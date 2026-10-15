@@ -86,7 +86,7 @@ struct ContentView: View {
                 searchText: searchText,
                 selection: $selectedDocument,
                 importMenu: { importMenu },
-                onDropFiles: importFiles
+                onDropFiles: { report(DocumentImporter.importDropped($0, into: context)) }
             )
             .searchable(text: $searchText, prompt: "Search full text")
         } detail: {
@@ -101,6 +101,14 @@ struct ContentView: View {
             }
         }
         .onChange(of: sidebarSelection) { selectedDocument = nil }
+        #if os(iOS)
+        .onChange(of: selectedDocument) {
+            // Once a document is open, the iPad layout is left to the system, so the document
+            // comes to the front. Forcing all columns kept the list laid over the document in
+            // portrait (iPad mini), and the first tap only closed the list.
+            if selectedDocument != nil { columnVisibility = .automatic }
+        }
+        #endif
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: DocumentImporter.importableTypes,
                       allowsMultipleSelection: true) { result in
             switch result {
@@ -133,9 +141,11 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 SettingsView()
+                    .accessibilityIdentifier(AccessibilityID.settings)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done") { showSettings = false }
+                                .accessibilityIdentifier(AccessibilityID.settingsDone)
                         }
                     }
             }
@@ -144,16 +154,17 @@ struct ContentView: View {
         .sheet(item: $editorTarget) { target in
             RuleEditorView(target: target)
         }
-        .alert(importNotice?.title ?? "", isPresented: .constant(importNotice != nil)) {
-            Button("OK") { importNotice = nil }
-        } message: {
-            Text(importNotice?.message ?? "")
+        .alert(importNotice?.title ?? "", isPresented: Binding(presenting: $importNotice), presenting: importNotice) { _ in
+            Button("OK") {}
+        } message: { notice in
+            Text(notice.message)
         }
-        .focusedSceneValue(\.importActions, ImportActions(
+        .focusedSceneValue(\.appActions, AppActions(
             importFiles: { showFileImporter = true },
             newTag: { editorTarget = .newTag },
             newCorrespondent: { editorTarget = .newCorrespondent },
-            newDocumentType: { editorTarget = .newDocumentType }
+            newDocumentType: { editorTarget = .newDocumentType },
+            showSettings: { showSettings = true }
         ))
         .task {
             DocumentType.upgradeDefaults(in: context)
@@ -185,7 +196,11 @@ struct ContentView: View {
     }
 
     private func importFiles(_ urls: [URL]) {
-        let result = DocumentImporter.importFiles(urls, into: context)
+        report(DocumentImporter.importFiles(urls, into: context))
+    }
+
+    /// Tells about skipped duplicates and errors, and opens what was imported.
+    private func report(_ result: DocumentImporter.ImportResult) {
         var lines: [String] = []
         if !result.duplicates.isEmpty {
             lines.append(result.duplicates.count == 1

@@ -7,7 +7,15 @@ struct DocumentDetailView: View {
     @Binding var editorTarget: RuleEditorTarget?
     var onDelete: () -> Void
 
-    @AppStorage("showInspector") private var showInspector = true
+    /// Whether the inspector was open, remembered where it is a column (Mac, wide iPad windows).
+    @AppStorage("showInspector") private var remembersInspector = true
+    /// The one state the inspector and the Info button use. On compact width (iPhone, narrow
+    /// iPad windows and columns) it starts closed: the remembered state there left the sheet
+    /// hidden but counted as open, so the first tap on Info did nothing.
+    @State private var showInspector = false
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     @State private var showExporter = false
     @State private var confirmDelete = false
 
@@ -25,9 +33,15 @@ struct DocumentDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .accessibilityIdentifier(AccessibilityID.documentDetail)
         .inspector(isPresented: $showInspector) {
             DocumentInfoForm(document: document, editorTarget: $editorTarget)
+                .accessibilityIdentifier(AccessibilityID.inspector)
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
+                #if os(iOS)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                #endif
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -66,8 +80,11 @@ struct DocumentDetailView: View {
                 } label: {
                     Label("Info", systemImage: "info.circle")
                 }
+                .accessibilityIdentifier(AccessibilityID.inspectorToggle)
             }
         }
+        .onAppear { showInspector = inspectorIsColumn && remembersInspector }
+        .onChange(of: showInspector) { if inspectorIsColumn { remembersInspector = showInspector } }
         .fileExporter(isPresented: $showExporter, document: document.pdfData.map(PDFFile.init(data:)),
                       contentType: .pdf, defaultFilename: document.exportFileName) { _ in }
         .confirmationDialog("Delete document?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -79,6 +96,14 @@ struct DocumentDetailView: View {
         } message: {
             Text("“\(document.title)” will be deleted on all devices.")
         }
+    }
+
+    private var inspectorIsColumn: Bool {
+        #if os(iOS)
+        horizontalSizeClass != .compact
+        #else
+        true
+        #endif
     }
 }
 

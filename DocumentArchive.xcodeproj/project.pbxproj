@@ -11,6 +11,7 @@
 		A10000000000000000000003 /* Project.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Project.xcconfig; sourceTree = "<group>"; };
 		A10000000000000000000002 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
 		B10000000000000000000001 /* DocumentArchiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocumentArchiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C10000000000000000000001 /* DocumentArchiveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocumentArchiveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -21,9 +22,21 @@
 			remoteGlobalIDString = A10000000000000000000040;
 			remoteInfo = DocumentArchive;
 		};
+		C10000000000000000000044 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000050 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000040;
+			remoteInfo = DocumentArchive;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		C10000000000000000000010 /* DocumentArchiveUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DocumentArchiveUITests;
+			sourceTree = "<group>";
+		};
 		B10000000000000000000010 /* DocumentArchiveTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = DocumentArchiveTests;
@@ -37,6 +50,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		C10000000000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B10000000000000000000020 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -61,6 +81,7 @@
 				A10000000000000000000002 /* Config */,
 				A10000000000000000000003 /* Project.xcconfig */,
 				B10000000000000000000010 /* DocumentArchiveTests */,
+				C10000000000000000000010 /* DocumentArchiveUITests */,
 				A10000000000000000000031 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -70,6 +91,7 @@
 			children = (
 				A10000000000000000000001 /* Document Archive.app */,
 				B10000000000000000000001 /* DocumentArchiveTests.xctest */,
+				C10000000000000000000001 /* DocumentArchiveUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -77,6 +99,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		C10000000000000000000040 /* DocumentArchiveUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C10000000000000000000060 /* Build configuration list for PBXNativeTarget "DocumentArchiveUITests" */;
+			buildPhases = (
+				C10000000000000000000041 /* Sources */,
+				C10000000000000000000020 /* Frameworks */,
+				C10000000000000000000042 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C10000000000000000000043 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C10000000000000000000010 /* DocumentArchiveUITests */,
+			);
+			name = DocumentArchiveUITests;
+			productName = DocumentArchiveUITests;
+			productReference = C10000000000000000000001 /* DocumentArchiveUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		B10000000000000000000040 /* DocumentArchiveTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B10000000000000000000060 /* Build configuration list for PBXNativeTarget "DocumentArchiveTests" */;
@@ -135,6 +178,10 @@
 						CreatedOnToolsVersion = 27.0;
 						TestTargetID = A10000000000000000000040;
 					};
+					C10000000000000000000040 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = A10000000000000000000040;
+					};
 				};
 			};
 			buildConfigurationList = A10000000000000000000070 /* Build configuration list for PBXProject "DocumentArchive" */;
@@ -154,11 +201,19 @@
 			targets = (
 				A10000000000000000000040 /* DocumentArchive */,
 				B10000000000000000000040 /* DocumentArchiveTests */,
+				C10000000000000000000040 /* DocumentArchiveUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		C10000000000000000000042 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B10000000000000000000042 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -176,6 +231,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		C10000000000000000000041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B10000000000000000000041 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -193,6 +255,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		C10000000000000000000043 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000040 /* DocumentArchive */;
+			targetProxy = C10000000000000000000044 /* PBXContainerItemProxy */;
+		};
 		B10000000000000000000043 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A10000000000000000000040 /* DocumentArchive */;
@@ -201,6 +268,46 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		C10000000000000000000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.patrickklein.DocumentArchiveUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DocumentArchive;
+			};
+			name = Debug;
+		};
+		C10000000000000000000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.patrickklein.DocumentArchiveUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DocumentArchive;
+			};
+			name = Release;
+		};
 		B10000000000000000000061 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -379,6 +486,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		C10000000000000000000060 /* Build configuration list for PBXNativeTarget "DocumentArchiveUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C10000000000000000000061 /* Debug */,
+				C10000000000000000000062 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B10000000000000000000060 /* Build configuration list for PBXNativeTarget "DocumentArchiveTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

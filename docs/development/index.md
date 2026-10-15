@@ -64,17 +64,37 @@ never touched. Rules for tests:
   inside `GlobalStateTests`, whose nested suites run one after another.
 - The model type `Tag` clashes with Swift Testing's `Tag`; use `ArchiveTag` in tests.
 
+### UI tests
+
+`DocumentArchiveUITests/` holds a few XCUITest smoke tests for iPhone and iPad,
+run by their own scheme `DocumentArchiveUITests` (see [iPhone and iPad](./ios)).
+The app is started with the launch argument `-UITestSeed` (DEBUG builds only):
+it then opens an in-memory store filled by `App/UITestSeed.swift`, so the tests
+never see the real archive and never call Mistral. Rules:
+
+- Find elements by accessibility identifier only, never by their (German) text.
+  Every identifier lives in `Views/AccessibilityID.swift`; a view a UI test
+  touches gets one from there.
+- Keep the suite small (a handful of tests); behaviour belongs in unit tests.
+- Extra sample data goes into `UITestSeed`, not into a new launch argument.
+- Alerts and dialogs use real bindings (`Binding(presenting:)`), never
+  `.constant(…)`: the system dismisses them by setting the binding to `false`.
+
+CI runs them as `test (iOS UI, iphone)` and `test (iOS UI, ipad)`. These checks
+are not required yet; they become required after a week without flaky runs.
+
 ## Project layout
 
 | Folder | Content |
 |---|---|
-| `DocumentArchive/App` | App entry point, data store setup, one-time migrations |
+| `DocumentArchive/App` | App entry point, menu commands (`AppCommands`), data store setup, one-time migrations, UI test data |
 | `DocumentArchive/Model` | SwiftData models (synced through CloudKit) |
 | `DocumentArchive/Services` | Import, PDF building, OCR, Mistral client, auto-assignment, maintenance |
 | `DocumentArchive/Views` | SwiftUI views shared by macOS and iOS |
 | `DocumentArchive/Platform` | Platform wrappers: PDFKit view, VisionKit scanner, sharing |
 | `Config` | Entitlements and Info.plist additions |
 | `DocumentArchiveTests` | Unit tests (Swift Testing) and their helpers in `Support/` |
+| `DocumentArchiveUITests` | UI smoke tests (XCUITest, iOS only) |
 
 One target builds both platforms. Platform-specific code is wrapped in
 `#if os(iOS)` / `#if os(macOS)`; keep it small and in `Platform/` where

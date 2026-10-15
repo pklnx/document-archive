@@ -1731,6 +1731,16 @@
         }
       }
     },
+    "Settings…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen …"
+          }
+        }
+      }
+    },
     "Share": {
       "localizations": {
         "de": {
