@@ -24,6 +24,39 @@ Unsigned builds have no iCloud entitlement: the app then stores everything
 locally and shows "Nur lokal gespeichert" in the sidebar. iCloud sync needs a
 build signed with a paid Apple Developer Program team (see the README).
 
+## Tests
+
+**Tests are mandatory.** Every change to behavior comes with tests, and every
+bug fix starts with a test that fails without the fix (a regression test). A
+pull request without tests for the behavior it changes is not ready for
+review.
+
+```sh
+xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO
+```
+
+or **⌘U** in Xcode. CI runs the same command as the required check
+`test (macOS)`.
+
+The tests use [Swift Testing](https://developer.apple.com/documentation/testing)
+and live in `DocumentArchiveTests/`, one file per component. They are hosted
+by the app, which notices the test run (`TestEnvironment.isRunningTests`) and
+then opens an in-memory store and skips migrations, so the real archive is
+never touched. Rules for tests:
+
+- **No network.** Mistral is stubbed with `MistralStub` (a `URLProtocol`);
+  `MistralStub.install(config:handler:)` sets the configuration and the
+  responses, `MistralStub.reset()` removes them.
+- **No real data.** Use `TestSupport.makeContainer()` for an in-memory archive,
+  `TestSupport.makeDefaults()` for settings, `TestSupport.makeTemporaryDirectory()`
+  for files and the test service name for the Keychain. Generate documents in
+  the test (`TestSupport.renderPage`, `TestSupport.samplePDF`); never commit real
+  documents.
+- **Global state** (the Mistral stub, `AutoClassifier.defaults`) is only changed
+  inside `GlobalStateTests`, whose nested suites run one after another.
+- The model type `Tag` clashes with Swift Testing's `Tag`; use `ArchiveTag` in tests.
+
 ## Project layout
 
 | Folder | Content |
@@ -34,6 +67,7 @@ build signed with a paid Apple Developer Program team (see the README).
 | `DocumentArchive/Views` | SwiftUI views shared by macOS and iOS |
 | `DocumentArchive/Platform` | Platform wrappers: PDFKit view, VisionKit scanner, sharing |
 | `Config` | Entitlements and Info.plist additions |
+| `DocumentArchiveTests` | Unit tests (Swift Testing) and their helpers in `Support/` |
 
 One target builds both platforms. Platform-specific code is wrapped in
 `#if os(iOS)` / `#if os(macOS)`; keep it small and in `Platform/` where
@@ -128,8 +162,9 @@ file changes on `main`.
 
 - The app uses only Apple frameworks; adding a Swift package needs a reason
   in the plan.
-- CI builds the macOS and the iOS app and scans for credentials with
-  gitleaks on every pull request (see [Secrets](#secrets)).
+- CI builds the macOS and the iOS app, runs the tests and scans for
+  credentials with gitleaks on every pull request (see [Tests](#tests) and
+  [Secrets](#secrets)).
 - Dependabot opens weekly update pull requests for GitHub Actions.
 - GitHub Actions are pinned to commit SHAs; workflows run with read-only
   permissions unless a job needs more.

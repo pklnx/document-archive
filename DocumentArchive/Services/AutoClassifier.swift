@@ -14,8 +14,11 @@ enum AutoClassifier {
     /// Einstellung: Unbekannte Absender automatisch als neuen Korrespondenten anlegen.
     static let autoCreateCorrespondentsKey = "autoCreateCorrespondents"
 
+    /// Settings source; tests use a throwaway suite.
+    nonisolated(unsafe) static var defaults: UserDefaults = .standard
+
     static var autoCreateCorrespondents: Bool {
-        UserDefaults.standard.object(forKey: autoCreateCorrespondentsKey) as? Bool ?? true
+        defaults.object(forKey: autoCreateCorrespondentsKey) as? Bool ?? true
     }
 
     /// Was bei einer Zuordnung geändert wurde – für die Rückmeldung in der Oberfläche.

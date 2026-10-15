@@ -31,9 +31,15 @@ struct DocumentArchiveApp: App {
     /// Ohne Entitlement (z. B. unsignierter Build) wird nur lokal gespeichert.
     static let storeName = "DocumentArchive"
 
+    static let schema = Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
+
     private static func makeContainer() -> ModelContainer {
+        // Unit tests are hosted by the app: never touch the real archive during a test run.
+        if TestEnvironment.isRunningTests {
+            return try! ModelContainer(for: schema, configurations: ModelConfiguration(
+                schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none))
+        }
         LegacyMigration.run(newStoreName: storeName)
-        let schema = Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
         let monitor = SyncMonitor.shared
         if SyncMonitor.hasCloudKitEntitlement {
             do {
