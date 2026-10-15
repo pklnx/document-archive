@@ -22,7 +22,7 @@ struct MistralConfig: Sendable {
     static func sanitize(_ raw: String) -> String {
         var key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if key.lowercased().hasPrefix("bearer ") { key = String(key.dropFirst(7)) }
-        let invisible = CharacterSet(charactersIn: "\u{200B}\u{200C}\u{200D}\u{FEFF}\u{00A0}\"'“”‘’")
+        let invisible = CharacterSet(charactersIn: "\u{200B}\u{200C}\u{200D}\u{FEFF}\u{00A0}\"'“”„‘’‚«»")
             .union(.whitespacesAndNewlines)
         return String(key.unicodeScalars.filter { !invisible.contains($0) })
     }
@@ -33,10 +33,15 @@ struct MistralConfig: Sendable {
         return "\(key.prefix(4))…\(key.suffix(4)) (\(key.count) Zeichen)"
     }
 
+    /// Source of the current configuration; tests replace it with a stub.
+    nonisolated(unsafe) static var provider: () -> MistralConfig? = { TestEnvironment.isRunningTests ? nil : live() }
+
     /// `nil`, wenn kein API-Schlüssel hinterlegt ist.
-    static func current() -> MistralConfig? {
+    static func current() -> MistralConfig? { provider() }
+
+    /// Reads the key from the Keychain and the switches from the given defaults.
+    static func live(defaults: UserDefaults = .standard) -> MistralConfig? {
         guard let key = KeychainStore.read(apiKeyAccount).map(sanitize), !key.isEmpty else { return nil }
-        let defaults = UserDefaults.standard
         func string(_ name: String, _ fallback: String) -> String {
             let value = defaults.string(forKey: name)?.trimmingCharacters(in: .whitespaces) ?? ""
             return value.isEmpty ? fallback : value
@@ -73,6 +78,9 @@ enum MistralError: LocalizedError {
 /// Zugriff auf die Mistral-API: Mistral OCR für die Texterkennung und
 /// ein Chat-Modell (Standard: Mistral Medium) für die Zuordnung per strukturierter JSON-Antwort.
 struct MistralClient: Sendable {
+    /// Session for all requests; tests replace it with one that uses a `URLProtocol` stub.
+    nonisolated(unsafe) static var session: URLSession = .shared
+
     let config: MistralConfig
     private let baseURL = URL(string: "https://api.mistral.ai/v1/")!
 
@@ -220,7 +228,7 @@ struct MistralClient: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await Self.session.data(for: request)
         } catch {
             throw MistralError.network(error.localizedDescription)
         }

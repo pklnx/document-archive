@@ -27,11 +27,11 @@ enum KeychainStore {
         return nil
     }
 
-    static func save(_ value: String, for account: String) {
-        delete(account)
+    static func save(_ value: String, for account: String, service: String = service) {
+        delete(account, service: service)
         guard !value.isEmpty else { return }
         for variant in variants {
-            var query = baseQuery(account, dataProtection: variant.dataProtection)
+            var query = baseQuery(account, dataProtection: variant.dataProtection, service: service)
             query[kSecAttrSynchronizable as String] = variant.sync
             query[kSecValueData as String] = Data(value.utf8)
             query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
@@ -39,9 +39,9 @@ enum KeychainStore {
         }
     }
 
-    static func delete(_ account: String) {
+    static func delete(_ account: String, service: String = service) {
         for dataProtection in [true, false] {
-            var query = baseQuery(account, dataProtection: dataProtection)
+            var query = baseQuery(account, dataProtection: dataProtection, service: service)
             query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
             SecItemDelete(query as CFDictionary)
         }

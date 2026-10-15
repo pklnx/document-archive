@@ -36,6 +36,30 @@ jobs:
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             ${{ matrix.args }} CODE_SIGNING_ALLOWED=NO build | tail -n 50
 
+  test:
+    # Unit tests, hosted by the macOS app. They use an in-memory store and stub all
+    # network access, so they need no secrets and never reach Mistral.
+    runs-on: macos-latest
+    name: test (macOS)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO | grep -E '✔|✘|error:|TEST (SUCCEEDED|FAILED)'
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TestResults
+          path: TestResults.xcresult
+          retention-days: 7
+
   gitleaks:
     # Scans the full history for credentials. The gitleaks binary is pinned and
     # checked against a SHA-256 kept here, so no third-party action runs with a token.

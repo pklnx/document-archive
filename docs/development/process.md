@@ -26,7 +26,8 @@ The plan is posted as a comment on the issue, and the label changes from
 - data model, iCloud sync or behavior changes (a change to `DocumentArchive/Model`
   means `schema-change`),
 - what is sent to external services (Mistral) and whether it can be turned off,
-- how it will be tested, on macOS and on iOS,
+- which automated tests will be added (tests are mandatory), and what is
+  checked by hand on macOS and iOS,
 - open questions and decisions to make,
 - the expected size (one pull request or several).
 
@@ -44,8 +45,9 @@ that come up during the work are noted in the issue before the pull request.
 
 Each issue gets its own branch and pull request. The description says
 `Closes #N`, so merging closes the issue. Labels follow the
-[label table](./#pull-requests-and-labels). CI must be green; the maintainer
-reviews and enables auto-merge.
+[label table](./#pull-requests-and-labels). The pull request includes tests for
+the behavior it changes (see [Tests](./#tests)); without them it is not ready
+for review. CI must be green; the maintainer reviews and enables auto-merge.
 
 ## Labels
 
