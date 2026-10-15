@@ -56,5 +56,7 @@ jobs:
           echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
           tar -xzf "$archive" gitleaks
           ./gitleaks version
+      # Only the history of the checked-out commit: by default gitleaks scans all
+      # fetched branches, so a leak on another open branch would fail every PR.
       - name: Scan history
-        run: ./gitleaks git --config .gitleaks.toml --redact --exit-code 1 --no-banner .
+        run: ./gitleaks git --config .gitleaks.toml --redact --exit-code 1 --no-banner --log-opts="HEAD" .
