@@ -123,6 +123,37 @@ display name). The app shows German on a German system and English otherwise.
   independent of the UI language.
 - The Mistral prompt is English and asks for titles in the app's language.
 
+## Accessibility
+
+The app must work with VoiceOver, large text and Increase Contrast on every
+platform. Check every new or changed screen against this list:
+
+- **Labels:** every icon-only button or control has a label (`Label` with a
+  title, or `.accessibilityLabel`). Labels are UI strings and go through the
+  String Catalog.
+- **One element per row:** a list row reads as one sentence
+  (`DocumentAccessibility.label(for:)`); decorative parts (thumbnails, dots,
+  stars) are hidden from VoiceOver.
+- **No gesture-only actions:** swipe, drag and similar gestures have an
+  alternative: a button, a context menu item or a named
+  `.accessibilityAction` (macOS has no swipe actions).
+- **Selection is spoken:** pickers built from tap gestures (colors, symbols)
+  name each choice (`Tag.colorName(for:)`, `DocumentType.symbolName(for:)`)
+  and mark the chosen one with `.isSelected`.
+- **Text sizes:** use text styles (`.body`, `.caption`, …), no fixed font
+  sizes; avoid fixed frames around text.
+- **Contrast:** text 4.5:1, borders and other non-text parts 3:1, in light and
+  dark mode. Colors chosen by the user (tags) go through `ColorContrast`
+  before they are used for text. Never use color alone to carry meaning.
+- **Changes the user does not trigger** (processing finished) are announced
+  with `AccessibilityNotification.Announcement` when they matter on the screen
+  in front of the user.
+- **New screens** get an accessibility audit test in the UI tests (from #21
+  part 3 on).
+
+Check with Accessibility Inspector (macOS) and with VoiceOver and the largest
+text size on the iPhone and iPad simulators.
+
 ## Data model and iCloud sync
 
 The models in `DocumentArchive/Model` are synced through CloudKit, which

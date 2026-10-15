@@ -62,6 +62,18 @@ struct DocumentListView<ImportMenu: View>: View {
                     DocumentRow(document: document)
                 }
                 .accessibilityIdentifier(AccessibilityID.documentRow(document.title))
+                #if os(macOS)
+                // iOS offers the swipe actions to VoiceOver; macOS has no swipe, so name them.
+                .accessibilityAction(named: document.isInbox ? Text("Mark as Done") : Text("Move to Inbox")) {
+                    document.isInbox.toggle()
+                    document.touch()
+                }
+                .accessibilityAction(named: document.isFavorite ? Text("Remove from Favorites") : Text("Add to Favorites")) {
+                    document.isFavorite.toggle()
+                    document.touch()
+                }
+                .accessibilityAction(named: Text("Delete")) { documentToDelete = document }
+                #endif
                 .swipeActions(edge: .leading) {
                     Button {
                         document.isInbox.toggle()
@@ -225,6 +237,7 @@ struct DocumentRow: View {
                         Image(systemName: "star.fill")
                             .font(.caption)
                             .foregroundStyle(.yellow)
+                            .accessibilityHidden(true)
                     }
                 }
                 Text(subtitle)
@@ -246,10 +259,13 @@ struct DocumentRow: View {
                     .fill(Color.accentColor)
                     .frame(width: 8, height: 8)
                     .padding(.top, 6)
-                    .accessibilityLabel("In inbox")
+                    .accessibilityHidden(true)
             }
         }
         .padding(.vertical, 4)
+        // One element for VoiceOver; the label names everything the row shows.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(DocumentAccessibility.label(for: document))
     }
 
     private var subtitle: String {
@@ -295,6 +311,8 @@ struct TagChipsView: View {
                 TagChip(tag: tag, compact: compact)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "Tags: \(DocumentAccessibility.tagList(tags.map(\.name)) ?? "")"))
     }
 }
 
@@ -302,13 +320,30 @@ struct TagChip: View {
     let tag: Tag
     var compact = false
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
     var body: some View {
+        let dark = colorScheme == .dark
         Text(tag.name)
             .font(compact ? .caption2.weight(.medium) : .caption.weight(.medium))
             .padding(.horizontal, compact ? 6 : 8)
             .padding(.vertical, compact ? 2 : 4)
-            .background(tag.color.opacity(0.18), in: Capsule())
-            .foregroundStyle(tag.color)
+            .background(tag.color.opacity(ColorContrast.chipBackgroundOpacity), in: Capsule())
+            // The tag color itself is too light for small text (yellow, teal); this one is
+            // adjusted to 4.5:1 on the chip background.
+            .foregroundStyle(Color(ColorContrast.chipText(tagHex: tag.colorHex, dark: dark)))
+            .overlay {
+                if colorSchemeContrast == .increased {
+                    Capsule().strokeBorder(Color(ColorContrast.chipBorder(tagHex: tag.colorHex, dark: dark)), lineWidth: 1)
+                }
+            }
+    }
+}
+
+extension Color {
+    init(_ rgb: ColorContrast.RGB) {
+        self.init(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 }
 

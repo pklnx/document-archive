@@ -101,6 +101,16 @@
         }
       }
     },
+    "1 document": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Dokument"
+          }
+        }
+      }
+    },
     "AI (Mistral)": {
       "localizations": {
         "de": {
@@ -301,12 +311,32 @@
         }
       }
     },
+    "Bank": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bank"
+          }
+        }
+      }
+    },
     "Bank statement": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Kontoauszug"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blau"
           }
         }
       }
@@ -331,22 +361,22 @@
         }
       }
     },
+    "Car": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto"
+          }
+        }
+      }
+    },
     "Color": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Farbe"
-          }
-        }
-      }
-    },
-    "Color %@": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Farbe %@"
           }
         }
       }
@@ -457,6 +487,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neue Absender automatisch als Korrespondent anlegen"
+          }
+        }
+      }
+    },
+    "Custom color": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigene Farbe"
           }
         }
       }
@@ -721,6 +761,26 @@
         }
       }
     },
+    "Education": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildung"
+          }
+        }
+      }
+    },
+    "Energy": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Energie"
+          }
+        }
+      }
+    },
     "Every file is in your archive only once.": {
       "localizations": {
         "de": {
@@ -791,6 +851,46 @@
         }
       }
     },
+    "Green": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grün"
+          }
+        }
+      }
+    },
+    "Health": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesundheit"
+          }
+        }
+      }
+    },
+    "Home": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wohnen"
+          }
+        }
+      }
+    },
+    "ID card": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausweis"
+          }
+        }
+      }
+    },
     "Image import": {
       "localizations": {
         "de": {
@@ -851,16 +951,6 @@
         }
       }
     },
-    "In inbox": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Im Posteingang"
-          }
-        }
-      }
-    },
     "Inactive – local only": {
       "localizations": {
         "de": {
@@ -887,6 +977,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Posteingang leer"
+          }
+        }
+      }
+    },
+    "Indigo": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indigo"
           }
         }
       }
@@ -967,6 +1067,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bibliothek"
+          }
+        }
+      }
+    },
+    "List": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste"
           }
         }
       }
@@ -1147,6 +1257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geändert"
+          }
+        }
+      }
+    },
+    "Money": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geld"
           }
         }
       }
@@ -1451,6 +1571,16 @@
         }
       }
     },
+    "Orange": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange"
+          }
+        }
+      }
+    },
     "Original file": {
       "localizations": {
         "de": {
@@ -1501,12 +1631,42 @@
         }
       }
     },
+    "Phone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefon"
+          }
+        }
+      }
+    },
     "Photo %@": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Foto %@"
+          }
+        }
+      }
+    },
+    "Pink": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pink"
+          }
+        }
+      }
+    },
+    "Purple": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lila"
           }
         }
       }
@@ -1547,6 +1707,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erkannter Text"
+          }
+        }
+      }
+    },
+    "Red": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rot"
           }
         }
       }
@@ -1761,6 +1931,26 @@
         }
       }
     },
+    "Shopping": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einkauf"
+          }
+        }
+      }
+    },
+    "Signature": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unterschrift"
+          }
+        }
+      }
+    },
     "Signed in": {
       "localizations": {
         "de": {
@@ -1777,6 +1967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Größe"
+          }
+        }
+      }
+    },
+    "Slate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schiefergrau"
           }
         }
       }
@@ -1911,6 +2111,26 @@
         }
       }
     },
+    "Tags: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tags: %@"
+          }
+        }
+      }
+    },
+    "Teal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Türkis"
+          }
+        }
+      }
+    },
     "Test Connection": {
       "localizations": {
         "de": {
@@ -1921,12 +2141,32 @@
         }
       }
     },
+    "Text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text"
+          }
+        }
+      }
+    },
     "Text recognition": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Texterkennung"
+          }
+        }
+      }
+    },
+    "Text recognition finished": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texterkennung abgeschlossen"
           }
         }
       }
@@ -2061,6 +2301,16 @@
         }
       }
     },
+    "Travel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reisen"
+          }
+        }
+      }
+    },
     "Unknown error": {
       "localizations": {
         "de": {
@@ -2071,12 +2321,42 @@
         }
       }
     },
+    "Untitled document": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokument ohne Titel"
+          }
+        }
+      }
+    },
     "With a key, new documents are sent to the Mistral API for text recognition and assignment. Without a key, or on errors, the app keeps working with Apple's local text recognition and your rules. The key is stored in the Keychain.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ist ein Schlüssel hinterlegt, werden neue Dokumente zur Texterkennung und Zuordnung an die Mistral-API übertragen. Ohne Schlüssel oder bei Fehlern arbeitet die App mit der lokalen Apple-Texterkennung und deinen Regeln weiter. Der Schlüssel wird im Schlüsselbund gespeichert."
+          }
+        }
+      }
+    },
+    "Work": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeit"
+          }
+        }
+      }
+    },
+    "Yellow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gelb"
           }
         }
       }
@@ -2097,6 +2377,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "z. B. Stadtwerke München"
+          }
+        }
+      }
+    },
+    "favorite": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorit"
           }
         }
       }
@@ -2137,6 +2427,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "iCloud – warte auf ersten Abgleich"
+          }
+        }
+      }
+    },
+    "in inbox": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "im Posteingang"
+          }
+        }
+      }
+    },
+    "tags: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tags: %@"
+          }
+        }
+      }
+    },
+    "text recognition running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texterkennung läuft"
           }
         }
       }

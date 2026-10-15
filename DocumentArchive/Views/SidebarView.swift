@@ -69,6 +69,9 @@ struct SidebarView: View {
                             Spacer()
                             countBadge(tag.documentCount)
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(tag.name)
+                        .accessibilityValue(DocumentAccessibility.documentCount(tag.documentCount))
                     }
                     .accessibilityIdentifier(AccessibilityID.sidebarRow(.tag(tag)))
                     .contextMenu {
@@ -117,6 +120,10 @@ struct SidebarView: View {
                 Spacer()
                 if let count { countBadge(count) }
             }
+            // "Inbox, 3 documents" instead of the label and a bare number
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(item.title)
+            .accessibilityValue(count.map(DocumentAccessibility.documentCount) ?? "")
         }
         .accessibilityIdentifier(AccessibilityID.sidebarRow(item))
     }
