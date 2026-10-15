@@ -20,9 +20,15 @@ xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 If `xcodebuild` reports a command line tools instance, point it at Xcode
 for the command with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
 
-Unsigned builds have no iCloud entitlement: the app then stores everything
-locally and shows "Nur lokal gespeichert" in the sidebar. iCloud sync needs a
-build signed with a paid Apple Developer Program team (see the README).
+The app only uses iCloud sync when the build setting `DA_CLOUDKIT_ENABLED`
+is `YES` (default `NO` in `Config/Project.xcconfig`; override it in the
+git-ignored `Config/Local.xcconfig` for a build signed with the paid Apple
+Developer team). Otherwise it stores everything locally and shows "Stored
+locally only" in the sidebar.
+
+Running on iPhone and iPad simulators and devices, the iOS tests, iPad
+multitasking checks and the manual release check list:
+[iPhone and iPad](./ios).
 
 ## Tests
 
@@ -37,7 +43,8 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 ```
 
 or **⌘U** in Xcode. CI runs the same command as the required check
-`test (macOS)`.
+`test (macOS)`, and runs the tests on the iPhone simulator as `test (iOS)`
+(see [iPhone and iPad](./ios) for the command).
 
 The tests use [Swift Testing](https://developer.apple.com/documentation/testing)
 and live in `DocumentArchiveTests/`, one file per component. They are hosted
@@ -183,8 +190,8 @@ file changes on `main`.
 
 - The app uses only Apple frameworks; adding a Swift package needs a reason
   in the plan.
-- CI builds the macOS and the iOS app, runs the tests and scans for
-  credentials with gitleaks on every pull request (see [Tests](#tests) and
+- CI builds the macOS and the iOS app, runs the tests on macOS and on the
+  iPhone simulator, and scans for credentials with gitleaks on every pull request (see [Tests](#tests) and
   [Secrets](#secrets)).
 - Dependabot opens weekly update pull requests for GitHub Actions.
 - GitHub Actions are pinned to commit SHAs; workflows run with read-only

@@ -115,13 +115,18 @@ struct ContentView: View {
         }
         #if os(iOS)
         .fullScreenCover(isPresented: $showScanner) {
-            DocumentScannerView { images in
+            DocumentScannerView { pages in
                 showScanner = false
-                if let document = DocumentImporter.importImages(images, source: .scan, into: context) {
+                let result = ScanImport.importScan(pages, into: context)
+                importNotice = result.notice
+                if case .imported(let document, _) = result {
                     select(document)
                 }
             } onCancel: {
                 showScanner = false
+            } onError: { error in
+                showScanner = false
+                importNotice = ImportNotice(title: String(localized: "Scan failed"), message: error.localizedDescription)
             }
             .ignoresSafeArea()
         }

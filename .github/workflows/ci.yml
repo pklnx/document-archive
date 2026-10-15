@@ -59,7 +59,36 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: TestResults
+          name: TestResults-macOS
+          path: TestResults.xcresult
+          retention-days: 7
+
+  test-ios:
+    # The same unit tests on the iPhone simulator with the smallest screen. The build is ad-hoc
+    # signed ("Sign to Run Locally", no team, no secrets): the Keychain tests need a signature.
+    runs-on: macos-latest
+    name: test (iOS)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version
+      - name: Pick simulator
+        id: simulator
+        run: echo "udid=$(python3 scripts/pick-simulator.py iphone smallest)" >> "$GITHUB_OUTPUT"
+      - name: Test
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -o pipefail
+          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY=- | grep -E '✔|✘|error:|TEST (SUCCEEDED|FAILED)'
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TestResults-iOS
           path: TestResults.xcresult
           retention-days: 7
 

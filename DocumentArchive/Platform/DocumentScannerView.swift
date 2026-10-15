@@ -5,8 +5,9 @@ import VisionKit
 /// The iOS document scanner: detects page edges, corrects the perspective
 /// and allows several pages per scan.
 struct DocumentScannerView: UIViewControllerRepresentable {
-    var onFinish: ([CGImage]) -> Void
+    var onFinish: (any ScannedPages) -> Void
     var onCancel: () -> Void
+    var onError: (Error) -> Void
 
     static var isSupported: Bool { VNDocumentCameraViewController.isSupported }
 
@@ -26,11 +27,7 @@ struct DocumentScannerView: UIViewControllerRepresentable {
         init(parent: DocumentScannerView) { self.parent = parent }
 
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-            let images = (0..<scan.pageCount).compactMap { index -> CGImage? in
-                let image = scan.imageOfPage(at: index)
-                return image.cgImage ?? normalized(image).cgImage
-            }
-            parent.onFinish(images)
+            parent.onFinish(scan)
         }
 
         func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
@@ -38,13 +35,17 @@ struct DocumentScannerView: UIViewControllerRepresentable {
         }
 
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
-            print("Scan failed: \(error)")
-            parent.onCancel()
+            parent.onError(error)
         }
+    }
+}
 
-        private func normalized(_ image: UIImage) -> UIImage {
-            UIGraphicsImageRenderer(size: image.size).image { _ in image.draw(at: .zero) }
-        }
+extension VNDocumentCameraScan: ScannedPages {
+    func image(at index: Int) -> CGImage? {
+        let image = imageOfPage(at: index)
+        if let cgImage = image.cgImage { return cgImage }
+        // Some pages come without a CGImage backing; redraw them into one.
+        return UIGraphicsImageRenderer(size: image.size).image { _ in image.draw(at: .zero) }.cgImage
     }
 }
 #endif

@@ -14,3 +14,6 @@ xcuserdata/
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+# Local build overrides (team, CloudKit flag)
+Config/Local.xcconfig
