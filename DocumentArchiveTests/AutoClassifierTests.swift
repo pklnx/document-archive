@@ -70,7 +70,8 @@ extension GlobalStateTests {
 
             #expect(!outcome.usedAI)
             #expect(outcome.aiError == nil)
-            #expect(doc.documentType?.name == "Rechnung")       // "Invoice" keyword
+            let invoice = DocumentType.defaults[0].0           // "Invoice" in the app language
+            #expect(doc.documentType?.name == invoice)          // matched by the "Invoice" keyword
             #expect(doc.correspondent?.name == "Anthropic, PBC") // detected sender, created
             #expect(doc.correspondent?.matchText == "Anthropic")
             #expect(TestSupport.components(of: doc.documentDate) == TestSupport.date(2026, 10, 3))

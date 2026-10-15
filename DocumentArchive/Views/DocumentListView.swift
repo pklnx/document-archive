@@ -8,10 +8,10 @@ enum DocumentSort: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .added: "Hinzugefügt"
-        case .documentDate: "Ausstellungsdatum"
-        case .title: "Titel"
-        case .correspondent: "Korrespondent"
+        case .added: String(localized: "Added")
+        case .documentDate: String(localized: "Issue date")
+        case .title: String(localized: "Title")
+        case .correspondent: String(localized: "Correspondent")
         }
     }
 }
@@ -34,7 +34,7 @@ struct DocumentListView<ImportMenu: View>: View {
     private var documents: [Document] {
         let allDocuments = allDocuments.filter(\.isAlive)
         if filter == .duplicates {
-            // Duplikate gruppiert anzeigen: jeweils das Original (ältestes) zuerst
+            // Show duplicates grouped, each with the original (oldest) first
             return MetadataMaintenance.duplicateDocumentGroups(allDocuments)
                 .flatMap { $0 }
                 .filter { $0.matches(searchText) }
@@ -66,25 +66,25 @@ struct DocumentListView<ImportMenu: View>: View {
                         document.isInbox.toggle()
                         document.touch()
                     } label: {
-                        Label(document.isInbox ? "Erledigt" : "Posteingang",
+                        Label(document.isInbox ? "Mark Done" : "Inbox",
                               systemImage: document.isInbox ? "tray.and.arrow.up" : "tray.and.arrow.down")
                     }
                     .tint(.green)
                 }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { documentToDelete = document } label: {
-                        Label("Löschen", systemImage: "trash")
+                        Label("Delete", systemImage: "trash")
                     }
                     Button {
                         document.isFavorite.toggle()
                         document.touch()
                     } label: {
-                        Label("Favorit", systemImage: document.isFavorite ? "star.slash" : "star")
+                        Label("Favorite", systemImage: document.isFavorite ? "star.slash" : "star")
                     }
                     .tint(.yellow)
                 }
                 .contextMenu { contextMenu(for: document) }
-                .draggable(document.transfer ?? PDFTransfer(data: Data(), fileName: "Dokument.pdf"))
+                .draggable(document.transfer ?? PDFTransfer(data: Data(), fileName: String(localized: "Document") + ".pdf"))
             }
         }
         .overlay {
@@ -106,7 +106,7 @@ struct DocumentListView<ImportMenu: View>: View {
         .navigationTitle(filter.title)
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 300, ideal: 380)
-        .navigationSubtitle("\(documents.count) Dokumente")
+        .navigationSubtitle("\(documents.count) documents")
         #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -114,37 +114,37 @@ struct DocumentListView<ImportMenu: View>: View {
             }
             if filter == .duplicates, !documents.isEmpty {
                 ToolbarItem {
-                    Button("Duplikate entfernen", systemImage: "trash.slash") { confirmRemoveDuplicates = true }
+                    Button("Remove Duplicates", systemImage: "trash.slash") { confirmRemoveDuplicates = true }
                 }
             }
             ToolbarItem {
                 Menu {
-                    Picker("Sortieren nach", selection: $sort) {
+                    Picker("Sort by", selection: $sort) {
                         ForEach(DocumentSort.allCases) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.inline)
                 } label: {
-                    Label("Sortieren", systemImage: "arrow.up.arrow.down")
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
                 }
             }
         }
-        .confirmationDialog("Duplikate entfernen?", isPresented: $confirmRemoveDuplicates, titleVisibility: .visible) {
-            Button("Duplikate löschen", role: .destructive) {
+        .confirmationDialog("Remove duplicates?", isPresented: $confirmRemoveDuplicates, titleVisibility: .visible) {
+            Button("Delete Duplicates", role: .destructive) {
                 selection = nil
                 MetadataMaintenance.removeDuplicateDocuments(in: context)
             }
         } message: {
-            Text("Von jeder identischen Datei bleibt das zuerst importierte Dokument erhalten. Fehlende Angaben wie Tags oder Notizen werden von den Duplikaten übernommen.")
+            Text("For every identical file, the document imported first is kept. Missing details such as tags or notes are taken over from the duplicates.")
         }
-        .confirmationDialog("Dokument löschen?", isPresented: .constant(documentToDelete != nil),
+        .confirmationDialog("Delete document?", isPresented: .constant(documentToDelete != nil),
                             titleVisibility: .visible) {
-            Button("Löschen", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 if let documentToDelete { delete(documentToDelete) }
                 documentToDelete = nil
             }
-            Button("Abbrechen", role: .cancel) { documentToDelete = nil }
+            Button("Cancel", role: .cancel) { documentToDelete = nil }
         } message: {
-            Text("„\(documentToDelete?.title ?? "")“ wird auf allen Geräten gelöscht.")
+            Text("“\(documentToDelete?.title ?? "")” will be deleted on all devices.")
         }
     }
 
@@ -153,19 +153,19 @@ struct DocumentListView<ImportMenu: View>: View {
         if !searchText.isEmpty {
             ContentUnavailableView.search(text: searchText)
         } else if filter == .duplicates {
-            ContentUnavailableView("Keine Duplikate", systemImage: "checkmark.circle",
-                                   description: Text("Jede Datei ist nur einmal in deinem Archiv."))
+            ContentUnavailableView("No Duplicates", systemImage: "checkmark.circle",
+                                   description: Text("Every file is in your archive only once."))
         } else if filter == .inbox {
-            ContentUnavailableView("Posteingang leer", systemImage: "tray",
-                                   description: Text("Neue Dokumente erscheinen hier, bis du sie als erledigt markierst."))
+            ContentUnavailableView("Inbox Empty", systemImage: "tray",
+                                   description: Text("New documents appear here until you mark them as done."))
         } else {
             ContentUnavailableView {
-                Label("Keine Dokumente", systemImage: "doc.on.doc")
+                Label("No Documents", systemImage: "doc.on.doc")
             } description: {
                 #if os(iOS)
-                Text("Scanne ein Dokument mit der Kamera oder importiere ein PDF.")
+                Text("Scan a document with the camera or import a PDF.")
                 #else
-                Text("Ziehe PDFs oder Bilder hierher oder importiere sie mit ⌘O.")
+                Text("Drag PDFs or images here or import them with ⌘O.")
                 #endif
             }
         }
@@ -173,23 +173,23 @@ struct DocumentListView<ImportMenu: View>: View {
 
     @ViewBuilder
     private func contextMenu(for document: Document) -> some View {
-        Button(document.isFavorite ? "Aus Favoriten entfernen" : "Zu Favoriten",
+        Button(document.isFavorite ? "Remove from Favorites" : "Add to Favorites",
                systemImage: document.isFavorite ? "star.slash" : "star") {
             document.isFavorite.toggle()
             document.touch()
         }
-        Button(document.isInbox ? "Als erledigt markieren" : "In den Posteingang",
+        Button(document.isInbox ? "Mark as Done" : "Move to Inbox",
                systemImage: document.isInbox ? "tray.and.arrow.up" : "tray.and.arrow.down") {
             document.isInbox.toggle()
             document.touch()
         }
         if let transfer = document.transfer {
             ShareLink(item: transfer, preview: SharePreview(document.title)) {
-                Label("Teilen …", systemImage: "square.and.arrow.up")
+                Label("Share…", systemImage: "square.and.arrow.up")
             }
         }
         Divider()
-        Button("Löschen", systemImage: "trash", role: .destructive) { documentToDelete = document }
+        Button("Delete", systemImage: "trash", role: .destructive) { documentToDelete = document }
     }
 
     private func delete(_ document: Document) {
@@ -232,7 +232,7 @@ struct DocumentRow: View {
                     TagChipsView(tags: document.sortedTags, compact: true)
                 }
                 if document.isProcessing {
-                    Text("Texterkennung läuft …")
+                    Text("Text recognition running…")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -243,7 +243,7 @@ struct DocumentRow: View {
                     .fill(Color.accentColor)
                     .frame(width: 8, height: 8)
                     .padding(.top, 6)
-                    .accessibilityLabel("Im Posteingang")
+                    .accessibilityLabel("In inbox")
             }
         }
         .padding(.vertical, 4)
@@ -309,7 +309,7 @@ struct TagChip: View {
     }
 }
 
-/// Einfaches Fließlayout, das Elemente zeilenweise umbricht (für Tags).
+/// A simple flow layout that wraps its elements into lines (for tags).
 struct FlowLayout: Layout {
     var spacing: CGFloat = 4
 

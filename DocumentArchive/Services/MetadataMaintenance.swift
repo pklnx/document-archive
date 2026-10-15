@@ -1,12 +1,12 @@
 import Foundation
 import SwiftData
 
-/// Führt doppelte Korrespondenten, Dokumenttypen und Tags zusammen.
-/// Duplikate können entstehen, wenn mehrere Dokumente gleichzeitig verarbeitet werden
-/// oder zwei Geräte vor dem iCloud-Abgleich denselben Eintrag anlegen.
+/// Merges duplicate correspondents, document types and tags.
+/// Duplicates appear when several documents are processed at the same time,
+/// or when two devices create the same entry before iCloud has synced.
 @MainActor
 enum MetadataMaintenance {
-    /// - Returns: Anzahl der entfernten Duplikate.
+    /// - Returns: The number of duplicates removed.
     @discardableResult
     static func mergeDuplicates(in context: ModelContext) -> Int {
         var removed = 0
@@ -48,16 +48,16 @@ enum MetadataMaintenance {
         return removed
     }
 
-    // MARK: Doppelte Dokumente
+    // MARK: Duplicate documents
 
-    /// Gruppen von Dokumenten mit identischem Dateiinhalt, ältestes zuerst.
+    /// Groups of documents with identical file content, oldest first.
     static func duplicateDocumentGroups(_ documents: [Document]) -> [[Document]] {
         duplicates(documents.filter(\.isAlive).sorted { $0.createdAt < $1.createdAt }, key: \.contentHash)
     }
 
-    /// Entfernt doppelte Dokumente. Das älteste bleibt erhalten und übernimmt fehlende Angaben
-    /// (Korrespondent, Typ, Tags, Notizen, Favorit, ASN) der Duplikate.
-    /// - Returns: Anzahl der gelöschten Dokumente.
+    /// Removes duplicate documents. The oldest stays and takes over details it is missing
+    /// (correspondent, type, tags, notes, favorite, ASN) from the duplicates.
+    /// - Returns: The number of documents deleted.
     @discardableResult
     static func removeDuplicateDocuments(in context: ModelContext) -> Int {
         guard let documents = try? context.fetch(FetchDescriptor<Document>()) else { return 0 }
@@ -79,7 +79,7 @@ enum MetadataMaintenance {
         return removed
     }
 
-    /// Gruppen mit mehr als einem Eintrag, jeweils in der Eingangsreihenfolge (ältester zuerst).
+    /// Groups with more than one entry, each in input order (oldest first).
     private static func duplicates<T>(_ items: [T], key: (T) -> String) -> [[T]] {
         var groups: [String: [T]] = [:]
         var order: [String] = []

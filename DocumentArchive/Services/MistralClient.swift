@@ -1,7 +1,7 @@
 import Foundation
 
-/// Einstellungen für die Mistral-Anbindung. Der API-Schlüssel liegt im Schlüsselbund,
-/// alles andere in den UserDefaults (pro Gerät).
+/// Settings for the Mistral connection. The API key lives in the Keychain,
+/// everything else in UserDefaults (per device).
 struct MistralConfig: Sendable {
     static let apiKeyAccount = "mistral-api-key"
     static let useOCRKey = "mistralUseOCR"
@@ -17,8 +17,8 @@ struct MistralConfig: Sendable {
     var useOCR: Bool
     var useLLM: Bool
 
-    /// Entfernt beim Einfügen versehentlich mitkopierte Zeichen: Leerzeichen, Zeilenumbrüche,
-    /// unsichtbare Zeichen, Anführungszeichen und ein vorangestelltes „Bearer “.
+    /// Removes characters pasted by accident: spaces, line breaks, invisible characters,
+    /// quotation marks and a leading "Bearer ".
     static func sanitize(_ raw: String) -> String {
         var key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if key.lowercased().hasPrefix("bearer ") { key = String(key.dropFirst(7)) }
@@ -27,16 +27,16 @@ struct MistralConfig: Sendable {
         return String(key.unicodeScalars.filter { !invisible.contains($0) })
     }
 
-    /// Unkritische Kurzform zur Kontrolle, z. B. „AbCd…wXyZ (32 Zeichen)“.
+    /// A short form that is safe to show, e.g. "AbCd…wXyZ (32 characters)".
     static func fingerprint(_ key: String) -> String {
-        guard key.count > 8 else { return "\(key.count) Zeichen" }
-        return "\(key.prefix(4))…\(key.suffix(4)) (\(key.count) Zeichen)"
+        guard key.count > 8 else { return String(localized: "\(key.count) characters") }
+        return String(localized: "\(String(key.prefix(4)))…\(String(key.suffix(4))) (\(key.count) characters)")
     }
 
     /// Source of the current configuration; tests replace it with a stub.
     nonisolated(unsafe) static var provider: () -> MistralConfig? = { TestEnvironment.isRunningTests ? nil : live() }
 
-    /// `nil`, wenn kein API-Schlüssel hinterlegt ist.
+    /// `nil` when no API key is stored.
     static func current() -> MistralConfig? { provider() }
 
     /// Reads the key from the Keychain and the switches from the given defaults.
@@ -64,19 +64,19 @@ enum MistralError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .http(401, let message):
-            "Mistral lehnt den API-Schlüssel ab (401\(message.isEmpty ? "" : ": \(message)")). Neue Schlüssel sind oft erst nach einigen Minuten aktiv; außerdem muss im Mistral-Workspace ein Tarif aktiviert sein."
+            String(localized: "Mistral rejects the API key (401\(message.isEmpty ? "" : ": \(message)")). New keys often only work after a few minutes, and the Mistral workspace needs an active plan.")
         case .http(403, let message):
-            "Mistral verweigert den Zugriff (403\(message.isEmpty ? "" : ": \(message)")). Ist das Modell in deinem Tarif enthalten?"
-        case .http(429, _): "Mistral: Zu viele Anfragen oder Kontingent aufgebraucht."
-        case .http(let code, let message): "Mistral-Fehler \(code): \(message)"
-        case .invalidResponse: "Mistral: Unerwartete Antwort."
-        case .network(let message): "Mistral nicht erreichbar: \(message)"
+            String(localized: "Mistral denies access (403\(message.isEmpty ? "" : ": \(message)")). Is the model included in your plan?")
+        case .http(429, _): String(localized: "Mistral: too many requests, or the quota is used up.")
+        case .http(let code, let message): String(localized: "Mistral error \(code): \(message)")
+        case .invalidResponse: String(localized: "Mistral: unexpected response.")
+        case .network(let message): String(localized: "Mistral cannot be reached: \(message)")
         }
     }
 }
 
-/// Zugriff auf die Mistral-API: Mistral OCR für die Texterkennung und
-/// ein Chat-Modell (Standard: Mistral Medium) für die Zuordnung per strukturierter JSON-Antwort.
+/// Access to the Mistral API: Mistral OCR for text recognition, and a chat model
+/// (default: Mistral Medium) for auto-assignment through a structured JSON answer.
 struct MistralClient: Sendable {
     /// Session for all requests; tests replace it with one that uses a `URLProtocol` stub.
     nonisolated(unsafe) static var session: URLSession = .shared
@@ -86,7 +86,7 @@ struct MistralClient: Sendable {
 
     // MARK: OCR
 
-    /// Liest den Text eines PDFs als Markdown (Tabellen bleiben dabei als Tabellen erhalten).
+    /// Reads the text of a PDF as Markdown (tables stay tables).
     func ocr(pdfData: Data) async throws -> String {
         let body: [String: Any] = [
             "model": config.ocrModel,
@@ -102,13 +102,13 @@ struct MistralClient: Sendable {
             .sorted { ($0["index"] as? Int ?? 0) < ($1["index"] as? Int ?? 0) }
             .compactMap { $0["markdown"] as? String }
             .joined(separator: "\n\n")
-        // Platzhalter für eingebettete Bilder entfernen, z. B. ![img-0.jpeg](img-0.jpeg)
+        // Remove placeholders for embedded images, e.g. ![img-0.jpeg](img-0.jpeg)
         return markdown
             .replacingOccurrences(of: #"!\[[^\]]*\]\([^)]*\)"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // MARK: Klassifizierung
+    // MARK: Classification
 
     struct Suggestion: Decodable, Sendable {
         var title: String?
@@ -132,7 +132,14 @@ struct MistralClient: Sendable {
         }
     }
 
-    func classify(text: String, fileName: String, correspondents: [String], documentTypes: [String], tags: [String]) async throws -> Suggestion {
+    /// The app's current language in English (e.g. "German"), so titles match the UI language.
+    static var appLanguageName: String {
+        let code = Bundle.main.preferredLocalizations.first ?? "en"
+        return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? "English"
+    }
+
+    func classify(text: String, fileName: String, correspondents: [String], documentTypes: [String], tags: [String],
+                  titleLanguage: String = MistralClient.appLanguageName) async throws -> Suggestion {
         let nullableString: [String: Any] = ["type": ["string", "null"]]
         var typeSchema = nullableString
         if !documentTypes.isEmpty { typeSchema["enum"] = documentTypes + [NSNull()] }
@@ -153,25 +160,25 @@ struct MistralClient: Sendable {
         ]
 
         let system = """
-        Du bist ein Assistent für ein persönliches Dokumentenarchiv (ähnlich paperless-ngx). \
-        Analysiere das Dokument und antworte ausschließlich mit JSON nach dem Schema.
-        Regeln:
-        - title: kurzer, aussagekräftiger deutscher Titel (max. 60 Zeichen) ohne Datum und ohne Absendernamen, \
-        z. B. „Rechnung Max-Abo“, „Stromabschlag September“, „Kfz-Versicherung Beitragsrechnung“.
-        - correspondent: Absender bzw. Aussteller des Dokuments (nicht der Empfänger). Wenn er einem vorhandenen \
-        Korrespondenten entspricht, exakt dessen Namen verwenden; sonst den offiziellen Firmen- oder Behördennamen. null, wenn unklar.
-        - document_type: genau einer der vorhandenen Dokumenttypen oder null, wenn keiner passt.
-        - tags: nur passende vorhandene Tags, sonst leere Liste.
-        - date: Ausstellungsdatum des Dokuments im Format YYYY-MM-DD (nicht Fälligkeits- oder Leistungsdatum), null wenn keins erkennbar.
+        You are the assistant of a personal document archive (similar to paperless-ngx). \
+        Analyze the document and answer only with JSON that follows the schema.
+        Rules:
+        - title: a short, meaningful title in \(titleLanguage) (at most 60 characters), without a date and without \
+        the sender's name, e.g. for German "Rechnung Max-Abo", "Stromabschlag September", "Kfz-Versicherung Beitragsrechnung".
+        - correspondent: the sender or issuer of the document (not the recipient). If it is one of the existing \
+        correspondents, use exactly that name; otherwise the official name of the company or authority. null if unclear.
+        - document_type: exactly one of the existing document types, or null if none fits.
+        - tags: only fitting existing tags, otherwise an empty list.
+        - date: the issue date of the document as YYYY-MM-DD (not a due date or service period), null if there is none.
         """
 
         let user = """
-        Vorhandene Korrespondenten: \(correspondents.isEmpty ? "(keine)" : correspondents.joined(separator: "; "))
-        Vorhandene Dokumenttypen: \(documentTypes.isEmpty ? "(keine)" : documentTypes.joined(separator: "; "))
-        Vorhandene Tags: \(tags.isEmpty ? "(keine)" : tags.joined(separator: "; "))
-        Dateiname: \(fileName)
+        Existing correspondents: \(correspondents.isEmpty ? "(none)" : correspondents.joined(separator: "; "))
+        Existing document types: \(documentTypes.isEmpty ? "(none)" : documentTypes.joined(separator: "; "))
+        Existing tags: \(tags.isEmpty ? "(none)" : tags.joined(separator: "; "))
+        File name: \(fileName)
 
-        Dokumenttext:
+        Document text:
         \(String(text.prefix(16000)))
         """
 
@@ -200,17 +207,27 @@ struct MistralClient: Sendable {
         }
     }
 
-    // MARK: Verbindungstest
+    // MARK: Connection test
 
-    /// Prüft den API-Schlüssel und ob die eingestellten Modelle verfügbar sind.
-    func testConnection() async throws -> String {
+    /// Checks the API key and whether the configured models are available.
+    struct ConnectionResult: Sendable {
+        /// Configured models the API key cannot use; empty when everything is available.
+        var missingModels: [String]
+        var isComplete: Bool { missingModels.isEmpty }
+
+        var message: String {
+            isComplete ? String(localized: "Connection successful.")
+                       : String(localized: "Connected, but model not found: \(missingModels.joined(separator: ", "))")
+        }
+    }
+
+    func testConnection() async throws -> ConnectionResult {
         var request = URLRequest(url: baseURL.appending(path: "models"))
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         let json = try await send(request)
         let ids = Set((json["data"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String })
         let missing = [config.ocrModel, config.chatModel].filter { !ids.isEmpty && !ids.contains($0) }
-        if missing.isEmpty { return "Verbindung erfolgreich." }
-        return "Verbunden, aber Modell nicht gefunden: \(missing.joined(separator: ", "))"
+        return ConnectionResult(missingModels: missing)
     }
 
     // MARK: HTTP

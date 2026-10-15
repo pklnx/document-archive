@@ -2,8 +2,8 @@ import Foundation
 import SwiftData
 import SwiftUI
 
-/// Wie ein Tag, Korrespondent oder Dokumenttyp automatisch einem neuen Dokument zugeordnet wird
-/// (wie die Zuweisungsregeln in paperless-ngx).
+/// How a tag, correspondent or document type is assigned to a new document automatically
+/// (like the matching rules in paperless-ngx).
 enum MatchMode: String, Codable, CaseIterable, Identifiable {
     case none
     case any
@@ -15,16 +15,16 @@ enum MatchMode: String, Codable, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .none: "Keine automatische Zuordnung"
-        case .any: "Eines der Wörter"
-        case .all: "Alle Wörter"
-        case .exact: "Exakter Ausdruck"
-        case .regex: "Regulärer Ausdruck"
+        case .none: String(localized: "No automatic assignment")
+        case .any: String(localized: "Any of the words")
+        case .all: String(localized: "All words")
+        case .exact: String(localized: "Exact phrase")
+        case .regex: String(localized: "Regular expression")
         }
     }
 }
 
-/// Gemeinsame Eigenschaften von Tag, Korrespondent und Dokumenttyp.
+/// What tags, correspondents and document types have in common.
 protocol MatchingRule: AnyObject {
     var name: String { get }
     var matchText: String { get }
@@ -32,7 +32,7 @@ protocol MatchingRule: AnyObject {
 }
 
 extension MatchingRule {
-    /// Prüft, ob der Dokumenttext zur Regel passt (ohne Groß-/Kleinschreibung und Akzente).
+    /// Whether the document text matches the rule (ignoring case and diacritics).
     func matches(text: String) -> Bool {
         let pattern = matchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pattern.isEmpty, !text.isEmpty else { return false }
@@ -51,14 +51,14 @@ extension MatchingRule {
         }
     }
 
-    /// Wie gut die Regel passt (0 = gar nicht). Bei „Eines der Wörter“ zählt jedes gefundene Wort.
+    /// How well the rule matches (0 = not at all). For "any of the words", every word found counts.
     func matchScore(text: String) -> Int {
         guard matches(text: text) else { return 0 }
         if matchMode == .any {
             return words(in: matchText.trimmingCharacters(in: .whitespacesAndNewlines))
                 .filter { containsWord($0, in: text) }.count
         }
-        return 2 // exakte Ausdrücke, Regex und „alle Wörter“ sind spezifischer als ein einzelnes Wort
+        return 2 // exact phrases, regexes and "all words" are more specific than a single word
     }
 
     private func words(in pattern: String) -> [String] {
@@ -108,8 +108,8 @@ final class Correspondent: MatchingRule {
     @Relationship(deleteRule: .nullify, inverse: \Document.correspondent)
     var documents: [Document]? = []
 
-    /// Standard: exakter Ausdruck mit dem Namen ohne Firmenform. „Eines der Wörter“ würde z. B. bei
-    /// „Stadtwerke München“ jedes Dokument mit „München“ zuordnen.
+    /// Default: exact phrase with the name without its legal form. "Any of the words" would, for
+    /// "Stadtwerke München", assign every document that mentions "München".
     init(name: String) {
         self.name = name
         self.matchText = SenderDetector.coreName(name)
@@ -145,36 +145,44 @@ final class DocumentType: MatchingRule {
         "graduationcap", "briefcase", "cart", "bolt", "phone", "airplane",
     ]
 
-    /// Startvorgaben, die beim ersten Start angelegt werden.
-    static let defaults: [(String, String, String)] = [
-        ("Rechnung", "eurosign.circle", "Rechnung Rechnungsnummer Rechnungsdatum Invoice Factura Facture"),
-        ("Quittung", "cart", "Quittung Kassenbon Kassenbeleg Kaufbeleg Receipt Zahlungsbestätigung"),
-        ("Vertrag", "signature", "Vertrag Vertragsnummer Contract Agreement"),
-        ("Kontoauszug", "building.columns", "Kontoauszug Bankauszug Depotauszug"),
-        ("Brief", "envelope", ""),
-        ("Bescheid", "doc.plaintext", "Bescheid Steuerbescheid"),
-        ("Versicherung", "shield", "Versicherungsschein Police Versicherungsnummer"),
-        ("Gehaltsabrechnung", "list.bullet.rectangle", "Gehaltsabrechnung Entgeltabrechnung Lohnabrechnung Payslip"),
-        ("Arztbrief", "cross.case", "Arztbrief Befund Diagnose"),
+    /// Recommended types the user can create in the settings: (name, symbol, match words).
+    /// Names follow the app language; the match words cover German and English documents,
+    /// because they must match the documents' language, not the UI's.
+    static var defaults: [(String, String, String)] {
+        [
+            (String(localized: "Invoice"), "eurosign.circle",
+             "Rechnung Rechnungsnummer Rechnungsdatum Invoice Factura Facture"),
+            (String(localized: "Receipt"), "cart",
+             "Quittung Kassenbon Kassenbeleg Kaufbeleg Receipt Zahlungsbestätigung"),
+            (String(localized: "Contract"), "signature", "Vertrag Vertragsnummer Contract Agreement"),
+            (String(localized: "Bank statement"), "building.columns", "Kontoauszug Bankauszug Depotauszug"),
+            (String(localized: "Letter"), "envelope", ""),
+            (String(localized: "Notice"), "doc.plaintext", "Bescheid Steuerbescheid"),
+            (String(localized: "Insurance"), "shield", "Versicherungsschein Police Versicherungsnummer"),
+            (String(localized: "Payslip"), "list.bullet.rectangle",
+             "Gehaltsabrechnung Entgeltabrechnung Lohnabrechnung Payslip"),
+            (String(localized: "Medical letter"), "cross.case", "Arztbrief Befund Diagnose"),
+        ]
+    }
+
+    /// Match words of earlier versions, keyed by the German type name used then, with the symbol
+    /// that identifies the current default. Types the user left unchanged get the new words.
+    static let legacyDefaults: [String: (symbol: String, matchText: String)] = [
+        "Rechnung": ("eurosign.circle", "Rechnung Rechnungsnummer Rechnungsdatum"),
+        "Vertrag": ("signature", "Vertrag Vertragsnummer"),
+        "Kontoauszug": ("building.columns", "Kontoauszug"),
+        "Bescheid": ("doc.plaintext", "Bescheid"),
+        "Versicherung": ("shield", "Versicherungsschein Police"),
+        "Gehaltsabrechnung": ("list.bullet.rectangle", "Gehaltsabrechnung Entgeltabrechnung Lohnabrechnung"),
     ]
 
-    /// Frühere Standard-Suchbegriffe – unverändert übernommene Typen werden auf die neuen aktualisiert.
-    static let legacyDefaults: [String: String] = [
-        "Rechnung": "Rechnung Rechnungsnummer Rechnungsdatum",
-        "Vertrag": "Vertrag Vertragsnummer",
-        "Kontoauszug": "Kontoauszug",
-        "Bescheid": "Bescheid",
-        "Versicherung": "Versicherungsschein Police",
-        "Gehaltsabrechnung": "Gehaltsabrechnung Entgeltabrechnung Lohnabrechnung",
-    ]
-
-    /// Aktualisiert Suchbegriffe von Standardtypen, die der Nutzer nicht selbst verändert hat.
+    /// Updates the match words of default types the user has not changed.
     @MainActor
     static func upgradeDefaults(in context: ModelContext) {
         guard let types = try? context.fetch(FetchDescriptor<DocumentType>()) else { return }
         for type in types {
-            guard let legacy = legacyDefaults[type.name], type.matchText == legacy,
-                  let current = defaults.first(where: { $0.0 == type.name }) else { continue }
+            guard let legacy = legacyDefaults[type.name], type.matchText == legacy.matchText,
+                  let current = defaults.first(where: { $0.1 == legacy.symbol }) else { continue }
             type.matchText = current.2
         }
         try? context.save()

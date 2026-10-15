@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// Anlegen und Bearbeiten von Tags, Korrespondenten und Dokumenttypen inkl. Zuordnungsregel.
+/// Creating and editing tags, correspondents and document types, including their matching rule.
 struct RuleEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -22,7 +22,7 @@ struct RuleEditorView: View {
                 }
 
                 if isTag {
-                    Section("Farbe") {
+                    Section("Color") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
                             ForEach(Tag.palette, id: \.self) { hex in
                                 Circle()
@@ -35,7 +35,7 @@ struct RuleEditorView: View {
                                     }
                                     .onTapGesture { colorHex = hex }
                                     .accessibilityAddTraits(.isButton)
-                                    .accessibilityLabel("Farbe \(hex)")
+                                    .accessibilityLabel("Color \(hex)")
                             }
                         }
                         .padding(.vertical, 4)
@@ -61,7 +61,7 @@ struct RuleEditorView: View {
                 }
 
                 Section {
-                    Picker("Zuordnung", selection: $matchMode) {
+                    Picker("Assignment", selection: $matchMode) {
                         ForEach(MatchMode.allCases) { Text($0.label).tag($0) }
                     }
                     if matchMode != .none {
@@ -69,14 +69,14 @@ struct RuleEditorView: View {
                             .autocorrectionDisabled()
                     }
                 } header: {
-                    Text("Automatische Zuordnung")
+                    Text("Automatic assignment")
                 } footer: {
-                    Text("Neue Dokumente, deren Text zu dieser Regel passt, werden automatisch zugeordnet. Groß-/Kleinschreibung spielt keine Rolle.")
+                    Text("New documents whose text matches this rule are assigned automatically. Case does not matter.")
                 }
 
                 if matchMode != .none {
                     Section {
-                        Toggle("Auch auf vorhandene Dokumente anwenden", isOn: $applyToExisting)
+                        Toggle("Also apply to existing documents", isOn: $applyToExisting)
                     }
                 }
             }
@@ -87,16 +87,16 @@ struct RuleEditorView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
+                    Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Sichern") { save() }
+                    Button("Save") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .onAppear(perform: load)
             .onChange(of: name) { oldValue, newValue in
-                // Bei Korrespondenten den Namen als Suchbegriff vorschlagen
+                // For correspondents, suggest the name as the match phrase
                 if isCorrespondent, matchText.isEmpty || matchText == SenderDetector.coreName(oldValue) {
                     matchText = SenderDetector.coreName(newValue)
                 }
@@ -123,20 +123,20 @@ struct RuleEditorView: View {
 
     private var title: String {
         switch target {
-        case .newTag: "Neuer Tag"
-        case .newCorrespondent: "Neuer Korrespondent"
-        case .newDocumentType: "Neuer Dokumenttyp"
-        case .tag: "Tag bearbeiten"
-        case .correspondent: "Korrespondent bearbeiten"
-        case .documentType: "Dokumenttyp bearbeiten"
+        case .newTag: String(localized: "New Tag")
+        case .newCorrespondent: String(localized: "New Correspondent")
+        case .newDocumentType: String(localized: "New Document Type")
+        case .tag: String(localized: "Edit Tag")
+        case .correspondent: String(localized: "Edit Correspondent")
+        case .documentType: String(localized: "Edit Document Type")
         }
     }
 
     private var matchPlaceholder: String {
         switch matchMode {
-        case .regex: "z. B. Kundennr\\.?\\s*12345"
-        case .exact: "z. B. Stadtwerke München"
-        default: "Suchbegriffe, durch Leerzeichen getrennt"
+        case .regex: String(localized: "e.g. Kundennr\\.?\\s*12345")
+        case .exact: String(localized: "e.g. Stadtwerke München")
+        default: String(localized: "Search words, separated by spaces")
         }
     }
 

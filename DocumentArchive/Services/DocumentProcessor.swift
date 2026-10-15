@@ -3,8 +3,8 @@ import Foundation
 import PDFKit
 import Vision
 
-/// Analysiert ein PDF: Seitenzahl, Vorschaubild und Volltext.
-/// Hat das PDF keinen eingebetteten Text (z. B. Scans), wird der Text per Vision-Texterkennung gelesen.
+/// Analyzes a PDF: page count, thumbnail and full text.
+/// If the PDF has no embedded text (e.g. scans), the text is read with Vision text recognition.
 enum DocumentProcessor {
     struct Result: Sendable {
         var pageCount: Int
@@ -14,14 +14,14 @@ enum DocumentProcessor {
         var note: String = ""
     }
 
-    /// Maximal so viele Seiten werden per OCR gelesen, damit sehr lange Scans nicht ewig dauern.
+    /// At most this many pages are read with OCR, so very long scans do not take forever.
     private static let maxOCRPages = 40
 
-    /// - Parameter mistral: Wenn gesetzt und Mistral OCR aktiviert ist, wird der Text über Mistral gelesen.
-    ///   Bei Fehlern wird auf eingebetteten PDF-Text bzw. die lokale Apple-Texterkennung zurückgegriffen.
+    /// - Parameter mistral: When set and Mistral OCR is on, the text is read through Mistral.
+    ///   On errors, the embedded PDF text or local Apple text recognition is used instead.
     static func analyze(_ pdfData: Data, mistral: MistralConfig? = nil) async -> Result {
         guard let pdf = PDFDocument(data: pdfData) else {
-            return Result(pageCount: 0, thumbnail: nil, text: "", textSource: "", note: "PDF konnte nicht gelesen werden.")
+            return Result(pageCount: 0, thumbnail: nil, text: "", textSource: "", note: String(localized: "The PDF could not be read."))
         }
         let pageCount = pdf.pageCount
         let thumbnail = pdf.page(at: 0)
@@ -36,7 +36,7 @@ enum DocumentProcessor {
                     return Result(pageCount: pageCount, thumbnail: thumbnail, text: text, textSource: "Mistral OCR")
                 }
             } catch {
-                note = (error.localizedDescription) + " Lokale Texterkennung verwendet."
+                note = String(localized: "\(error.localizedDescription) Local text recognition was used instead.")
             }
         }
 
@@ -72,10 +72,10 @@ enum DocumentProcessor {
         return pages.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Rendert eine PDF-Seite plattformunabhängig in ein Bitmap.
+    /// Renders a PDF page into a bitmap, the same way on every platform.
     static func render(_ page: PDFPage, maxPixelSize: CGFloat) -> CGImage? {
         let bounds = page.bounds(for: .cropBox)
-        // Gedrehte Seiten: Breite/Höhe tauschen
+        // Rotated pages: swap width and height
         let rotated = page.rotation % 180 != 0
         let pageSize = rotated ? CGSize(width: bounds.height, height: bounds.width) : bounds.size
         guard pageSize.width > 0, pageSize.height > 0 else { return nil }

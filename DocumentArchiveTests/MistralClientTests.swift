@@ -73,6 +73,21 @@ extension GlobalStateTests {
             #expect(tagEnum == ["Steuer"])
         }
 
+        @Test func classificationAsksForTitlesInTheGivenLanguage() async throws {
+            MistralStub.install(config: MistralStub.config()) { _, _ in
+                .chat(["title": "T", "correspondent": NSNull(), "document_type": NSNull(), "tags": [], "date": NSNull()])
+            }
+            _ = try await client.classify(text: "Text", fileName: "", correspondents: [], documentTypes: [], tags: [],
+                                          titleLanguage: "German")
+            let body = MistralStub.json(try #require(MistralStub.requests.first).body)
+            let system = ((body["messages"] as? [[String: Any]])?.first?["content"] as? String) ?? ""
+            #expect(system.contains("title in German"))
+        }
+
+        @Test func appLanguageNameIsEnglishWord() {
+            #expect(["English", "German"].contains(MistralClient.appLanguageName))
+        }
+
         @Test func classificationWithoutTypesOrTagsHasNoEnums() async throws {
             MistralStub.install(config: MistralStub.config()) { _, _ in
                 .chat(["title": "T", "correspondent": NSNull(), "document_type": NSNull(), "tags": [], "date": NSNull()])
@@ -132,8 +147,10 @@ extension GlobalStateTests {
 
         @Test func connectionTestReportsMissingModels() async throws {
             MistralStub.install(config: MistralStub.config()) { _, _ in .json(["data": [["id": MistralConfig.defaultOCRModel]]]) }
-            let message = try await client.testConnection()
-            #expect(message.contains(MistralConfig.defaultChatModel))
+            let result = try await client.testConnection()
+            #expect(result.missingModels == [MistralConfig.defaultChatModel])
+            #expect(!result.isComplete)
+            #expect(result.message.contains(MistralConfig.defaultChatModel))
             #expect(MistralStub.requests.first?.request.url?.path == "/v1/models")
         }
 
@@ -141,8 +158,9 @@ extension GlobalStateTests {
             MistralStub.install(config: MistralStub.config()) { _, _ in
                 .json(["data": [["id": MistralConfig.defaultOCRModel], ["id": MistralConfig.defaultChatModel]]])
             }
-            let message = try await client.testConnection()
-            #expect(!message.contains(MistralConfig.defaultChatModel))
+            let result = try await client.testConnection()
+            #expect(result.isComplete)
+            #expect(!result.message.contains(MistralConfig.defaultChatModel))
         }
 
         // MARK: Key handling

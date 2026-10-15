@@ -73,7 +73,28 @@ One target builds both platforms. Platform-specific code is wrapped in
 `#if os(iOS)` / `#if os(macOS)`; keep it small and in `Platform/` where
 possible.
 
-UI texts are German and written directly in the views.
+## Localization
+
+Code, comments and UI source strings are English. German is provided through
+String Catalogs: `DocumentArchive/Localizable.xcstrings` for the UI and
+`DocumentArchive/InfoPlist.xcstrings` for Info.plist texts (camera permission,
+display name). The app shows German on a German system and English otherwise.
+
+- SwiftUI literals (`Text("…")`, `Button("…")`, `Section("…")`, …) are
+  localized automatically. Strings that are passed around as `String` (enum
+  labels, error messages, status texts, titles built in code) must use
+  `String(localized: "…")`, otherwise they stay English.
+- A missing German translation is a bug. Xcode adds new strings to the catalog
+  when you build in the IDE; fill in the German text there. On the command
+  line, `xcodebuild` does not update the catalog, so run
+  `python3 scripts/check-localization.py build` after a build with
+  `-derivedDataPath build` – CI does the same for macOS and iOS.
+- `LocalizationTests` checks that every catalog entry has a finished German
+  translation with the same placeholders.
+- Words that match document **content** (matching rules, sender and date
+  detection, default document type keywords) stay German and English,
+  independent of the UI language.
+- The Mistral prompt is English and asks for titles in the app's language.
 
 ## Data model and iCloud sync
 

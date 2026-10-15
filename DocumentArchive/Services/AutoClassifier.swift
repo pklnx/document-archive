@@ -1,17 +1,17 @@
 import Foundation
 import SwiftData
 
-/// Ordnet neuen Dokumenten anhand ihres Textes automatisch Korrespondent, Dokumenttyp,
-/// Tags, Titel und Ausstellungsdatum zu – wie die automatische Zuweisung in paperless-ngx.
+/// Assigns correspondent, document type, tags, title and issue date to new documents from
+/// their text, like the automatic matching in paperless-ngx.
 ///
-/// Reihenfolge:
-/// 1. Korrespondent über deine Regeln (exakte Namen sind am zuverlässigsten)
-/// 2. Mistral (falls eingerichtet): Korrespondent, Dokumenttyp, Tags, Titel, Datum
-/// 3. Deine Regeln für Typ und Tags, falls noch offen
-/// 4. Lokale Heuristiken: Absendererkennung und Datumserkennung
+/// Order:
+/// 1. Correspondent through the user's rules (exact names are the most reliable)
+/// 2. Mistral (if set up): correspondent, document type, tags, title, date
+/// 3. The user's rules for type and tags, if still empty
+/// 4. Local heuristics: sender detection and date detection
 @MainActor
 enum AutoClassifier {
-    /// Einstellung: Unbekannte Absender automatisch als neuen Korrespondenten anlegen.
+    /// Setting: create unknown senders as new correspondents automatically.
     static let autoCreateCorrespondentsKey = "autoCreateCorrespondents"
 
     /// Settings source; tests use a throwaway suite.
@@ -21,7 +21,7 @@ enum AutoClassifier {
         defaults.object(forKey: autoCreateCorrespondentsKey) as? Bool ?? true
     }
 
-    /// Was bei einer Zuordnung geändert wurde – für die Rückmeldung in der Oberfläche.
+    /// What an assignment run changed, for the feedback in the UI.
     struct Outcome {
         var changes: [String] = []
         var isComplete = false
@@ -33,15 +33,15 @@ enum AutoClassifier {
             if let aiError { lines.append("⚠︎ \(aiError)") }
             if changes.isEmpty {
                 lines.insert(isComplete
-                    ? "Korrespondent und Dokumenttyp sind bereits zugeordnet. Manuell gesetzte Felder werden nicht überschrieben."
-                    : "Nichts Neues erkannt. Lege Korrespondenten, Dokumenttypen oder Tags an oder richte Mistral in den Einstellungen ein.",
+                    ? String(localized: "Correspondent and document type are already assigned. Fields set by hand are not overwritten.")
+                    : String(localized: "Nothing new found. Create correspondents, document types or tags, or set up Mistral in the settings."),
                     at: 0)
             }
             return lines.joined(separator: "\n")
         }
     }
 
-    /// Füllt nur leere Felder; manuell gesetzte Zuordnungen bleiben unangetastet.
+    /// Only fills empty fields; assignments made by hand stay untouched.
     @discardableResult
     static func classify(_ document: Document, context: ModelContext) async -> Outcome {
         var outcome = Outcome()
@@ -51,10 +51,10 @@ enum AutoClassifier {
         let tags = (try? context.fetch(FetchDescriptor<Tag>())) ?? []
         let dateIsUntouched = Calendar.current.isDate(document.documentDate, inSameDayAs: document.createdAt)
 
-        // 1. Korrespondent über Regeln
+        // 1. Correspondent through rules
         if document.correspondent == nil, let match = bestMatch(in: correspondents, text: text) {
             document.correspondent = match
-            outcome.changes.append("Korrespondent: \(match.name)")
+            outcome.changes.append(String(localized: "Correspondent: \(match.name)"))
         }
 
         // 2. Mistral
@@ -69,12 +69,12 @@ enum AutoClassifier {
                 )
                 guard !document.isDeleted else { return outcome }
                 outcome.usedAI = true
-                // Während des Wartens auf Mistral können parallel importierte Dokumente Korrespondenten
-                // angelegt haben – daher die Liste neu laden, sonst entstehen Duplikate.
+                // While waiting for Mistral, documents imported in parallel may have created
+                // correspondents, so reload the list; otherwise duplicates appear.
                 correspondents = fetchCorrespondents(context)
                 if document.correspondent == nil, let match = bestMatch(in: correspondents, text: text) {
                     document.correspondent = match
-                    outcome.changes.append("Korrespondent: \(match.name)")
+                    outcome.changes.append(String(localized: "Correspondent: \(match.name)"))
                 }
                 apply(suggestion, to: document, correspondents: correspondents, types: types, tags: tags,
                       dateIsUntouched: dateIsUntouched, context: context, outcome: &outcome)
@@ -83,37 +83,38 @@ enum AutoClassifier {
             }
         }
 
-        // 3. Regeln für Typ und Tags
+        // 3. Rules for type and tags
         if document.documentType == nil, let match = bestMatch(in: types, text: text) {
             document.documentType = match
-            outcome.changes.append("Dokumenttyp: \(match.name)")
+            outcome.changes.append(String(localized: "Document type: \(match.name)"))
         }
         for tag in tags where tag.matches(text: text) && !document.hasTag(tag) {
             document.toggleTag(tag)
-            outcome.changes.append("Tag: \(tag.name)")
+            outcome.changes.append(String(localized: "Tag: \(tag.name)"))
         }
 
-        // 4. Heuristiken
+        // 4. Heuristics
         correspondents = fetchCorrespondents(context)
         if document.correspondent == nil, autoCreateCorrespondents,
            let detected = SenderDetector.detect(in: document.extractedText) {
             let (correspondent, isNew) = findOrCreateCorrespondent(named: detected.name, matchText: detected.matchText,
                                                                    among: correspondents, context: context)
             document.correspondent = correspondent
-            outcome.changes.append(isNew ? "Neuer Korrespondent: \(correspondent.name)" : "Korrespondent: \(correspondent.name)")
+            outcome.changes.append(isNew ? String(localized: "New correspondent: \(correspondent.name)")
+                                         : String(localized: "Correspondent: \(correspondent.name)"))
         }
         if dateIsUntouched, Calendar.current.isDate(document.documentDate, inSameDayAs: document.createdAt),
            let date = DateDetector.firstDate(in: document.extractedText),
            !Calendar.current.isDate(date, inSameDayAs: document.documentDate) {
             document.documentDate = date
-            outcome.changes.append("Datum: \(date.formatted(date: .long, time: .omitted))")
+            outcome.changes.append(String(localized: "Date: \(date.formatted(date: .long, time: .omitted))"))
         }
-        // Gescannte Dokumente ohne KI-Titel bekommen „Typ Korrespondent“ statt „Scan 15.10.2026 …“
+        // Scans without an AI title get "Type Correspondent" instead of "Scan 15.10.2026 …"
         if document.source != .file, document.hasAutomaticTitle {
             let parts = [document.documentType?.name, document.correspondent?.name].compactMap { $0 }
             if !parts.isEmpty {
                 document.title = parts.joined(separator: " ")
-                outcome.changes.append("Titel: \(document.title)")
+                outcome.changes.append(String(localized: "Title: \(document.title)"))
             }
         }
 
@@ -130,33 +131,33 @@ enum AutoClassifier {
             let existing = correspondents.first { sameName($0.name, name) || sameName(SenderDetector.coreName($0.name), core) }
             if let existing {
                 document.correspondent = existing
-                outcome.changes.append("Korrespondent (KI): \(existing.name)")
+                outcome.changes.append(String(localized: "Correspondent (AI): \(existing.name)"))
             } else if autoCreateCorrespondents {
                 let (created, _) = findOrCreateCorrespondent(named: name, matchText: core, among: correspondents, context: context)
                 document.correspondent = created
-                outcome.changes.append("Neuer Korrespondent (KI): \(created.name)")
+                outcome.changes.append(String(localized: "New correspondent (AI): \(created.name)"))
             }
         }
         if document.documentType == nil, let name = suggestion.documentType,
            let type = types.first(where: { sameName($0.name, name) }) {
             document.documentType = type
-            outcome.changes.append("Dokumenttyp (KI): \(type.name)")
+            outcome.changes.append(String(localized: "Document type (AI): \(type.name)"))
         }
         for name in suggestion.tags ?? [] {
             if let tag = tags.first(where: { sameName($0.name, name) }), !document.hasTag(tag) {
                 document.toggleTag(tag)
-                outcome.changes.append("Tag (KI): \(tag.name)")
+                outcome.changes.append(String(localized: "Tag (AI): \(tag.name)"))
             }
         }
         if dateIsUntouched, let date = suggestion.parsedDate,
            !Calendar.current.isDate(date, inSameDayAs: document.documentDate) {
             document.documentDate = date
-            outcome.changes.append("Datum (KI): \(date.formatted(date: .long, time: .omitted))")
+            outcome.changes.append(String(localized: "Date (AI): \(date.formatted(date: .long, time: .omitted))"))
         }
         if document.hasAutomaticTitle, let title = suggestion.title?.trimmingCharacters(in: .whitespacesAndNewlines),
            !title.isEmpty, title != document.title {
             document.title = String(title.prefix(120))
-            outcome.changes.append("Titel (KI): \(document.title)")
+            outcome.changes.append(String(localized: "Title (AI): \(document.title)"))
         }
     }
 
@@ -181,7 +182,7 @@ enum AutoClassifier {
         a.compare(b, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
     }
 
-    /// Bei mehreren Treffern gewinnt die Regel mit den meisten passenden Suchbegriffen.
+    /// With several matches, the rule with the most matching words wins.
     private static func bestMatch<T: MatchingRule>(in rules: [T], text: String) -> T? {
         rules.map { ($0, $0.matchScore(text: text)) }
             .filter { $0.1 > 0 }
@@ -189,19 +190,19 @@ enum AutoClassifier {
     }
 }
 
-/// Erkennt den Absender eines Dokuments, wenn noch kein passender Korrespondent existiert.
-/// 1. Zeile mit Firmenform (GmbH, AG, Inc., PBC …), außerhalb des Empfängerblocks
-/// 2. Sonst die Domain der ersten geschäftlichen E-Mail- oder Web-Adresse
+/// Detects the sender of a document when no matching correspondent exists yet.
+/// 1. A line with a legal form (GmbH, AG, Inc., PBC, …) outside the recipient block
+/// 2. Otherwise the domain of the first business e-mail or web address
 enum SenderDetector {
     struct Sender: Equatable {
         var name: String
-        /// Name ohne Firmenform – wird als exakter Suchbegriff für künftige Dokumente verwendet
+        /// Name without the legal form; used as the exact match phrase for future documents
         var matchText: String
     }
 
     private static let legalForm = #"(?:GmbH\s*&\s*Co\.?\s*KG(?:aA)?|gGmbH|GmbH|mbH|AG|SE|KGaA|KG|OHG|UG(?:\s*\(haftungsbeschränkt\))?|GbR|e\.\s?V\.|eG|Inc\.?|LLC|L\.L\.C\.|Ltd\.?|Limited|PBC|Corp\.?|Corporation|PLC|plc|S\.A\.|SA|S\.?A\.?R\.?L\.?|B\.V\.|BV|N\.V\.|AB|ApS|A/S|Oy|S\.p\.A\.|S\.r\.l\.)"#
 
-    /// Schlüsselwörter, nach denen Empfängeradressen folgen – diese Zeilen sind nicht der Absender.
+    /// Keywords followed by the recipient's address; those lines are not the sender.
     private static let recipientMarkers = [
         "bill to", "billed to", "ship to", "sold to", "invoice to", "customer",
         "rechnungsempfänger", "rechnungsadresse", "lieferadresse", "empfänger", "kunde:", "an:",
@@ -220,7 +221,7 @@ enum SenderDetector {
         for (index, line) in lines.enumerated() {
             let lower = line.lowercased()
             if recipientMarkers.contains(where: { lower.hasPrefix($0) }) {
-                skipUntil = index + 5 // Empfängerblock (Name + Adresse) überspringen
+                skipUntil = index + 5 // skip the recipient block (name and address)
                 continue
             }
             guard index > skipUntil, line.count <= 90, let name = companyName(in: line) else { continue }
@@ -234,19 +235,19 @@ enum SenderDetector {
         return nil
     }
 
-    /// „Anthropic, PBC @anthropic“ → „Anthropic, PBC“
+    /// "Anthropic, PBC @anthropic" → "Anthropic, PBC"
     static func companyName(in line: String) -> String? {
         let pattern = #"^([\p{L}\p{N}][\p{L}\p{N}&.,'’\- ]{1,60}?[,\s]\s*"# + legalForm + #")(?=$|[\s,;·|•/@()])"#
         guard let range = line.range(of: pattern, options: .regularExpression) else { return nil }
         let name = String(line[range]).trimmingCharacters(in: .whitespaces)
-        // Zeilen wie „Sitz der Gesellschaft …“ oder Bankverbindungen ausschließen
+        // Skip lines such as "Sitz der Gesellschaft …" (registered office) or bank details
         let lower = name.lowercased()
         let excluded = ["sitz", "registergericht", "amtsgericht", "geschäftsführ", "bank", "iban", "vat", "ust"]
         guard !excluded.contains(where: { lower.hasPrefix($0) }) else { return nil }
         return name
     }
 
-    /// Name ohne Firmenform: „Stadtwerke München GmbH“ → „Stadtwerke München“
+    /// Name without the legal form: "Stadtwerke München GmbH" → "Stadtwerke München"
     static func coreName(_ name: String) -> String {
         let stripped = name.replacingOccurrences(of: #"[,\s]+"# + legalForm + #"\s*$"#, with: "", options: .regularExpression)
         let trimmed = stripped.trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
@@ -265,7 +266,7 @@ enum SenderDetector {
     }
 }
 
-/// Findet das erste plausible Datum in einem deutschen oder englischen Text.
+/// Finds the first plausible date in a German or English text.
 enum DateDetector {
     private static let months: [String: Int] = [
         "januar": 1, "jänner": 1, "jan": 1, "january": 1,
@@ -282,11 +283,11 @@ enum DateDetector {
         "dezember": 12, "dez": 12, "dec": 12, "december": 12,
     ]
 
-    // Swift-Regex unterstützt kein Lookbehind, daher die Gruppe `(?:^|…)` als Vorbedingung
+    // Swift Regex has no lookbehind, hence the group `(?:^|…)` as a precondition
     private static let numeric = /(?:^|[^\d.])(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})(?!\d)/
     private static let iso = /(?:^|\D)(\d{4})-(\d{2})-(\d{2})(?!\d)/
     private static let written = /(?i)(?:^|\D)(\d{1,2})\.?\s+([a-zäöü]{3,9})\.?\s+(\d{4})(?!\d)/
-    /// Englisch: „October 3, 2026“ oder „Oct 3 2026“
+    /// English: "October 3, 2026" or "Oct 3 2026"
     private static let writtenUS = /(?i)([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?!\d)/
 
     static func firstDate(in text: String) -> Date? {
@@ -326,7 +327,7 @@ enum DateDetector {
         var components = DateComponents(year: year, month: month, day: day, hour: 12)
         components.calendar = Calendar(identifier: .gregorian)
         guard let date = components.date, components.isValidDate,
-              date <= Date().addingTimeInterval(60 * 60 * 24 * 365) // max. ein Jahr in der Zukunft
+              date <= Date().addingTimeInterval(60 * 60 * 24 * 365) // at most one year in the future
         else { return nil }
         return date
     }

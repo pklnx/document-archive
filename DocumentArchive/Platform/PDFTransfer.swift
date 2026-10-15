@@ -2,7 +2,7 @@ import CoreTransferable
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Ein PDF zum Teilen (ShareLink) oder Ziehen per Drag & Drop.
+/// A PDF for sharing (ShareLink) or dragging out of the app.
 struct PDFTransfer: Transferable {
     let data: Data
     let fileName: String
@@ -13,7 +13,7 @@ struct PDFTransfer: Transferable {
     }
 }
 
-/// Für den Export über den Dateidialog (`fileExporter`).
+/// For exporting through the file dialog (`fileExporter`).
 struct PDFFile: FileDocument {
     static let readableContentTypes: [UTType] = [.pdf]
     var data: Data

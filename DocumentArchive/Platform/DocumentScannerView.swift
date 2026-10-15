@@ -2,8 +2,8 @@
 import SwiftUI
 import VisionKit
 
-/// Der Dokumentenscanner von iOS: erkennt Seitenränder automatisch, korrigiert die Perspektive
-/// und erlaubt mehrere Seiten pro Scan.
+/// The iOS document scanner: detects page edges, corrects the perspective
+/// and allows several pages per scan.
 struct DocumentScannerView: UIViewControllerRepresentable {
     var onFinish: ([CGImage]) -> Void
     var onCancel: () -> Void
@@ -38,7 +38,7 @@ struct DocumentScannerView: UIViewControllerRepresentable {
         }
 
         func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
-            print("Scan fehlgeschlagen: \(error)")
+            print("Scan failed: \(error)")
             parent.onCancel()
         }
 

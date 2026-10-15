@@ -3,11 +3,11 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Erzeugt aus Bildern (Kamera-Scan, Fotos, Bilddateien) ein kompaktes PDF.
-/// Die Bilder werden verkleinert und als JPEG eingebettet, damit die Dateien klein bleiben
-/// und schnell über iCloud synchronisiert werden.
+/// Builds a compact PDF from images (camera scan, photos, image files).
+/// The images are scaled down and embedded as JPEG, so the files stay small
+/// and sync quickly through iCloud.
 enum PDFBuilder {
-    /// Breite einer Seite in PDF-Punkten (A4-Breite). Die Höhe ergibt sich aus dem Seitenverhältnis.
+    /// Page width in PDF points (A4 width). The height follows from the aspect ratio.
     private static let pageWidth: CGFloat = 595
     private static let maxPixelSize: Int = 2400
     private static let jpegQuality: CGFloat = 0.72
@@ -49,7 +49,7 @@ enum PDFBuilder {
         return makePDF(from: images)
     }
 
-    /// Lädt ein Bild mit korrekt angewendeter EXIF-Ausrichtung (wichtig für Handyfotos).
+    /// Loads an image with its EXIF orientation applied (important for phone photos).
     private static func orientedImage(from source: CGImageSource) -> CGImage? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -59,8 +59,8 @@ enum PDFBuilder {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    /// Verkleinert und JPEG-komprimiert ein Bild. Quartz übernimmt JPEG-Daten beim Zeichnen
-    /// direkt in das PDF, statt sie unkomprimiert einzubetten.
+    /// Scales an image down and compresses it as JPEG. Quartz copies JPEG data into the PDF
+    /// when drawing, instead of embedding it uncompressed.
     private static func compressed(_ image: CGImage) -> CGImage? {
         guard let jpeg = ImageCoding.jpegData(from: image, maxPixelSize: maxPixelSize, quality: jpegQuality),
               let source = CGImageSourceCreateWithData(jpeg as CFData, nil)
