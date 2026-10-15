@@ -4,9 +4,10 @@
 [extend]
 useDefault = true
 
-# Mistral keys are 32 alphanumeric characters without a provider prefix, so
-# neither GitHub secret scanning nor the default rules recognize them reliably.
-# The console shows them with an optional "mstrl_" prefix.
+# Mistral keys are 32 alphanumeric characters without a provider prefix, so the
+# default gitleaks rules only catch them next to words like "token" or "key".
+# GitHub push protection knows them, but only checks on push; this rule stops
+# them already at commit time. The console shows an optional "mstrl_" prefix.
 [[rules]]
 id = "mistral-api-key"
 description = "Mistral AI API key"
