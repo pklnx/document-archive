@@ -1,0 +1,40 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please remove API keys and the contents of your documents from logs and screenshots before posting.
+        Security problems: please use the private vulnerability report (link on the previous page) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+      placeholder: |
+        1. Imported a PDF with …
+        2. Clicked „Automatisch zuordnen“
+        Expected: …
+        Actual: …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "App version (macOS: About window), or the git commit (`git rev-parse --short HEAD`)."
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: macOS or iOS version, device, whether iCloud sync and Mistral are turned on.
+      placeholder: macOS 27 on Apple Silicon, Mistral on, unsigned build
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Crash report or Console output. Pasted as code."
+      render: text

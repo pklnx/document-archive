@@ -1,0 +1,4 @@
+# Labels applied automatically to pull requests by .github/workflows/labeler.yml.
+schema-change:
+  - changed-files:
+      - any-glob-to-any-file: DocumentArchive/Model/**
