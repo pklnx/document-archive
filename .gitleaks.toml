@@ -1,0 +1,16 @@
+# gitleaks configuration: the default rules plus a rule for Mistral API keys.
+# Used by the `gitleaks` CI job and the pre-commit hook in .githooks/.
+
+[extend]
+useDefault = true
+
+# Mistral keys are 32 alphanumeric characters without a provider prefix, so the
+# default gitleaks rules only catch them next to words like "token" or "key".
+# GitHub push protection knows them, but only checks on push; this rule stops
+# them already at commit time. The console shows an optional "mstrl_" prefix.
+[[rules]]
+id = "mistral-api-key"
+description = "Mistral AI API key"
+regex = '''(?i)mistral[\w.\-]{0,40}?\s*[:=]\s*["']?(?:mstrl_)?([A-Za-z0-9]{32})["']?'''
+secretGroup = 1
+keywords = ["mistral"]
