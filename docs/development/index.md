@@ -73,6 +73,37 @@ New features that send data anywhere else need this stated in the plan and a
 setting to turn them off. API keys are stored in the Keychain, never in
 `UserDefaults`, files or logs.
 
+## Secrets
+
+The repository is public, so credentials must never be committed. Three
+layers check for them:
+
+- **Pre-commit hook** (local, opt-in): runs [gitleaks](https://github.com/gitleaks/gitleaks)
+  on the staged changes and refuses the commit on a finding. Enable it once
+  per clone:
+
+  ```sh
+  brew install gitleaks
+  git config core.hooksPath .githooks
+  ```
+
+- **CI job `gitleaks`** (required): scans the full history of every pull
+  request and of `main`. The gitleaks version and the SHA-256 of its release
+  archive are pinned in `.github/workflows/ci.yml`; to update, change both
+  (`shasum -a 256` of the new `gitleaks_<version>_linux_x64.tar.gz`, compared
+  with the release's `checksums.txt`).
+- **GitHub secret scanning with push protection** for known provider formats.
+
+`.gitleaks.toml` adds a rule for Mistral API keys to the default rules.
+Findings are printed redacted. For a false positive, prefer changing the code
+over an allow list; if an exception is needed, add it to `.gitleaks.toml` with
+a comment saying why.
+
+**After a leak, revoke the credential first** (for Mistral: delete the key in
+the Mistral console and create a new one). Once something was pushed to a
+public repository, it must be treated as known, even if the history is
+rewritten afterwards.
+
 ## Pull requests and labels
 
 Changes start as an issue with an approved plan; see
@@ -97,7 +128,8 @@ file changes on `main`.
 
 - The app uses only Apple frameworks; adding a Swift package needs a reason
   in the plan.
-- CI builds the macOS and the iOS app on every pull request.
+- CI builds the macOS and the iOS app and scans for credentials with
+  gitleaks on every pull request (see [Secrets](#secrets)).
 - Dependabot opens weekly update pull requests for GitHub Actions.
 - GitHub Actions are pinned to commit SHAs; workflows run with read-only
   permissions unless a job needs more.

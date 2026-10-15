@@ -22,6 +22,10 @@ advisory unless you prefer otherwise.
 This project is entirely AI-written (see the [README](README.md)).
 Independent review is welcome.
 
+Every pull request is scanned for committed credentials with gitleaks, in
+addition to GitHub secret scanning with push protection (see
+[docs/development](docs/development/index.md#secrets)).
+
 ## Scope
 
 In scope, for example:
