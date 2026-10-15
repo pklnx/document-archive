@@ -28,8 +28,34 @@ final class SyncMonitor {
 
     var isICloudSignedIn: Bool { FileManager.default.ubiquityIdentityToken != nil }
 
-    /// Whether the app is signed with the iCloud/CloudKit entitlement. Unsigned development builds
-    /// are not; then SwiftData can only store locally.
+    /// Info.plist key filled from the build setting `DA_CLOUDKIT_ENABLED` (see Config/Project.xcconfig).
+    static let cloudKitFlagKey = "DACloudKitEnabled"
+
+    /// Whether this build may use CloudKit. The build flag must be on – it is only set for builds
+    /// signed with the paid Apple Developer team – and on macOS the CloudKit entitlement must be
+    /// present as well. Being signed in to iCloud alone is not enough: ad-hoc signed simulator and
+    /// unsigned builds must never open a CloudKit store.
+    nonisolated static func cloudKitAvailable(
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary,
+        hasEntitlement: () -> Bool = { hasCloudKitEntitlement }
+    ) -> Bool {
+        guard isOn(infoDictionary?[cloudKitFlagKey]) else { return false }
+        #if os(macOS)
+        return hasEntitlement()
+        #else
+        return true
+        #endif
+    }
+
+    /// Reads a Boolean Info.plist value written as `YES`/`NO` by the build setting.
+    nonisolated private static func isOn(_ value: Any?) -> Bool {
+        if let bool = value as? Bool { return bool }
+        guard let string = (value as? String)?.trimmingCharacters(in: .whitespaces).lowercased() else { return false }
+        return ["yes", "true", "1"].contains(string)
+    }
+
+    /// Whether the app is signed with the iCloud/CloudKit entitlement (macOS). Unsigned development
+    /// builds are not; then SwiftData can only store locally.
     nonisolated static var hasCloudKitEntitlement: Bool {
         #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil),
@@ -37,8 +63,7 @@ final class SyncMonitor {
         else { return false }
         return (value as? [String])?.contains("CloudKit") ?? false
         #else
-        // iOS apps only run signed; without the iCloud entitlement the system returns no identity token.
-        return FileManager.default.ubiquityIdentityToken != nil
+        return true   // iOS has no public API for this; the build flag decides
         #endif
     }
 

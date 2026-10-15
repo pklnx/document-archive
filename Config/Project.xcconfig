@@ -1,0 +1,9 @@
+// Build settings shared by all configurations of the app target.
+
+// CloudKit sync needs a build signed with the paid Apple Developer team. Leave this NO for
+// unsigned, ad-hoc (simulator) and free Personal Team builds; set it to YES in
+// Config/Local.xcconfig (not in git) for the signed build. See docs/development/ios.md.
+DA_CLOUDKIT_ENABLED = NO
+
+// Optional local overrides, e.g. DEVELOPMENT_TEAM and DA_CLOUDKIT_ENABLED = YES.
+#include? "Local.xcconfig"

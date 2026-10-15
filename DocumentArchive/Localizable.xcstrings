@@ -1341,6 +1341,16 @@
         }
       }
     },
+    "No page of the scan could be read.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Seite des Scans konnte gelesen werden."
+          }
+        }
+      }
+    },
     "No text recognized": {
       "localizations": {
         "de": {
@@ -1661,6 +1671,26 @@
         }
       }
     },
+    "Scan failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Scan partly imported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan teilweise importiert"
+          }
+        }
+      }
+    },
     "Search full text": {
       "localizations": {
         "de": {
@@ -1937,6 +1967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die ausgewählten Fotos konnten nicht geladen werden."
+          }
+        }
+      }
+    },
+    "These pages could not be read and were skipped: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Seiten konnten nicht gelesen werden und wurden übersprungen: %@"
           }
         }
       }

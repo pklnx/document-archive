@@ -26,44 +26,10 @@ struct DocumentArchiveApp: App {
         #endif
     }
 
-    /// Creates the store. With the iCloud entitlement, SwiftData syncs automatically through the
-    /// private CloudKit database (container `iCloud.de.patrickklein.DocumentArchive`).
-    /// Without it (e.g. an unsigned build), data is stored locally only.
-    static let storeName = "DocumentArchive"
-
-    static let schema = Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
-
+    /// Creates the store chosen at launch (see `StoreChoice`). With CloudKit, SwiftData syncs
+    /// through the private database (container `iCloud.de.patrickklein.DocumentArchive`).
     private static func makeContainer() -> ModelContainer {
-        // Unit tests are hosted by the app: never touch the real archive during a test run.
-        if TestEnvironment.isRunningTests {
-            return try! ModelContainer(for: schema, configurations: ModelConfiguration(
-                schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none))
-        }
-        LegacyMigration.run(newStoreName: storeName)
-        let monitor = SyncMonitor.shared
-        if SyncMonitor.hasCloudKitEntitlement {
-            do {
-                let config = ModelConfiguration(storeName, schema: schema,
-                                                cloudKitDatabase: .private(SyncMonitor.containerIdentifier))
-                let container = try ModelContainer(for: schema, configurations: config)
-                monitor.isCloudKitEnabled = true
-                return container
-            } catch {
-                print("Could not open the CloudKit store, using local storage: \(error)")
-            }
-        }
-        // Same location as with CloudKit, so nothing is lost when sync is turned on later
-        do {
-            let local = ModelConfiguration(storeName, schema: schema, cloudKitDatabase: .none)
-            return try ModelContainer(for: schema, configurations: local)
-        } catch {
-            do {
-                let local = ModelConfiguration("\(storeName)-lokal", schema: schema, cloudKitDatabase: .none)
-                return try ModelContainer(for: schema, configurations: local)
-            } catch {
-                fatalError("Could not create the store: \(error)")
-            }
-        }
+        ArchiveStore.makeContainer(for: ArchiveStore.currentChoice())
     }
 }
 

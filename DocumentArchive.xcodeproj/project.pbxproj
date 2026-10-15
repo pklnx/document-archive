@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		A10000000000000000000001 /* Document Archive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Document Archive.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000003 /* Project.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Project.xcconfig; sourceTree = "<group>"; };
 		A10000000000000000000002 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
 		B10000000000000000000001 /* DocumentArchiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocumentArchiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -58,6 +59,7 @@
 			children = (
 				A10000000000000000000010 /* DocumentArchive */,
 				A10000000000000000000002 /* Config */,
+				A10000000000000000000003 /* Project.xcconfig */,
 				B10000000000000000000010 /* DocumentArchiveTests */,
 				A10000000000000000000031 /* Products */,
 			);
@@ -290,6 +292,7 @@
 		};
 		A10000000000000000000061 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000003 /* Project.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -301,6 +304,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_FILE[sdk=macosx*]" = "Config/Info-macOS.plist";
 				"INFOPLIST_FILE[sdk=iphoneos*]" = "Config/Info-iOS.plist";
 				"INFOPLIST_FILE[sdk=iphonesimulator*]" = "Config/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Document Archive";
@@ -331,6 +335,7 @@
 		};
 		A10000000000000000000062 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000003 /* Project.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -342,6 +347,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_FILE[sdk=macosx*]" = "Config/Info-macOS.plist";
 				"INFOPLIST_FILE[sdk=iphoneos*]" = "Config/Info-iOS.plist";
 				"INFOPLIST_FILE[sdk=iphonesimulator*]" = "Config/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Document Archive";

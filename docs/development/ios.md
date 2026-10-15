@@ -1,0 +1,96 @@
+# iPhone and iPad
+
+The app is one target for macOS, iOS and iPadOS. Every change must work on all
+three; this page covers running and checking the iPhone and iPad versions.
+
+## Simulators
+
+Xcode installs the iOS runtime of its version. `scripts/pick-simulator.py`
+picks a simulator by screen size (newest runtime only), the same way CI does:
+
+```sh
+python3 scripts/pick-simulator.py iphone smallest   # e.g. iPhone 17e
+python3 scripts/pick-simulator.py ipad largest      # e.g. iPad Pro 13-inch
+```
+
+Run the unit tests on the iPhone simulator (this is the required CI check
+`test (iOS)`):
+
+```sh
+xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+  -destination "platform=iOS Simulator,id=$(python3 scripts/pick-simulator.py iphone smallest)" \
+  CODE_SIGN_IDENTITY=-
+```
+
+`CODE_SIGN_IDENTITY=-` signs ad hoc ("Sign to Run Locally"); it needs no team.
+The Keychain tests fail without a signature on the simulator.
+
+The simulator has no camera, so the "Add" button falls back to the file
+importer there. The scan import itself is covered by `ScanImportTests` through
+the `ScannedPages` protocol, without a camera.
+
+### iPad multitasking
+
+- **iPadOS 26 and later:** check windows resized to their narrowest width and
+  the menu bar.
+- **Split View (½, ⅓) and Slide Over** only exist up to iPadOS 18. Install an
+  iPadOS 18 runtime in Xcode → Settings → Components → Other Installed
+  Platforms (+), then create an iPad simulator with it. CI only has the
+  image's default runtime, so these checks are manual.
+
+## On a real device
+
+### Now: free Apple ID ("Personal Team")
+
+1. Xcode → Settings → Accounts → add your Apple ID.
+2. Create `Config/Local.xcconfig` (it is in `.gitignore`):
+
+   ```
+   DEVELOPMENT_TEAM = ABCDE12345
+   DA_CLOUDKIT_ENABLED = NO
+   ```
+
+   The team ID is shown in Xcode → Settings → Accounts.
+3. Connect the device, select it as the run destination and run.
+
+Limits of a Personal Team build: it expires after **7 days** and must be
+installed again; no iCloud/CloudKit and no App Groups (so no sync and no share
+extension). Keep `DA_CLOUDKIT_ENABLED = NO`.
+
+### Later: paid Apple Developer Program
+
+- Set `DA_CLOUDKIT_ENABLED = YES` in `Config/Local.xcconfig` for the signed
+  build. The app only opens a CloudKit store when this flag is on (and, on
+  macOS, the build has the CloudKit entitlement); being signed in to iCloud is
+  not enough. Unsigned, ad-hoc and CI builds keep the repository default `NO`.
+- Enable the iCloud container and, for #12, the App Group in *Signing &
+  Capabilities*.
+- Distribute through TestFlight instead of installing from Xcode.
+
+## Known gaps
+
+Need a real device:
+
+- scan quality with the real camera (edge detection, lighting);
+- Photos with originals stored in iCloud Photos;
+- performance with many documents and memory use with large PDFs.
+
+Need the paid account:
+
+- iCloud sync between devices;
+- the share extension (#12).
+
+## Manual check before a release
+
+On the smallest and largest iPhone and on iPad mini and iPad Pro, in portrait
+and landscape:
+
+| Area | Check |
+|---|---|
+| Navigation | sidebar → list → document and back; a new import opens the document |
+| List | swipe actions, context menu, sort, search, empty states |
+| Document | PDF view, inspector (sheet on iPhone, column on iPad), share, export |
+| Sheets and dialogs | settings, rule editor, alerts and delete confirmations can be dismissed |
+| Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad |
+| iPad | keyboard shortcuts and menu bar, narrow windows, Split View on iPadOS 18 |
+| Sidebar footer | sync status matches the build (local only on unsigned builds) |
