@@ -24,7 +24,7 @@ struct DocumentListView<ImportMenu: View>: View {
     let searchText: String
     @Binding var selection: Document?
     @ViewBuilder var importMenu: () -> ImportMenu
-    var onDropFiles: ([URL]) -> Void
+    var onDropFiles: ([ImportedFile]) -> Void
 
     @AppStorage("documentSort") private var sort: DocumentSort = .added
     @State private var isDropTargeted = false
@@ -61,6 +61,7 @@ struct DocumentListView<ImportMenu: View>: View {
                 NavigationLink(value: document) {
                     DocumentRow(document: document)
                 }
+                .accessibilityIdentifier(AccessibilityID.documentRow(document.title))
                 .swipeActions(edge: .leading) {
                     Button {
                         document.isInbox.toggle()
@@ -75,6 +76,7 @@ struct DocumentListView<ImportMenu: View>: View {
                     Button(role: .destructive) { documentToDelete = document } label: {
                         Label("Delete", systemImage: "trash")
                     }
+                    .accessibilityIdentifier(AccessibilityID.deleteSwipe)
                     Button {
                         document.isFavorite.toggle()
                         document.touch()
@@ -87,6 +89,7 @@ struct DocumentListView<ImportMenu: View>: View {
                 .draggable(document.transfer ?? PDFTransfer(data: Data(), fileName: String(localized: "Document") + ".pdf"))
             }
         }
+        .accessibilityIdentifier(AccessibilityID.documentList)
         .overlay {
             if documents.isEmpty { emptyState }
         }
@@ -99,9 +102,9 @@ struct DocumentListView<ImportMenu: View>: View {
                     .allowsHitTesting(false)
             }
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            onDropFiles(urls)
-            return true
+        .dropDestination(for: ImportedFile.self) { files, _ in
+            onDropFiles(files)
+            return !files.isEmpty
         } isTargeted: { isDropTargeted = $0 }
         .navigationTitle(filter.title)
         #if os(macOS)
@@ -111,6 +114,7 @@ struct DocumentListView<ImportMenu: View>: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 importMenu()
+                    .accessibilityIdentifier(AccessibilityID.importMenu)
             }
             if filter == .duplicates, !documents.isEmpty {
                 ToolbarItem {
@@ -136,15 +140,13 @@ struct DocumentListView<ImportMenu: View>: View {
         } message: {
             Text("For every identical file, the document imported first is kept. Missing details such as tags or notes are taken over from the duplicates.")
         }
-        .confirmationDialog("Delete document?", isPresented: .constant(documentToDelete != nil),
-                            titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                if let documentToDelete { delete(documentToDelete) }
-                documentToDelete = nil
-            }
-            Button("Cancel", role: .cancel) { documentToDelete = nil }
-        } message: {
-            Text("“\(documentToDelete?.title ?? "")” will be deleted on all devices.")
+        .confirmationDialog("Delete document?", isPresented: Binding(presenting: $documentToDelete),
+                            titleVisibility: .visible, presenting: documentToDelete) { document in
+            Button("Delete", role: .destructive) { delete(document) }
+                .accessibilityIdentifier(AccessibilityID.deleteConfirm)
+            Button("Cancel", role: .cancel) {}
+        } message: { document in
+            Text("“\(document.isAlive ? document.title : "")” will be deleted on all devices.")
         }
     }
 
@@ -193,6 +195,7 @@ struct DocumentListView<ImportMenu: View>: View {
     }
 
     private func delete(_ document: Document) {
+        guard document.isAlive else { return }
         if selection?.id == document.id { selection = nil }
         context.delete(document)
         try? context.save()

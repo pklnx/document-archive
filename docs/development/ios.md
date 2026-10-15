@@ -22,6 +22,18 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
   CODE_SIGN_IDENTITY=-
 ```
 
+Run the UI smoke tests (any iPhone or iPad simulator):
+
+```sh
+xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
+  -destination "platform=iOS Simulator,id=$(python3 scripts/pick-simulator.py ipad smallest)" \
+  CODE_SIGN_IDENTITY=-
+```
+
+To look at the app with the same sample data, start it with the launch argument
+`-UITestSeed` (Xcode: Product → Scheme → Edit Scheme → Run → Arguments). Nothing
+is saved in that mode.
+
 `CODE_SIGN_IDENTITY=-` signs ad hoc ("Sign to Run Locally"); it needs no team.
 The Keychain tests fail without a signature on the simulator.
 
@@ -92,5 +104,5 @@ and landscape:
 | Document | PDF view, inspector (sheet on iPhone, column on iPad), share, export |
 | Sheets and dialogs | settings, rule editor, alerts and delete confirmations can be dismissed |
 | Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad |
-| iPad | keyboard shortcuts and menu bar, narrow windows, Split View on iPadOS 18 |
+| iPad | keyboard shortcuts (⌘O, ⌘,) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list |
 | Sidebar footer | sync status matches the build (local only on unsigned builds) |

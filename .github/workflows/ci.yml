@@ -92,6 +92,42 @@ jobs:
           path: TestResults.xcresult
           retention-days: 7
 
+  test-ios-ui:
+    # UI smoke tests on the smallest iPhone and the smallest iPad. The app starts with generated
+    # sample data in memory (-UITestSeed), so no real archive, no iCloud and no Mistral.
+    # Not a required check yet: it becomes one after a week without flaky runs.
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iphone, ipad]
+    name: test (iOS UI, ${{ matrix.device }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version
+      - name: Pick simulator
+        id: simulator
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: echo "udid=$(python3 scripts/pick-simulator.py "$DEVICE" smallest)" >> "$GITHUB_OUTPUT"
+      - name: UI tests
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -o pipefail
+          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
+            -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY=- | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)"
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TestResults-iOS-UI-${{ matrix.device }}
+          path: TestResults.xcresult
+          retention-days: 7
+
   gitleaks:
     # Scans the full history for credentials. The gitleaks binary is pinned and
     # checked against a SHA-256 kept here, so no third-party action runs with a token.

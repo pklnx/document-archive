@@ -88,6 +88,7 @@ struct RuleEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier(AccessibilityID.ruleEditorCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }

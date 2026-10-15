@@ -40,7 +40,7 @@ struct SidebarView: View {
                         }
                 }
             } header: {
-                sectionHeader(String(localized: "Document Types")) { editorTarget = .newDocumentType }
+                sectionHeader(String(localized: "Document Types"), id: "documentType") { editorTarget = .newDocumentType }
             }
 
             Section {
@@ -54,7 +54,7 @@ struct SidebarView: View {
                         }
                 }
             } header: {
-                sectionHeader(String(localized: "Correspondents")) { editorTarget = .newCorrespondent }
+                sectionHeader(String(localized: "Correspondents"), id: "correspondent") { editorTarget = .newCorrespondent }
             }
 
             Section {
@@ -70,15 +70,17 @@ struct SidebarView: View {
                             countBadge(tag.documentCount)
                         }
                     }
+                    .accessibilityIdentifier(AccessibilityID.sidebarRow(.tag(tag)))
                     .contextMenu {
                         Button("Edit…", systemImage: "pencil") { editorTarget = .tag(tag) }
                         Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
                     }
                 }
             } header: {
-                sectionHeader(String(localized: "Tags")) { editorTarget = .newTag }
+                sectionHeader(String(localized: "Tags"), id: "tag") { editorTarget = .newTag }
             }
         }
+        .accessibilityIdentifier(AccessibilityID.sidebar)
         .navigationTitle("Document Archive")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 200, ideal: 240)
@@ -86,6 +88,7 @@ struct SidebarView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Settings", systemImage: "gearshape") { showSettings = true }
+                    .accessibilityIdentifier(AccessibilityID.settingsButton)
             }
         }
         #endif
@@ -96,12 +99,13 @@ struct SidebarView: View {
         }
         .confirmationDialog(
             pendingDeletion?.title ?? "",
-            isPresented: .constant(pendingDeletion != nil),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) { deletePending() }
-            Button("Cancel", role: .cancel) { pendingDeletion = nil }
-        } message: {
+            isPresented: Binding(presenting: $pendingDeletion),
+            titleVisibility: .visible,
+            presenting: pendingDeletion
+        ) { deletion in
+            Button("Delete", role: .destructive) { delete(deletion) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
             Text("The documents themselves are kept.")
         }
     }
@@ -114,6 +118,7 @@ struct SidebarView: View {
                 if let count { countBadge(count) }
             }
         }
+        .accessibilityIdentifier(AccessibilityID.sidebarRow(item))
     }
 
     @ViewBuilder
@@ -125,7 +130,7 @@ struct SidebarView: View {
         }
     }
 
-    private func sectionHeader(_ title: String, add: @escaping () -> Void) -> some View {
+    private func sectionHeader(_ title: String, id: String, add: @escaping () -> Void) -> some View {
         HStack {
             Text(title)
             Spacer()
@@ -135,6 +140,7 @@ struct SidebarView: View {
             .buttonStyle(.borderless)
             .help(String(localized: "\(title): create new"))
             .accessibilityLabel(String(localized: "Add \(title)"))
+            .accessibilityIdentifier(AccessibilityID.sidebarAdd(id))
         }
     }
 
@@ -150,9 +156,8 @@ struct SidebarView: View {
         }
     }
 
-    private func deletePending() {
-        guard let pendingDeletion else { return }
-        switch pendingDeletion {
+    private func delete(_ deletion: PendingDeletion) {
+        switch deletion {
         case .tag(let tag):
             if selection == .tag(tag) { selection = .all }
             context.delete(tag)
@@ -164,7 +169,6 @@ struct SidebarView: View {
             context.delete(type)
         }
         try? context.save()
-        self.pendingDeletion = nil
     }
 }
 

@@ -42,9 +42,13 @@ enum ArchiveStore {
         for choice: StoreChoice,
         migrate: () -> Void = { LegacyMigration.run(newStoreName: storeName) }
     ) -> ModelContainer {
-        if case .inMemory = choice {
-            return try! ModelContainer(for: schema, configurations: ModelConfiguration(
+        if case .inMemory(let seed) = choice {
+            let container = try! ModelContainer(for: schema, configurations: ModelConfiguration(
                 schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none))
+            #if DEBUG
+            if seed { UITestSeed.fill(container.mainContext) }
+            #endif
+            return container
         }
         migrate()
         if choice == .cloudKit {
