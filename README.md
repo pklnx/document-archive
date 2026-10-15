@@ -1,52 +1,56 @@
 # Document Archive
 
 > [!WARNING]
-> **Dieses Projekt ist vollständig vibe-coded.** Code, Konfiguration und
-> Dokumentation wurden von einer KI (Claude) unter menschlicher Anleitung
-> geschrieben, ohne zeilenweise menschliche Prüfung. Prüfe es selbst, bevor du
-> ihm wichtige Dokumente anvertraust, und behalte unabhängige Sicherungen.
+> **This project is entirely vibe-coded.** All code, configuration and
+> documentation were written by an AI (Claude) under human direction, without
+> line-by-line human review. Review it yourself before trusting it with
+> important documents, and keep independent backups.
 
-Persönliches Dokumentenarchiv im Stil von paperless-ngx für iPhone, iPad und Mac – ohne Server und ohne Benutzerverwaltung.
-Alle Daten werden über deine private iCloud (CloudKit) zwischen den Geräten synchronisiert.
+A personal document archive in the style of paperless-ngx for iPhone, iPad and Mac – without a server and without user accounts.
+All data is synced between your devices through your private iCloud (CloudKit).
 
-## Funktionen
+The app is available in English and German.
 
-- **Mistral AI** (optional): Mistral OCR für die Texterkennung, Mistral Medium für Titel, Korrespondent, Typ, Tags und Datum
-- **Duplikaterkennung**: identische Dateien werden beim Import übersprungen
-- **Hinzufügen**: Kamera-Scan (iPhone/iPad, mit automatischer Kantenerkennung), PDFs und Bilder aus Dateien, Fotos aus der Mediathek, Drag & Drop (Mac: auch ⌘O)
-- **Texterkennung (OCR)** für Scans und Bild-PDFs (Deutsch und Englisch), danach **Volltextsuche**
-- **Korrespondenten, Dokumenttypen, Tags** und **ASN** (Archiv-Seriennummer) wie in paperless
-- **Automatische Zuordnung** über Suchbegriffe (eines/alle Wörter, exakt, Regex) sowie **Erkennung des Ausstellungsdatums**
-- **Posteingang** für neue Dokumente, Favoriten, Sortierung, Teilen und PDF-Export
+## Features
 
-## Einrichtung (einmalig)
+- **Add documents:** camera scan (iPhone/iPad, with automatic edge detection), PDFs and images from Files, photos from the library, drag and drop (Mac: also ⌘O)
+- **Text recognition (OCR)** for scans and image-only PDFs (German and English), then **full-text search**
+- **Mistral AI** (optional): Mistral OCR for text recognition, Mistral Medium for title, correspondent, type, tags and date
+- **Correspondents, document types, tags** and **ASN** (archive serial number), as in paperless
+- **Automatic assignment** with matching rules (any/all words, exact phrase, regex), sender detection and **issue date detection**
+- **Duplicate detection:** identical files are skipped on import
+- **Inbox** for new documents, favorites, sorting, sharing and PDF export
 
-1. `DocumentArchive.xcodeproj` in Xcode öffnen.
-2. Target **DocumentArchive** → *Signing & Capabilities* → bei **Team** deine Apple-ID / dein Entwicklerteam wählen.
-3. Bei Bedarf die **Bundle-ID** (`de.patrickklein.DocumentArchive`) anpassen. Unter **iCloud** muss der Container
-   `iCloud.de.patrickklein.DocumentArchive` angehakt sein (bei geänderter ID: neuen Container anlegen und in
-   `Config/DocumentArchive-iOS.entitlements` und `Config/DocumentArchive-macOS.entitlements` eintragen).
-4. Einmal auf **My Mac** und einmal auf dem **iPhone/iPad** ausführen. Auf allen Geräten mit derselben Apple-ID bei iCloud angemeldet sein.
+## Setup (once)
 
-> Für iCloud/CloudKit wird ein Apple-Developer-Account benötigt (99 €/Jahr). Ohne Signierung läuft die App nur lokal ohne Synchronisation.
+1. Open `DocumentArchive.xcodeproj` in Xcode.
+2. Target **DocumentArchive** → *Signing & Capabilities* → choose your Apple ID / developer team under **Team**.
+3. Change the **bundle ID** (`de.patrickklein.DocumentArchive`) if needed. Under **iCloud**, the container
+   `iCloud.de.patrickklein.DocumentArchive` must be checked (with another ID: create a new container and enter it in
+   `Config/DocumentArchive-iOS.entitlements` and `Config/DocumentArchive-macOS.entitlements`).
+4. Run once on **My Mac** and once on the **iPhone/iPad**. Sign in to iCloud with the same Apple ID on all devices.
 
-Hinweis: CloudKit-Schemas starten in der *Development*-Umgebung. Für den dauerhaften Einsatz das Schema im
-[CloudKit-Dashboard](https://icloud.developer.apple.com) nach *Production* übertragen und die App per TestFlight oder Archive installieren.
+> iCloud/CloudKit needs a paid Apple Developer Program membership. Without signing, the app runs with local storage only, without sync.
 
-## Aufbau
+Note: CloudKit schemas start in the *Development* environment. For lasting use, deploy the schema to *Production* in the
+[CloudKit Dashboard](https://icloud.developer.apple.com) and install the app through TestFlight or an archive.
 
-| Ordner | Inhalt |
+## Structure
+
+| Folder | Content |
 | --- | --- |
-| `DocumentArchive/Model` | SwiftData-Modelle: `Document`, `Tag`, `Correspondent`, `DocumentType`, Zuordnungsregeln |
-| `DocumentArchive/Services` | PDF-Erzeugung, OCR (Vision), automatische Zuordnung, Import, Sync-Status |
-| `DocumentArchive/Views` | SwiftUI-Oberfläche (Seitenleiste, Liste, Detailansicht, Editoren, Einstellungen) |
-| `DocumentArchive/Platform` | PDF-Anzeige (PDFKit), Dokumentscanner (VisionKit), Teilen/Export |
-| `Config` | Entitlements (iCloud, Sandbox) und Info.plist-Ergänzungen |
+| `DocumentArchive/Model` | SwiftData models: `Document`, `Tag`, `Correspondent`, `DocumentType`, matching rules |
+| `DocumentArchive/Services` | PDF building, OCR (Vision, Mistral), auto-assignment, import, sync status |
+| `DocumentArchive/Views` | SwiftUI interface (sidebar, list, detail view, editors, settings) |
+| `DocumentArchive/Platform` | PDF viewer (PDFKit), document scanner (VisionKit), sharing/export |
+| `DocumentArchive/*.xcstrings` | String Catalogs: English source strings with German translations |
+| `DocumentArchiveTests` | Unit tests (Swift Testing) |
+| `Config` | Entitlements (iCloud, sandbox) and Info.plist additions |
 
-## Entwicklung
+## Development
 
-Ablauf (Issue → Plan → Freigabe → Pull Request), Labels und Releases:
+Workflow (issue → plan → approval → pull request), labels and releases:
 [docs/development/process.md](docs/development/process.md).
-Setup, Projektaufbau und Regeln für Datenmodell und externe Dienste:
+Setup, project structure, tests and the rules for the data model, localization and external services:
 [docs/development/index.md](docs/development/index.md).
-Sicherheitsprobleme bitte privat melden: [SECURITY.md](SECURITY.md).
+Please report security problems privately: [SECURITY.md](SECURITY.md).

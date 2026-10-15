@@ -1,7 +1,7 @@
 import PDFKit
 import SwiftUI
 
-/// PDF-Anzeige für iOS und macOS.
+/// PDF viewer for iOS and macOS.
 struct PDFKitView: View {
     let data: Data
     let id: UUID
@@ -63,7 +63,7 @@ extension Representable {
     }
 
     fileprivate func update(_ view: PDFView, coordinator: Coordinator) {
-        // Nur neu laden, wenn sich das Dokument tatsächlich geändert hat
+        // Only reload when the document actually changed
         guard coordinator.shownID != id || coordinator.shownSize != data.count else { return }
         coordinator.shownID = id
         coordinator.shownSize = data.count

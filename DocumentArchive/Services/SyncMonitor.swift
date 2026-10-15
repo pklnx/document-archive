@@ -5,8 +5,8 @@ import Observation
 import Security
 #endif
 
-/// Beobachtet die CloudKit-Synchronisation, die SwiftData intern über
-/// NSPersistentCloudKitContainer abwickelt, und stellt den Status für die Oberfläche bereit.
+/// Observes the CloudKit sync that SwiftData runs internally through
+/// NSPersistentCloudKitContainer, and provides its state to the UI.
 @MainActor
 @Observable
 final class SyncMonitor {
@@ -22,14 +22,14 @@ final class SyncMonitor {
 
     private(set) var state: State = .idle
     private(set) var lastSuccess: Date?
-    /// Ob der Datenspeicher tatsächlich mit CloudKit verbunden ist (wird beim Start gesetzt).
+    /// Whether the store is actually connected to CloudKit (set at launch).
     var isCloudKitEnabled = false
     private var observer: NSObjectProtocol?
 
     var isICloudSignedIn: Bool { FileManager.default.ubiquityIdentityToken != nil }
 
-    /// Ob die App mit iCloud/CloudKit-Berechtigung signiert ist. Unsignierte Entwicklungs-Builds
-    /// haben sie nicht – dann kann SwiftData nur lokal speichern.
+    /// Whether the app is signed with the iCloud/CloudKit entitlement. Unsigned development builds
+    /// are not; then SwiftData can only store locally.
     nonisolated static var hasCloudKitEntitlement: Bool {
         #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil),
@@ -37,7 +37,7 @@ final class SyncMonitor {
         else { return false }
         return (value as? [String])?.contains("CloudKit") ?? false
         #else
-        // iOS-Apps laufen nur signiert; ohne iCloud-Berechtigung liefert das System kein Identitäts-Token.
+        // iOS apps only run signed; without the iCloud entitlement the system returns no identity token.
         return FileManager.default.ubiquityIdentityToken != nil
         #endif
     }
@@ -66,7 +66,7 @@ final class SyncMonitor {
             lastSuccess = ended
             state = .succeeded(ended)
         } else {
-            state = .failed(error ?? "Unbekannter Fehler")
+            state = .failed(error ?? String(localized: "Unknown error"))
         }
     }
 }

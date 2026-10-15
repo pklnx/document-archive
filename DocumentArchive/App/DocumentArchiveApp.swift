@@ -26,9 +26,9 @@ struct DocumentArchiveApp: App {
         #endif
     }
 
-    /// Erstellt den Datenspeicher. Mit iCloud-Entitlement synchronisiert SwiftData automatisch
-    /// über die private CloudKit-Datenbank (Container `iCloud.de.patrickklein.DocumentArchive`).
-    /// Ohne Entitlement (z. B. unsignierter Build) wird nur lokal gespeichert.
+    /// Creates the store. With the iCloud entitlement, SwiftData syncs automatically through the
+    /// private CloudKit database (container `iCloud.de.patrickklein.DocumentArchive`).
+    /// Without it (e.g. an unsigned build), data is stored locally only.
     static let storeName = "DocumentArchive"
 
     static let schema = Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
@@ -49,10 +49,10 @@ struct DocumentArchiveApp: App {
                 monitor.isCloudKitEnabled = true
                 return container
             } catch {
-                print("CloudKit-Store konnte nicht geöffnet werden, verwende lokalen Speicher: \(error)")
+                print("Could not open the CloudKit store, using local storage: \(error)")
             }
         }
-        // Gleicher Speicherort wie mit CloudKit, damit beim späteren Aktivieren nichts verloren geht
+        // Same location as with CloudKit, so nothing is lost when sync is turned on later
         do {
             let local = ModelConfiguration(storeName, schema: schema, cloudKitDatabase: .none)
             return try ModelContainer(for: schema, configurations: local)
@@ -61,13 +61,13 @@ struct DocumentArchiveApp: App {
                 let local = ModelConfiguration("\(storeName)-lokal", schema: schema, cloudKitDatabase: .none)
                 return try ModelContainer(for: schema, configurations: local)
             } catch {
-                fatalError("Datenspeicher konnte nicht erstellt werden: \(error)")
+                fatalError("Could not create the store: \(error)")
             }
         }
     }
 }
 
-/// Aktionen des aktuellen Fensters, damit die Menüleiste (macOS) sie auslösen kann.
+/// Actions of the current window, so the menu bar (macOS) can trigger them.
 struct ImportActions {
     var importFiles: () -> Void
     var newTag: () -> Void
@@ -85,15 +85,15 @@ struct ImportCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Dokumente importieren …") { actions?.importFiles() }
+            Button("Import Documents…") { actions?.importFiles() }
                 .keyboardShortcut("o")
                 .disabled(actions == nil)
             Divider()
-            Button("Neuer Tag …") { actions?.newTag() }
+            Button("New Tag…") { actions?.newTag() }
                 .disabled(actions == nil)
-            Button("Neuer Korrespondent …") { actions?.newCorrespondent() }
+            Button("New Correspondent…") { actions?.newCorrespondent() }
                 .disabled(actions == nil)
-            Button("Neuer Dokumenttyp …") { actions?.newDocumentType() }
+            Button("New Document Type…") { actions?.newDocumentType() }
                 .disabled(actions == nil)
         }
     }

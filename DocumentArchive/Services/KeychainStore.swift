@@ -1,13 +1,13 @@
 import Foundation
 import Security
 
-/// Speichert Geheimnisse (API-Schlüssel) im Schlüsselbund.
-/// Wenn möglich im iCloud-Schlüsselbund, damit der Schlüssel auch auf iPhone und iPad bereitsteht.
-/// Unsignierte Entwicklungs-Builds haben dafür keine Berechtigung – dann wird lokal gespeichert.
+/// Stores secrets (API keys) in the Keychain.
+/// Preferably in the iCloud Keychain, so the key is also available on iPhone and iPad.
+/// Unsigned development builds are not allowed to use it; then the key is stored locally.
 enum KeychainStore {
     static let service = "de.patrickklein.DocumentArchive"
 
-    /// Varianten in absteigender Präferenz: (synchronisieren, Data-Protection-Schlüsselbund)
+    /// Variants in order of preference: (synchronizable, data protection keychain)
     private static let variants: [(sync: Bool, dataProtection: Bool)] = [
         (true, true), (false, true), (false, false),
     ]

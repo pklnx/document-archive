@@ -34,7 +34,10 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            ${{ matrix.args }} CODE_SIGNING_ALLOWED=NO build | tail -n 50
+            ${{ matrix.args }} -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 50
+      # Every UI string compiled for this platform must have a German translation.
+      - name: Check translations
+        run: python3 scripts/check-localization.py build
 
   test:
     # Unit tests, hosted by the macOS app. They use an in-memory store and stub all

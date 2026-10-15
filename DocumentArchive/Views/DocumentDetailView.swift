@@ -17,8 +17,8 @@ struct DocumentDetailView: View {
                 PDFKitView(data: data, id: document.id)
                     .ignoresSafeArea(edges: .bottom)
             } else {
-                ContentUnavailableView("PDF wird geladen …", systemImage: "icloud.and.arrow.down",
-                                       description: Text("Die Datei wird gerade aus iCloud geladen."))
+                ContentUnavailableView("Loading PDF…", systemImage: "icloud.and.arrow.down",
+                                       description: Text("The file is being downloaded from iCloud."))
             }
         }
         .navigationTitle(document.title)
@@ -35,54 +35,54 @@ struct DocumentDetailView: View {
                     document.isInbox.toggle()
                     document.touch()
                 } label: {
-                    Label(document.isInbox ? "Als erledigt markieren" : "In den Posteingang",
+                    Label(document.isInbox ? "Mark as Done" : "Move to Inbox",
                           systemImage: document.isInbox ? "tray.and.arrow.up" : "tray.and.arrow.down")
                 }
-                .help(document.isInbox ? "Als erledigt markieren (aus dem Posteingang entfernen)" : "Zurück in den Posteingang")
+                .help(document.isInbox ? "Mark as done (remove from inbox)" : "Back to the inbox")
 
                 Button {
                     document.isFavorite.toggle()
                     document.touch()
                 } label: {
-                    Label("Favorit", systemImage: document.isFavorite ? "star.fill" : "star")
+                    Label("Favorite", systemImage: document.isFavorite ? "star.fill" : "star")
                 }
 
                 if let transfer = document.transfer {
                     ShareLink(item: transfer, preview: SharePreview(document.title)) {
-                        Label("Teilen", systemImage: "square.and.arrow.up")
+                        Label("Share", systemImage: "square.and.arrow.up")
                     }
                 }
 
                 Menu {
-                    Button("Als PDF exportieren …", systemImage: "arrow.down.doc") { showExporter = true }
+                    Button("Export as PDF…", systemImage: "arrow.down.doc") { showExporter = true }
                     Divider()
-                    Button("Löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                    Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 } label: {
-                    Label("Mehr", systemImage: "ellipsis.circle")
+                    Label("More", systemImage: "ellipsis.circle")
                 }
 
                 Button {
                     showInspector.toggle()
                 } label: {
-                    Label("Informationen", systemImage: "info.circle")
+                    Label("Info", systemImage: "info.circle")
                 }
             }
         }
         .fileExporter(isPresented: $showExporter, document: document.pdfData.map(PDFFile.init(data:)),
                       contentType: .pdf, defaultFilename: document.exportFileName) { _ in }
-        .confirmationDialog("Dokument löschen?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Löschen", role: .destructive) {
+        .confirmationDialog("Delete document?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
                 onDelete()
                 context.delete(document)
                 try? context.save()
             }
         } message: {
-            Text("„\(document.title)“ wird auf allen Geräten gelöscht.")
+            Text("“\(document.title)” will be deleted on all devices.")
         }
     }
 }
 
-/// Metadaten eines Dokuments bearbeiten – Titel, Datum, Korrespondent, Typ, Tags, ASN, Notizen.
+/// Edits a document's metadata: title, date, correspondent, type, tags, ASN, notes.
 struct DocumentInfoForm: View {
     @Environment(\.modelContext) private var context
     @Bindable var document: Document
@@ -99,23 +99,23 @@ struct DocumentInfoForm: View {
     var body: some View {
         Form {
             Section {
-                TextField("Titel", text: $document.title, axis: .vertical)
+                TextField("Title", text: $document.title, axis: .vertical)
                     .font(.headline)
-                DatePicker("Ausgestellt", selection: $document.documentDate, displayedComponents: .date)
+                DatePicker("Issued", selection: $document.documentDate, displayedComponents: .date)
             }
 
-            Section("Zuordnung") {
+            Section("Assignment") {
                 Picker(selection: $document.correspondent) {
-                    Text("Keiner").tag(Correspondent?.none)
+                    Text("None").tag(Correspondent?.none)
                     ForEach(correspondents) { Text($0.name).tag(Optional($0)) }
                 } label: {
-                    Label("Korrespondent", systemImage: "person.crop.circle")
+                    Label("Correspondent", systemImage: "person.crop.circle")
                 }
                 Picker(selection: $document.documentType) {
-                    Text("Keiner").tag(DocumentType?.none)
+                    Text("None").tag(DocumentType?.none)
                     ForEach(documentTypes) { Label($0.name, systemImage: $0.symbol).tag(Optional($0)) }
                 } label: {
-                    Label("Dokumenttyp", systemImage: "doc.text")
+                    Label("Document type", systemImage: "doc.text")
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -129,13 +129,13 @@ struct DocumentInfoForm: View {
                                 ))
                             }
                             if !tags.isEmpty { Divider() }
-                            Button("Neuer Tag …", systemImage: "plus") { editorTarget = .newTag }
+                            Button("New Tag…", systemImage: "plus") { editorTarget = .newTag }
                         } label: {
                             Image(systemName: "plus.circle")
                         }
                         .menuStyle(.borderlessButton)
                         .fixedSize()
-                        .accessibilityLabel("Tags bearbeiten")
+                        .accessibilityLabel("Edit tags")
                     }
                     if !document.sortedTags.isEmpty {
                         FlowLayout(spacing: 6) {
@@ -151,7 +151,7 @@ struct DocumentInfoForm: View {
                                     }
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel("Tag \(tag.name) entfernen")
+                                .accessibilityLabel("Remove tag \(tag.name)")
                             }
                         }
                     }
@@ -166,14 +166,14 @@ struct DocumentInfoForm: View {
                         #endif
                         .frame(maxWidth: 100)
                     if document.archiveSerialNumber == nil {
-                        Button("Nächste") { document.archiveSerialNumber = nextASN }
+                        Button("Next") { document.archiveSerialNumber = nextASN }
                             .buttonStyle(.borderless)
                     }
                 }
             }
 
-            Section("Notizen") {
-                TextField("Notizen", text: $document.notes, axis: .vertical)
+            Section("Notes") {
+                TextField("Notes", text: $document.notes, axis: .vertical)
                     .lineLimit(3...10)
             }
 
@@ -188,7 +188,7 @@ struct DocumentInfoForm: View {
                     }
                 } label: {
                     HStack {
-                        Label("Automatisch zuordnen", systemImage: "wand.and.stars")
+                        Label("Assign automatically", systemImage: "wand.and.stars")
                         if isClassifying {
                             Spacer()
                             ProgressView().controlSize(.small)
@@ -202,7 +202,7 @@ struct DocumentInfoForm: View {
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
                 }
-                Button("Erneut analysieren (Texterkennung + Zuordnung)", systemImage: "text.viewfinder") {
+                Button("Analyze again (text recognition + assignment)", systemImage: "text.viewfinder") {
                     classificationMessage = nil
                     DocumentImporter.process(document, context: context, classify: true)
                 }
@@ -215,30 +215,30 @@ struct DocumentInfoForm: View {
             }
 
             Section("Details") {
-                LabeledContent("Hinzugefügt", value: document.createdAt.formatted(date: .abbreviated, time: .shortened))
-                LabeledContent("Geändert", value: document.modifiedAt.formatted(date: .abbreviated, time: .shortened))
-                LabeledContent("Quelle") { Label(document.source.label, systemImage: document.source.systemImage) }
-                LabeledContent("Seiten", value: "\(document.pageCount)")
-                LabeledContent("Größe", value: document.fileSize.formatted(.byteCount(style: .file)))
+                LabeledContent("Added", value: document.createdAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Modified", value: document.modifiedAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Source") { Label(document.source.label, systemImage: document.source.systemImage) }
+                LabeledContent("Pages", value: "\(document.pageCount)")
+                LabeledContent("Size", value: document.fileSize.formatted(.byteCount(style: .file)))
                 if !document.originalFileName.isEmpty {
-                    LabeledContent("Originaldatei", value: document.originalFileName)
+                    LabeledContent("Original file", value: document.originalFileName)
                 }
                 if !document.textSource.isEmpty {
-                    LabeledContent("Texterkennung", value: document.textSource)
+                    LabeledContent("Text recognition", value: document.textSource)
                 }
             }
 
-            Section("Erkannter Text") {
+            Section("Recognized Text") {
                 if document.isProcessing {
                     HStack {
                         ProgressView().controlSize(.small)
-                        Text(MistralConfig.current()?.useOCR == true ? "Mistral OCR läuft …" : "Texterkennung läuft …")
+                        Text(MistralConfig.current()?.useOCR == true ? "Mistral OCR running…" : "Text recognition running…")
                             .foregroundStyle(.secondary)
                     }
                 } else if document.extractedText.isEmpty {
-                    Text("Kein Text erkannt").foregroundStyle(.secondary)
+                    Text("No text recognized").foregroundStyle(.secondary)
                 } else {
-                    DisclosureGroup("\(document.extractedText.count) Zeichen") {
+                    DisclosureGroup("\(document.extractedText.count) characters") {
                         Text(document.extractedText)
                             .font(.caption)
                             .textSelection(.enabled)

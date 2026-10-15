@@ -17,7 +17,7 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $selection) {
-            Section("Bibliothek") {
+            Section("Library") {
                 row(.inbox, icon: "tray", count: documents.filter(\.isInbox).count)
                 row(.all, icon: "doc.on.doc", count: documents.count)
                 row(.favorites, icon: "star", count: documents.filter(\.isFavorite).count)
@@ -33,28 +33,28 @@ struct SidebarView: View {
                 ForEach(documentTypes) { type in
                     row(.documentType(type), icon: type.symbol, count: type.documentCount)
                         .contextMenu {
-                            Button("Bearbeiten …", systemImage: "pencil") { editorTarget = .documentType(type) }
-                            Button("Löschen", systemImage: "trash", role: .destructive) {
+                            Button("Edit…", systemImage: "pencil") { editorTarget = .documentType(type) }
+                            Button("Delete", systemImage: "trash", role: .destructive) {
                                 pendingDeletion = .documentType(type)
                             }
                         }
                 }
             } header: {
-                sectionHeader("Dokumenttypen") { editorTarget = .newDocumentType }
+                sectionHeader(String(localized: "Document Types")) { editorTarget = .newDocumentType }
             }
 
             Section {
                 ForEach(correspondents) { correspondent in
                     row(.correspondent(correspondent), icon: "person.crop.circle", count: correspondent.documentCount)
                         .contextMenu {
-                            Button("Bearbeiten …", systemImage: "pencil") { editorTarget = .correspondent(correspondent) }
-                            Button("Löschen", systemImage: "trash", role: .destructive) {
+                            Button("Edit…", systemImage: "pencil") { editorTarget = .correspondent(correspondent) }
+                            Button("Delete", systemImage: "trash", role: .destructive) {
                                 pendingDeletion = .correspondent(correspondent)
                             }
                         }
                 }
             } header: {
-                sectionHeader("Korrespondenten") { editorTarget = .newCorrespondent }
+                sectionHeader(String(localized: "Correspondents")) { editorTarget = .newCorrespondent }
             }
 
             Section {
@@ -71,12 +71,12 @@ struct SidebarView: View {
                         }
                     }
                     .contextMenu {
-                        Button("Bearbeiten …", systemImage: "pencil") { editorTarget = .tag(tag) }
-                        Button("Löschen", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
+                        Button("Edit…", systemImage: "pencil") { editorTarget = .tag(tag) }
+                        Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
                     }
                 }
             } header: {
-                sectionHeader("Tags") { editorTarget = .newTag }
+                sectionHeader(String(localized: "Tags")) { editorTarget = .newTag }
             }
         }
         .navigationTitle("Document Archive")
@@ -85,7 +85,7 @@ struct SidebarView: View {
         #else
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("Einstellungen", systemImage: "gearshape") { showSettings = true }
+                Button("Settings", systemImage: "gearshape") { showSettings = true }
             }
         }
         #endif
@@ -99,10 +99,10 @@ struct SidebarView: View {
             isPresented: .constant(pendingDeletion != nil),
             titleVisibility: .visible
         ) {
-            Button("Löschen", role: .destructive) { deletePending() }
-            Button("Abbrechen", role: .cancel) { pendingDeletion = nil }
+            Button("Delete", role: .destructive) { deletePending() }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
         } message: {
-            Text("Die Dokumente selbst bleiben erhalten.")
+            Text("The documents themselves are kept.")
         }
     }
 
@@ -133,8 +133,8 @@ struct SidebarView: View {
                 Image(systemName: "plus")
             }
             .buttonStyle(.borderless)
-            .help("\(title): neu anlegen")
-            .accessibilityLabel("\(title) hinzufügen")
+            .help(String(localized: "\(title): create new"))
+            .accessibilityLabel(String(localized: "Add \(title)"))
         }
     }
 
@@ -143,9 +143,9 @@ struct SidebarView: View {
 
         var title: String {
             switch self {
-            case .tag(let t): "Tag „\(t.name)“ löschen?"
-            case .correspondent(let c): "Korrespondent „\(c.name)“ löschen?"
-            case .documentType(let d): "Dokumenttyp „\(d.name)“ löschen?"
+            case .tag(let t): String(localized: "Delete tag “\(t.name)”?")
+            case .correspondent(let c): String(localized: "Delete correspondent “\(c.name)”?")
+            case .documentType(let d): String(localized: "Delete document type “\(d.name)”?")
             }
         }
     }
@@ -176,22 +176,22 @@ struct SyncStatusView: View {
             switch monitor.state {
             case _ where !monitor.isCloudKitEnabled:
                 Image(systemName: "externaldrive")
-                Text("Nur lokal gespeichert – kein iCloud-Sync")
+                Text("Stored locally only – no iCloud sync")
             case _ where !monitor.isICloudSignedIn:
                 Image(systemName: "icloud.slash")
-                Text("Nicht bei iCloud angemeldet")
+                Text("Not signed in to iCloud")
             case .syncing:
                 ProgressView().controlSize(.mini)
-                Text("Synchronisiere …")
+                Text("Syncing…")
             case .failed:
                 Image(systemName: "exclamationmark.icloud").foregroundStyle(.orange)
-                Text("Sync-Fehler – siehe Einstellungen")
+                Text("Sync error – see Settings")
             case .succeeded(let date):
                 Image(systemName: "checkmark.icloud")
-                Text("Synchronisiert \(date.formatted(.relative(presentation: .named)))")
+                Text("Synced \(date.formatted(.relative(presentation: .named)))")
             case .idle:
                 Image(systemName: "icloud")
-                Text("iCloud – warte auf ersten Abgleich")
+                Text("iCloud – waiting for the first sync")
             }
             Spacer(minLength: 0)
         }

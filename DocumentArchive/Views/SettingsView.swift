@@ -7,10 +7,10 @@ struct SettingsView: View {
         TabView {
             Form { GeneralSettingsSections() }
                 .formStyle(.grouped)
-                .tabItem { Label("Allgemein", systemImage: "gearshape") }
+                .tabItem { Label("General", systemImage: "gearshape") }
             Form { MistralSettingsSection() }
                 .formStyle(.grouped)
-                .tabItem { Label("KI (Mistral)", systemImage: "sparkles") }
+                .tabItem { Label("AI (Mistral)", systemImage: "sparkles") }
             Form { SyncSettingsSections() }
                 .formStyle(.grouped)
                 .tabItem { Label("iCloud", systemImage: "icloud") }
@@ -22,7 +22,7 @@ struct SettingsView: View {
             SyncSettingsSections()
         }
         .formStyle(.grouped)
-        .navigationTitle("Einstellungen")
+        .navigationTitle("Settings")
         #endif
     }
 }
@@ -44,11 +44,11 @@ struct MistralSettingsSection: View {
     var body: some View {
         Section {
             if hasStoredKey {
-                LabeledContent("API-Schlüssel") {
+                LabeledContent("API key") {
                     HStack {
-                        Label("Gespeichert", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                        Label("Saved", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
                         Text(keyFingerprint).font(.caption.monospaced()).foregroundStyle(.secondary)
-                        Button("Entfernen", role: .destructive) {
+                        Button("Remove", role: .destructive) {
                             KeychainStore.delete(MistralConfig.apiKeyAccount)
                             loadKeyState()
                             testResult = nil
@@ -57,34 +57,34 @@ struct MistralSettingsSection: View {
                     }
                 }
             } else {
-                SecureField("API-Schlüssel", text: $apiKey, prompt: Text("Mistral-API-Schlüssel einfügen"))
+                SecureField("API key", text: $apiKey, prompt: Text("Paste the Mistral API key"))
                     .autocorrectionDisabled()
-                Button("Schlüssel speichern") {
+                Button("Save Key") {
                     KeychainStore.save(MistralConfig.sanitize(apiKey), for: MistralConfig.apiKeyAccount)
                     apiKey = ""
                     loadKeyState()
                     if hasStoredKey { Task { await test() } }
                 }
                 .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
-                Link("API-Schlüssel bei Mistral erstellen", destination: URL(string: "https://console.mistral.ai/api-keys")!)
+                Link("Create an API key at Mistral", destination: URL(string: "https://console.mistral.ai/api-keys")!)
                     .font(.caption)
             }
 
-            Toggle("Mistral OCR für die Texterkennung", isOn: $useOCR)
-            Toggle("Mistral-Modell für Titel und Zuordnung", isOn: $useLLM)
+            Toggle("Mistral OCR for text recognition", isOn: $useOCR)
+            Toggle("Mistral model for titles and assignment", isOn: $useLLM)
         } header: {
             Text("Mistral AI")
         } footer: {
-            Text("Ist ein Schlüssel hinterlegt, werden neue Dokumente zur Texterkennung und Zuordnung an die Mistral-API übertragen. Ohne Schlüssel oder bei Fehlern arbeitet die App mit der lokalen Apple-Texterkennung und deinen Regeln weiter. Der Schlüssel wird im Schlüsselbund gespeichert.")
+            Text("With a key, new documents are sent to the Mistral API for text recognition and assignment. Without a key, or on errors, the app keeps working with Apple's local text recognition and your rules. The key is stored in the Keychain.")
         }
 
-        Section("Modelle") {
-            TextField("OCR-Modell", text: $ocrModel, prompt: Text(MistralConfig.defaultOCRModel))
+        Section("Models") {
+            TextField("OCR model", text: $ocrModel, prompt: Text(MistralConfig.defaultOCRModel))
                 .autocorrectionDisabled()
-            TextField("Zuordnungsmodell", text: $chatModel, prompt: Text(MistralConfig.defaultChatModel))
+            TextField("Assignment model", text: $chatModel, prompt: Text(MistralConfig.defaultChatModel))
                 .autocorrectionDisabled()
             HStack {
-                Button("Verbindung testen") { Task { await test() } }
+                Button("Test Connection") { Task { await test() } }
                     .disabled(!hasStoredKey || isTesting)
                 if isTesting { ProgressView().controlSize(.small) }
                 if let testResult {
@@ -110,15 +110,15 @@ struct MistralSettingsSection: View {
         isTesting = true
         defer { isTesting = false }
         do {
-            let message = try await MistralClient(config: config).testConnection()
-            testResult = (!message.contains("nicht gefunden"), message)
+            let result = try await MistralClient(config: config).testConnection()
+            testResult = (result.isComplete, result.message)
         } catch {
             testResult = (false, error.localizedDescription)
         }
     }
 }
 
-// MARK: - Allgemein
+// MARK: - General
 
 struct GeneralSettingsSections: View {
     @Environment(\.modelContext) private var context
@@ -134,37 +134,38 @@ struct GeneralSettingsSections: View {
 
     var body: some View {
         Section {
-            Toggle("Neue Absender automatisch als Korrespondent anlegen", isOn: $autoCreateCorrespondents)
+            Toggle("Create new senders as correspondents automatically", isOn: $autoCreateCorrespondents)
         } header: {
-            Text("Automatische Zuordnung")
+            Text("Automatic assignment")
         } footer: {
-            Text("Erkennt den Absender per KI oder über Firmennamen (GmbH, AG, Inc. …) bzw. die E-Mail-Adresse, wenn noch kein passender Korrespondent existiert.")
+            Text("Detects the sender with AI, or from company names (GmbH, AG, Inc., …) or the e-mail address, when no matching correspondent exists yet.")
         }
 
-        Section("Bibliothek") {
-            LabeledContent("Dokumente", value: "\(documents.count)")
-            LabeledContent("Seiten", value: "\(documents.reduce(0) { $0 + $1.pageCount })")
-            LabeledContent("Speicherbedarf", value: documents.reduce(0) { $0 + $1.fileSize }.formatted(.byteCount(style: .file)))
-            LabeledContent("Korrespondenten", value: "\(correspondents.count)")
-            LabeledContent("Dokumenttypen", value: "\(documentTypes.count)")
+        Section("Library") {
+            LabeledContent("Documents", value: "\(documents.count)")
+            LabeledContent("Pages", value: "\(documents.reduce(0) { $0 + $1.pageCount })")
+            LabeledContent("Storage used", value: documents.reduce(0) { $0 + $1.fileSize }.formatted(.byteCount(style: .file)))
+            LabeledContent("Correspondents", value: "\(correspondents.count)")
+            LabeledContent("Document Types", value: "\(documentTypes.count)")
             LabeledContent("Tags", value: "\(tags.count)")
         }
 
         Section {
-            Button("Standard-Dokumenttypen anlegen", systemImage: "square.stack.3d.up") {
+            Button("Create default document types", systemImage: "square.stack.3d.up") {
                 addDefaultTypes()
             }
             HStack {
-                Button("Doppelte Einträge zusammenführen", systemImage: "arrow.triangle.merge") {
+                Button("Merge duplicate entries", systemImage: "arrow.triangle.merge") {
                     let removed = MetadataMaintenance.mergeDuplicates(in: context)
-                    mergeMessage = removed == 0 ? "Keine Duplikate gefunden." : "\(removed) Duplikat(e) zusammengeführt."
+                    mergeMessage = removed == 0 ? String(localized: "No duplicates found.")
+                                                : String(localized: "\(removed) duplicate(s) merged.")
                 }
                 if let mergeMessage {
                     Text(mergeMessage).font(.caption).foregroundStyle(.secondary)
                 }
             }
             HStack {
-                Button("Alle Dokumente neu zuordnen", systemImage: "wand.and.stars") {
+                Button("Reassign all documents", systemImage: "wand.and.stars") {
                     Task { await reclassifyAll() }
                 }
                 .disabled(reclassifyProgress != nil)
@@ -175,9 +176,9 @@ struct GeneralSettingsSections: View {
                 }
             }
         } header: {
-            Text("Werkzeuge")
+            Text("Tools")
         } footer: {
-            Text("„Neu zuordnen“ ergänzt fehlende Korrespondenten, Dokumenttypen und Tags. Vorhandene Zuordnungen bleiben erhalten.")
+            Text("“Reassign” adds missing correspondents, document types and tags. Existing assignments are kept.")
         }
     }
 
@@ -192,8 +193,8 @@ struct GeneralSettingsSections: View {
         reclassifyProgress = nil
     }
 
-    /// Legt nur Typen an, die es noch nicht gibt – so entstehen keine Duplikate,
-    /// auch wenn der Knopf auf mehreren Geräten gedrückt wird.
+    /// Only creates types that do not exist yet, so there are no duplicates,
+    /// even when the button is pressed on several devices.
     private func addDefaultTypes() {
         let existing = Set(documentTypes.map { $0.name.lowercased() })
         for (name, symbol, match) in DocumentType.defaults where !existing.contains(name.lowercased()) {
@@ -211,28 +212,28 @@ struct SyncSettingsSections: View {
 
     var body: some View {
         Section {
-            LabeledContent("Synchronisation") {
+            LabeledContent("Sync") {
                 if monitor.isCloudKitEnabled {
-                    Label("Aktiv", systemImage: "checkmark.icloud").foregroundStyle(.green)
+                    Label("Active", systemImage: "checkmark.icloud").foregroundStyle(.green)
                 } else {
-                    Label("Inaktiv – nur lokal", systemImage: "externaldrive").foregroundStyle(.orange)
+                    Label("Inactive – local only", systemImage: "externaldrive").foregroundStyle(.orange)
                 }
             }
             if !monitor.isCloudKitEnabled {
-                Text("Diese App-Version ist nicht mit iCloud-Berechtigung signiert. Deine Dokumente liegen nur auf diesem Gerät. Für den Abgleich mit iPhone und iPad muss die App in Xcode mit deinem Apple-Developer-Team signiert werden (Target „DocumentArchive“ → Signing & Capabilities → Team). Deine vorhandenen Dokumente werden danach automatisch hochgeladen.")
+                Text("This version of the app is not signed with the iCloud entitlement. Your documents are only on this device. To sync with iPhone and iPad, sign the app in Xcode with your Apple Developer team (target “DocumentArchive” → Signing & Capabilities → Team). Your existing documents are uploaded automatically afterwards.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            LabeledContent("iCloud-Konto") {
+            LabeledContent("iCloud account") {
                 if monitor.isICloudSignedIn {
-                    Label("Angemeldet", systemImage: "checkmark.icloud").foregroundStyle(.green)
+                    Label("Signed in", systemImage: "checkmark.icloud").foregroundStyle(.green)
                 } else {
-                    Label("Nicht angemeldet", systemImage: "icloud.slash").foregroundStyle(.orange)
+                    Label("Not signed in", systemImage: "icloud.slash").foregroundStyle(.orange)
                 }
             }
-            LabeledContent("Letzte Synchronisation") {
+            LabeledContent("Last sync") {
                 Text(monitor.lastSuccess?.formatted(date: .abbreviated, time: .shortened)
-                     ?? (monitor.isCloudKitEnabled ? "Noch keiner seit App-Start" : "–"))
+                     ?? (monitor.isCloudKitEnabled ? String(localized: "None since the app started") : "–"))
             }
             if case .failed(let message) = monitor.state {
                 Text(message)
@@ -240,9 +241,9 @@ struct SyncSettingsSections: View {
                     .foregroundStyle(.red)
             }
         } header: {
-            Text("iCloud-Synchronisation")
+            Text("iCloud Sync")
         } footer: {
-            Text("Alle Dokumente werden in deiner privaten iCloud gespeichert und automatisch zwischen Mac, iPhone und iPad abgeglichen. Es gibt keinen Server und kein Benutzerkonto außer deiner Apple-ID.")
+            Text("All documents are stored in your private iCloud and synced automatically between Mac, iPhone and iPad. There is no server and no account besides your Apple ID.")
         }
     }
 }

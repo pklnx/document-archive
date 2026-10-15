@@ -14,11 +14,11 @@ enum SidebarItem: Hashable {
 
     var title: String {
         switch self {
-        case .inbox: "Posteingang"
-        case .all: "Alle Dokumente"
-        case .favorites: "Favoriten"
-        case .recent: "Zuletzt hinzugefügt"
-        case .duplicates: "Duplikate"
+        case .inbox: String(localized: "Inbox")
+        case .all: String(localized: "All Documents")
+        case .favorites: String(localized: "Favorites")
+        case .recent: String(localized: "Recently Added")
+        case .duplicates: String(localized: "Duplicates")
         case .documentType(let type): type.name
         case .correspondent(let correspondent): correspondent.name
         case .tag(let tag): tag.name
@@ -31,7 +31,7 @@ enum SidebarItem: Hashable {
         case .all: true
         case .favorites: document.isFavorite
         case .recent: document.createdAt > Date().addingTimeInterval(-60 * 60 * 24 * 30)
-        case .duplicates: false // braucht alle Dokumente, siehe DocumentListView
+        case .duplicates: false // needs all documents, see DocumentListView
         case .documentType(let type): document.documentType?.id == type.id
         case .correspondent(let correspondent): document.correspondent?.id == correspondent.id
         case .tag(let tag): document.hasTag(tag)
@@ -39,7 +39,7 @@ enum SidebarItem: Hashable {
     }
 }
 
-/// Welcher Editor für Tags, Korrespondenten oder Dokumenttypen gerade offen ist.
+/// Which editor for tags, correspondents or document types is open.
 enum RuleEditorTarget: Identifiable {
     case newTag, newCorrespondent, newDocumentType
     case tag(Tag), correspondent(Correspondent), documentType(DocumentType)
@@ -88,7 +88,7 @@ struct ContentView: View {
                 importMenu: { importMenu },
                 onDropFiles: importFiles
             )
-            .searchable(text: $searchText, prompt: "Volltext durchsuchen")
+            .searchable(text: $searchText, prompt: "Search full text")
         } detail: {
             if let selectedDocument, selectedDocument.isAlive {
                 DocumentDetailView(document: selectedDocument, editorTarget: $editorTarget) {
@@ -96,8 +96,8 @@ struct ContentView: View {
                 }
                 .id(selectedDocument.id)
             } else {
-                ContentUnavailableView("Kein Dokument ausgewählt", systemImage: "doc.text.magnifyingglass",
-                                       description: Text("Wähle links ein Dokument aus oder füge ein neues hinzu."))
+                ContentUnavailableView("No Document Selected", systemImage: "doc.text.magnifyingglass",
+                                       description: Text("Select a document on the left or add a new one."))
             }
         }
         .onChange(of: sidebarSelection) { selectedDocument = nil }
@@ -105,7 +105,7 @@ struct ContentView: View {
                       allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): importFiles(urls)
-            case .failure(let error): importNotice = ImportNotice(title: "Import fehlgeschlagen", message: error.localizedDescription)
+            case .failure(let error): importNotice = ImportNotice(title: String(localized: "Import failed"), message: error.localizedDescription)
             }
         }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, matching: .images)
@@ -130,7 +130,7 @@ struct ContentView: View {
                 SettingsView()
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Fertig") { showSettings = false }
+                            Button("Done") { showSettings = false }
                         }
                     }
             }
@@ -163,13 +163,13 @@ struct ContentView: View {
         Menu {
             #if os(iOS)
             if DocumentScannerView.isSupported {
-                Button("Dokument scannen", systemImage: "doc.viewfinder") { showScanner = true }
+                Button("Scan Document", systemImage: "doc.viewfinder") { showScanner = true }
             }
             #endif
-            Button("Aus Dateien importieren", systemImage: "folder") { showFileImporter = true }
-            Button("Aus Fotos importieren", systemImage: "photo.on.rectangle") { showPhotoPicker = true }
+            Button("Import from Files", systemImage: "folder") { showFileImporter = true }
+            Button("Import from Photos", systemImage: "photo.on.rectangle") { showPhotoPicker = true }
         } label: {
-            Label("Hinzufügen", systemImage: "plus")
+            Label("Add", systemImage: "plus")
         } primaryAction: {
             #if os(iOS)
             if DocumentScannerView.isSupported { showScanner = true } else { showFileImporter = true }
@@ -183,15 +183,17 @@ struct ContentView: View {
         let result = DocumentImporter.importFiles(urls, into: context)
         var lines: [String] = []
         if !result.duplicates.isEmpty {
-            lines.append(result.duplicates.count == 1 ? "Diese Datei ist bereits vorhanden und wurde übersprungen:"
-                                                      : "\(result.duplicates.count) Dateien sind bereits vorhanden und wurden übersprungen:")
-            lines += result.duplicates.map { "• \($0.fileName) → „\($0.existing.title)“" }
+            lines.append(result.duplicates.count == 1
+                ? String(localized: "This file is already in the archive and was skipped:")
+                : String(localized: "\(result.duplicates.count) files are already in the archive and were skipped:"))
+            lines += result.duplicates.map { String(localized: "• \($0.fileName) → “\($0.existing.title)”") }
         }
         lines += result.errors.map(\.localizedDescription)
         if !lines.isEmpty {
             let title = result.errors.isEmpty
-                ? (result.imported.isEmpty ? "Bereits vorhanden" : "\(result.imported.count) importiert, Duplikate übersprungen")
-                : "Import teilweise fehlgeschlagen"
+                ? (result.imported.isEmpty ? String(localized: "Already in the archive")
+                                           : String(localized: "\(result.imported.count) imported, duplicates skipped"))
+                : String(localized: "Import partly failed")
             importNotice = ImportNotice(title: title, message: lines.joined(separator: "\n"))
         }
         if result.imported.count == 1, let document = result.imported.first {
@@ -219,22 +221,23 @@ struct ContentView: View {
         let result = DocumentImporter.importImageData(images, into: context)
         if let document = result.document {
             if result.isDuplicate {
-                importNotice = ImportNotice(title: "Bereits vorhanden",
-                                            message: "Diese Fotos wurden schon als „\(document.title)“ importiert.")
+                importNotice = ImportNotice(title: String(localized: "Already in the archive"),
+                                            message: String(localized: "These photos were already imported as “\(document.title)”."))
                 showExisting(document)
             } else {
                 select(document)
             }
         } else {
-            importNotice = ImportNotice(title: "Import fehlgeschlagen", message: "Die ausgewählten Fotos konnten nicht geladen werden.")
+            importNotice = ImportNotice(title: String(localized: "Import failed"),
+                                        message: String(localized: "The selected photos could not be loaded."))
         }
     }
 
     private func select(_ document: Document) {
-        // Neue Dokumente liegen im Posteingang; ggf. dorthin wechseln, damit sie sichtbar sind.
+        // New documents are in the inbox; switch there if needed, so they are visible.
         if let filter = sidebarSelection, filter != .inbox, filter != .all, filter != .recent {
             sidebarSelection = .inbox
-            // Erst nach dem Zurücksetzen durch `onChange(of: sidebarSelection)` auswählen
+            // Select only after `onChange(of: sidebarSelection)` has reset the selection
             Task { @MainActor in selectedDocument = document }
         } else {
             selectedDocument = document

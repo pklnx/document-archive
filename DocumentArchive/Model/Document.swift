@@ -1,39 +1,39 @@
 import Foundation
 import SwiftData
 
-/// Ein gespeichertes Dokument (angelehnt an paperless-ngx). Die PDF-Daten liegen als externe Datei
-/// neben der Datenbank und werden von SwiftData automatisch als CloudKit-Asset über iCloud synchronisiert.
+/// A stored document (modeled after paperless-ngx). The PDF data lives in an external file next to
+/// the database, and SwiftData syncs it through iCloud as a CloudKit asset.
 ///
-/// Hinweis zu CloudKit: Alle Eigenschaften brauchen einen Standardwert oder müssen optional sein,
-/// Beziehungen müssen optional sein und `@Attribute(.unique)` ist nicht erlaubt.
+/// CloudKit rules: every property needs a default value or must be optional, relationships must be
+/// optional, and `@Attribute(.unique)` is not allowed.
 @Model
 final class Document {
     var id: UUID = UUID()
     var title: String = ""
-    /// Hinzugefügt am
+    /// When the document was added
     var createdAt: Date = Date()
     var modifiedAt: Date = Date()
-    /// Ausstellungsdatum des Dokuments (z. B. Rechnungsdatum). Wird beim Import aus dem Text erkannt.
+    /// Issue date of the document (e.g. the invoice date), detected from the text on import.
     var documentDate: Date = Date()
     var notes: String = ""
     var isFavorite: Bool = false
-    /// Neue Dokumente landen im Posteingang, bis sie geprüft wurden.
+    /// New documents stay in the inbox until they have been checked.
     var isInbox: Bool = true
-    /// Archiv-Seriennummer (ASN) – praktisch, wenn das Papieroriginal aufbewahrt wird.
+    /// Archive serial number (ASN), useful when the paper original is kept.
     var archiveSerialNumber: Int?
     var pageCount: Int = 0
     var fileSize: Int = 0
-    /// Volltext (aus dem PDF oder per Texterkennung), wird für Suche und automatische Zuordnung verwendet.
+    /// Full text (from the PDF or from OCR), used for search and auto-assignment.
     var extractedText: String = ""
-    /// `true`, solange Vorschaubild und Text noch erzeugt werden.
+    /// `true` while the thumbnail and the text are still being created.
     var isProcessing: Bool = false
     var source: DocumentSource = DocumentSource.file
     var originalFileName: String = ""
-    /// Womit der Text gewonnen wurde (z. B. „Mistral OCR“, „Apple Vision“, „PDF-Text“).
+    /// Where the text came from ("Mistral OCR", "Apple Vision" or "PDF-Text"); shown in the inspector.
     var textSource: String = ""
-    /// Hinweis aus der letzten Verarbeitung, z. B. wenn Mistral nicht erreichbar war.
+    /// Note from the last processing run, e.g. when Mistral could not be reached.
     var processingNote: String = ""
-    /// SHA-256 der Originaldatei – erkennt identische Dateien beim erneuten Import.
+    /// SHA-256 of the original file; detects identical files on a later import.
     var contentHash: String = ""
 
     @Attribute(.externalStorage) var pdfData: Data?
@@ -56,17 +56,21 @@ final class Document {
         modifiedAt = Date()
     }
 
-    /// `false` für gelöschte Dokumente. Auf Eigenschaften gelöschter Objekte darf nicht mehr
-    /// zugegriffen werden (SwiftData bricht sonst ab), Views können aber kurz noch alte Referenzen halten.
+    /// `false` for deleted documents. Properties of deleted objects must not be read (SwiftData
+    /// traps), but views can hold on to old references for a moment.
     var isAlive: Bool { !isDeleted && modelContext != nil }
 
-    /// `true`, solange der Titel noch automatisch vergeben ist (Dateiname oder „Scan …“) –
-    /// dann darf die automatische Zuordnung einen besseren Titel setzen.
+    /// `true` while the title is still the automatic one (file name or "Scan …"); only then may
+    /// auto-assignment replace it with a better title.
     var hasAutomaticTitle: Bool {
         let fileStem = (originalFileName as NSString).deletingPathExtension
         return title.isEmpty || (!fileStem.isEmpty && title == fileStem)
-            || ["Scan ", "Foto ", "Dokument "].contains { title.hasPrefix($0) }
+            || Self.automaticTitlePrefixes.contains { title.hasPrefix($0) }
     }
+
+    /// Prefixes of the default titles in English and German, so documents are recognized whatever
+    /// language the app ran in when they were imported.
+    static let automaticTitlePrefixes = ["Scan ", "Photo ", "Foto ", "Document ", "Dokument "]
 
     var sortedTags: [Tag] {
         (tags ?? []).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -86,7 +90,7 @@ final class Document {
         touch()
     }
 
-    /// Volltextsuche über Titel, Notizen, erkannten Text, Korrespondent, Typ, Tags und ASN.
+    /// Full-text search over title, notes, recognized text, correspondent, type, tags and ASN.
     func matches(_ query: String) -> Bool {
         let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !terms.isEmpty else { return true }
@@ -99,7 +103,7 @@ final class Document {
         return terms.allSatisfy { haystack.localizedStandardContains($0) }
     }
 
-    /// Dateiname für Export und Teilen, z. B. „2026-10-15 Stadtwerke – Rechnung.pdf“.
+    /// File name for export and sharing, e.g. "2026-10-15 Stadtwerke Rechnung.pdf".
     var exportFileName: String {
         let invalid = CharacterSet(charactersIn: "/\\:?%*|\"<>")
         let date = documentDate.formatted(.iso8601.year().month().day())
@@ -107,7 +111,7 @@ final class Document {
         if let correspondent, !title.localizedCaseInsensitiveContains(correspondent.name) {
             parts.append(correspondent.name)
         }
-        parts.append(title.isEmpty ? "Dokument" : title)
+        parts.append(title.isEmpty ? String(localized: "Document") : title)
         let name = parts.joined(separator: " ").components(separatedBy: invalid).joined(separator: "-")
         return name.trimmingCharacters(in: .whitespacesAndNewlines) + ".pdf"
     }
@@ -120,9 +124,9 @@ enum DocumentSource: String, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .file: "PDF-Import"
-        case .scan: "Kamera-Scan"
-        case .image: "Bild-Import"
+        case .file: String(localized: "PDF import")
+        case .scan: String(localized: "Camera scan")
+        case .image: String(localized: "Image import")
         }
     }
 
