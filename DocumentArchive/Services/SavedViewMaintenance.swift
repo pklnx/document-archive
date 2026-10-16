@@ -67,4 +67,35 @@ enum SavedViewMaintenance {
     static func nextSortIndex(after views: [SavedView]) -> Int {
         (views.filter { !$0.isDeleted }.map(\.sortIndex).max() ?? -1) + 1
     }
+
+    // MARK: Sidebar
+
+    /// "Duplicate": a copy with the same symbol and the exact stored filter (also keys and values
+    /// of newer versions), placed after the last view. Does not save.
+    @discardableResult
+    static func duplicate(_ view: SavedView, among views: [SavedView], in context: ModelContext) -> SavedView {
+        let copy = SavedView(name: copyName(of: view), symbol: view.symbol, sortIndex: nextSortIndex(after: views))
+        copy.filterJSON = view.filterJSON
+        context.insert(copy)
+        return copy
+    }
+
+    static func copyName(of view: SavedView) -> String {
+        String(localized: "\(view.name) Copy")
+    }
+
+    /// The sidebar counts: for each view, its documents among `documents` (the base list after the
+    /// central exclusions). One filter decode and one `FilterContext` per view, one pass over the
+    /// documents per view.
+    static func counts(of views: [SavedView], documents: [Document], tags: [Tag], correspondents: [Correspondent],
+                       documentTypes: [DocumentType], now: Date = Date()) -> [UUID: Int] {
+        var counts: [UUID: Int] = [:]
+        for view in views where !view.isDeleted {
+            let filter = view.filter
+            let context = FilterContext(filter: filter, tags: tags, correspondents: correspondents,
+                                        documentTypes: documentTypes, now: now)
+            counts[view.id] = documents.reduce(0) { $0 + (filter.matches($1, context: context) ? 1 : 0) }
+        }
+        return counts
+    }
 }

@@ -79,3 +79,42 @@ extension DocumentType {
         symbolNames[symbol] ?? String(localized: "Symbol")
     }
 }
+
+extension SavedView {
+    static let defaultSymbol = "line.3.horizontal.decrease.circle"
+
+    /// The symbols the saved view editor offers (#14).
+    static let symbolChoices = [
+        defaultSymbol, "star", "flag", "bookmark", "tray.full", "folder",
+        "doc.text", "envelope", "eurosign.circle", "building.columns", "house", "car",
+        "shield", "cross.case", "briefcase", "cart", "calendar", "clock",
+    ]
+
+    /// One name per symbol in `symbolChoices`.
+    static var symbolNames: [String: String] {
+        [
+            defaultSymbol: String(localized: "Filter"),
+            "star": String(localized: "Star"),
+            "flag": String(localized: "Flag"),
+            "bookmark": String(localized: "Bookmark"),
+            "tray.full": String(localized: "Tray"),
+            "folder": String(localized: "Folder"),
+            "doc.text": String(localized: "Document"),
+            "envelope": String(localized: "Letter"),
+            "eurosign.circle": String(localized: "Money"),
+            "building.columns": String(localized: "Bank"),
+            "house": String(localized: "Home"),
+            "car": String(localized: "Car"),
+            "shield": String(localized: "Insurance"),
+            "cross.case": String(localized: "Health"),
+            "briefcase": String(localized: "Work"),
+            "cart": String(localized: "Shopping"),
+            "calendar": String(localized: "Calendar"),
+            "clock": String(localized: "Clock"),
+        ]
+    }
+
+    static func symbolName(for symbol: String) -> String {
+        symbolNames[symbol] ?? String(localized: "Symbol")
+    }
+}

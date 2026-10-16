@@ -15,10 +15,16 @@ struct SidebarView: View {
     @Query(sort: \DocumentType.name) private var documentTypes: [DocumentType]
     @Query(sort: \Correspondent.name) private var correspondents: [Correspondent]
     @Query(sort: \Tag.name) private var tags: [Tag]
+    @Query private var queriedSavedViews: [SavedView]
+    /// Saved views (#14) in their order.
+    private var savedViews: [SavedView] { SavedViewMaintenance.sorted(queriedSavedViews) }
 
     @State private var pendingDeletion: PendingDeletion?
     /// The tag whose "Move To…" sheet is open.
     @State private var movingTag: Tag?
+    /// The saved view editor opened from the sidebar ("+" or a row's "Edit…").
+    @State private var viewEditor: SavedViewEditorTarget?
+    @State private var showViewsManager = false
     /// Expanded tags of the tree, per window and device (ids separated by commas).
     @SceneStorage("sidebar.expandedTags") private var expandedTagsStorage = ""
 
@@ -35,6 +41,8 @@ struct SidebarView: View {
                         .foregroundStyle(.orange)
                 }
             }
+
+            savedViewSection
 
             Section {
                 ForEach(documentTypes) { type in
@@ -89,6 +97,9 @@ struct SidebarView: View {
         .sheet(item: $movingTag) { tag in
             TagParentPicker(tag: tag)
         }
+        .sheet(isPresented: $showViewsManager) {
+            SavedViewsManager(selection: $selection)
+        }
         .onChange(of: selection) { revealSelectedTag() }
         .confirmationDialog(
             pendingDeletion?.title ?? "",
@@ -101,6 +112,83 @@ struct SidebarView: View {
         } message: { deletion in
             Text(deletion.message)
         }
+    }
+
+    /// Saved views (#14), after the library. Reordering: dragging on macOS, the "Manage Views"
+    /// sheet on iPhone and iPad (the sidebar list is never put into edit mode, which would turn
+    /// it into a multi-selection on iOS).
+    private var savedViewSection: some View {
+        Section {
+            let views = savedViews
+            let counts = SavedViewMaintenance.counts(of: views, documents: documents, tags: tags,
+                                                     correspondents: correspondents, documentTypes: documentTypes)
+            ForEach(views) { view in
+                savedViewRow(view, count: counts[view.id] ?? 0)
+            }
+            #if os(macOS)
+            .onMove { source, destination in
+                SavedViewMaintenance.move(savedViews, fromOffsets: source, toOffset: destination)
+                try? context.save()
+            }
+            #endif
+        } header: {
+            savedViewHeader
+        }
+    }
+
+    private func savedViewRow(_ view: SavedView, count: Int) -> some View {
+        row(.savedView(view), icon: view.symbol, count: count)
+            .contextMenu {
+                Button("Edit…", systemImage: "pencil") { viewEditor = .edit(view) }
+                Button("Duplicate", systemImage: "plus.square.on.square") {
+                    let copy = SavedViewMaintenance.duplicate(view, among: savedViews, in: context)
+                    try? context.save()
+                    selection = .savedView(copy)
+                }
+                Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .savedView(view) }
+            }
+            .savedViewEditor(item: editorBinding(for: view)) { selection = .savedView($0) }
+    }
+
+    private var savedViewHeader: some View {
+        HStack {
+            Text("Views")
+            Spacer()
+            Menu {
+                Button("Manage Views…", systemImage: "list.bullet") { showViewsManager = true }
+                    .accessibilityIdentifier(AccessibilityID.manageSavedViews)
+                    .disabled(savedViews.isEmpty)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(.borderless)
+            .fixedSize()
+            .accessibilityLabel(String(localized: "More for Views"))
+            .accessibilityIdentifier(AccessibilityID.savedViewsMenu)
+            Button { viewEditor = .new(name: "", filter: DocumentFilter()) } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.borderless)
+            .help(String(localized: "Views: create new"))
+            .accessibilityLabel(String(localized: "Add View"))
+            .accessibilityIdentifier(AccessibilityID.sidebarAdd("savedView"))
+            .savedViewEditor(item: newEditorBinding) { selection = .savedView($0) }
+        }
+    }
+
+    /// The editor of one row: presented from that row, so the popover points at it.
+    private func editorBinding(for view: SavedView) -> Binding<SavedViewEditorTarget?> {
+        Binding {
+            if case .edit(let edited) = viewEditor, edited.id == view.id { viewEditor } else { nil }
+        } set: { viewEditor = $0 }
+    }
+
+    private var newEditorBinding: Binding<SavedViewEditorTarget?> {
+        Binding {
+            if case .new = viewEditor { viewEditor } else { nil }
+        } set: { viewEditor = $0 }
     }
 
     /// The tags as a tree (#13), roots only on iPhone. Counts include the tags nested in a tag, each document once
@@ -196,7 +284,7 @@ struct SidebarView: View {
     }
 
     enum PendingDeletion {
-        case tag(Tag), correspondent(Correspondent), documentType(DocumentType)
+        case tag(Tag), correspondent(Correspondent), documentType(DocumentType), savedView(SavedView)
 
         /// Without the name once the object is gone (deleted on another device while the dialog
         /// is open).
@@ -205,10 +293,14 @@ struct SidebarView: View {
             case .tag(let t): String(localized: "Delete tag “\(Self.name(t, t.name))”?")
             case .correspondent(let c): String(localized: "Delete correspondent “\(Self.name(c, c.name))”?")
             case .documentType(let d): String(localized: "Delete document type “\(Self.name(d, d.name))”?")
+            case .savedView(let v): String(localized: "Delete view “\(Self.name(v, v.name))”?")
             }
         }
 
         var message: String {
+            if case .savedView = self {
+                return String(localized: "Only the view is deleted, on all devices. The documents themselves are kept.")
+            }
             if case .tag(let tag) = self, !tag.isDeleted, tag.modelContext != nil, !(tag.children ?? []).isEmpty {
                 return String(localized: "The documents themselves are kept. Tags nested in this tag move up one level.")
             }
@@ -231,6 +323,10 @@ struct SidebarView: View {
         case .documentType(let type):
             if selection == .documentType(type) { selection = .all }
             MetadataDeletion.delete(type, in: context, recorder: DocumentDeletion.recorder())
+        case .savedView(let view):
+            guard !view.isDeleted, view.modelContext != nil else { return }
+            if selection == .savedView(view) { selection = .all }
+            MetadataDeletion.delete(view, in: context, recorder: DocumentDeletion.recorder())
         }
         try? context.save()
     }

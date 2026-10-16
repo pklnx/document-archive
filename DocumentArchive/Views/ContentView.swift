@@ -11,6 +11,8 @@ enum SidebarItem: Hashable {
     case documentType(DocumentType)
     case correspondent(Correspondent)
     case tag(Tag)
+    /// A saved view (#14): its filter, sorted by the view's own sort.
+    case savedView(SavedView)
 
     var title: String {
         switch self {
@@ -22,21 +24,56 @@ enum SidebarItem: Hashable {
         case .documentType(let type): type.name
         case .correspondent(let correspondent): correspondent.name
         case .tag(let tag): tag.name
+        case .savedView(let view): view.isDeleted || view.modelContext == nil ? "" : view.name
         }
     }
 
-    func includes(_ document: Document) -> Bool {
+    // Written out: synthesizing them needs `SavedView: Hashable` (from the `@Model` macro), which
+    // the compiler did not always see in time when building from scratch.
+    static func == (lhs: SidebarItem, rhs: SidebarItem) -> Bool {
+        switch (lhs, rhs) {
+        case (.inbox, .inbox), (.all, .all), (.favorites, .favorites), (.recent, .recent), (.duplicates, .duplicates):
+            true
+        case let (.documentType(a), .documentType(b)): a.persistentModelID == b.persistentModelID
+        case let (.correspondent(a), .correspondent(b)): a.persistentModelID == b.persistentModelID
+        case let (.tag(a), .tag(b)): a.persistentModelID == b.persistentModelID
+        case let (.savedView(a), .savedView(b)): a.persistentModelID == b.persistentModelID
+        default: false
+        }
+    }
+
+    func hash(into hasher: inout Hasher) {
+        switch self {
+        case .inbox: hasher.combine(0)
+        case .all: hasher.combine(1)
+        case .favorites: hasher.combine(2)
+        case .recent: hasher.combine(3)
+        case .duplicates: hasher.combine(4)
+        case .documentType(let type): hasher.combine(5); hasher.combine(type.persistentModelID)
+        case .correspondent(let correspondent): hasher.combine(6); hasher.combine(correspondent.persistentModelID)
+        case .tag(let tag): hasher.combine(7); hasher.combine(tag.persistentModelID)
+        case .savedView(let view): hasher.combine(8); hasher.combine(view.persistentModelID)
+        }
+    }
+
+    @MainActor func includes(_ document: Document) -> Bool {
         documentFilter()(document)
     }
 
     /// The test `includes` applies, prepared once for a whole list: a tag's subtree is computed
-    /// once, not per document. A tag includes the documents of the tags nested in it.
-    func documentFilter() -> (Document) -> Bool {
-        if case .tag(let tag) = self {
+    /// once, not per document. A tag includes the documents of the tags nested in it. A saved
+    /// view decodes its filter and resolves its references once (`FilterContext`).
+    @MainActor func documentFilter() -> (Document) -> Bool {
+        switch self {
+        case .tag(let tag):
             let ids = TagHierarchy.subtreeIDs(of: tag)
             return { document in document.tags?.contains { ids.contains($0.id) } ?? false }
+        case .savedView(let view):
+            guard let (filter, context) = view.filterAndContext() else { return { _ in false } }
+            return { document in filter.matches(document, context: context) }
+        default:
+            return { document in self.matchesWithoutTags(document) }
         }
-        return { document in self.matchesWithoutTags(document) }
     }
 
     private func matchesWithoutTags(_ document: Document) -> Bool {
@@ -49,6 +86,7 @@ enum SidebarItem: Hashable {
         case .documentType(let type): document.documentType?.id == type.id
         case .correspondent(let correspondent): document.correspondent?.id == correspondent.id
         case .tag(let tag): document.hasTag(tag) // handled by `documentFilter`
+        case .savedView: false // handled by `documentFilter`
         }
     }
 }
@@ -145,6 +183,8 @@ struct ContentView: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showSettings = false
     @State private var editorTarget: RuleEditorTarget?
+    /// The saved view editor of the list in front ("Save as View…", ⌥⌘S, "Edit View…").
+    @State private var viewEditor: SavedViewEditorTarget?
     @State private var importNotice: ImportNotice?
     private let externalImport = ExternalImport.shared
 
@@ -258,7 +298,10 @@ struct ContentView: View {
             importMenu: { importMenu },
             onDropFiles: { report(DocumentImporter.importDropped($0, into: context)) },
             subfolders: SubfolderChip.chips(of: filter, in: allDocuments),
-            openSubfolder: isCompact ? nil : { sidebarSelection = .tag($0) }
+            openSubfolder: isCompact ? nil : { sidebarSelection = .tag($0) },
+            // Only the list in front presents the editor.
+            viewEditor: documents == nil ? nil : $viewEditor,
+            openView: { sidebarSelection = .savedView($0) }
         )
         .searchable(text: $searchText, prompt: "Search full text")
         #if os(iOS)
@@ -408,6 +451,7 @@ struct ContentView: View {
             newTag: { editorTarget = .newTag },
             newCorrespondent: { editorTarget = .newCorrespondent },
             newDocumentType: { editorTarget = .newDocumentType },
+            saveAsView: { saveAsView() },
             showSettings: { showSettings = true }
         ))
         // The folder copy catches up with changes made while the app was in the background.
@@ -436,6 +480,20 @@ struct ContentView: View {
             // Files opened at launch waited for the archive; they are imported now.
             externalImport.context = context
             showExternalImportResult()
+        }
+    }
+
+    /// ⌥⌘S: the editor for a new view from the list in front, its search and sort; for a saved
+    /// view, its editor.
+    private func saveAsView() {
+        switch listFilter {
+        case .duplicates:
+            return
+        case .savedView(let view):
+            viewEditor = .edit(view)
+        default:
+            let prefill = listFilter.savedViewPrefill(searchText: searchText, sort: sort)
+            viewEditor = .new(name: prefill.name, filter: prefill.filter)
         }
     }
 

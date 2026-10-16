@@ -20,29 +20,36 @@ import SwiftData
 /// The filter works on the list it is given (after any central exclusion, #22); it never fetches
 /// documents itself.
 struct DocumentFilter: Equatable {
-    var tags: [Ref] = []
-    var tagMode: TagMode = .any
+    // Setting a field (even to the value it has) marks it as changed by the user: it leaves
+    // `fallbackKeys`, so a value of a newer version is replaced, also by this version's default.
+    var tags: [Ref] = [] { didSet { touch(.tags) } }
+    var tagMode: TagMode = .any { didSet { touch(.tagMode) } }
     /// Whether a tag also matches the tags nested in it. Applies to `excludedTags` as well:
     /// excluding a parent excludes its children.
-    var includeSubTags = true
-    var excludedTags: [Ref] = []
+    var includeSubTags = true { didSet { touch(.includeSubTags) } }
+    var excludedTags: [Ref] = [] { didSet { touch(.excludedTags) } }
     /// Any of them.
-    var correspondents: [Ref] = []
+    var correspondents: [Ref] = [] { didSet { touch(.correspondents) } }
     /// Any of them.
-    var documentTypes: [Ref] = []
-    var dateField: DateField = .documentDate
-    var dateRange: DateRange?
+    var documentTypes: [Ref] = [] { didSet { touch(.documentTypes) } }
+    var dateField: DateField = .documentDate { didSet { touch(.dateField) } }
+    var dateRange: DateRange? { didSet { touch(.dateRange) } }
     /// `nil`: either.
-    var inbox: Bool?
-    var favorite: Bool?
-    var hasASN: Bool?
+    var inbox: Bool? { didSet { touch(.inbox) } }
+    var favorite: Bool? { didSet { touch(.favorite) } }
+    var hasASN: Bool? { didSet { touch(.hasASN) } }
     /// Full-text search, the same as the search field (`Document.matches`).
-    var query = ""
-    var sort: DocumentSort = .added
-    var ascending = false
+    var query = "" { didSet { touch(.query) } }
+    var sort: DocumentSort = .added { didSet { touch(.sort) } }
+    var ascending = false { didSet { touch(.ascending) } }
 
-    /// Keys whose stored value could not be decoded (a newer version's value). Not encoded.
+    /// Keys whose stored value could not be decoded (a newer version's value) and that were not
+    /// set since. Not encoded. `json(_:preserving:)` keeps the stored raw value of these keys.
     var fallbackKeys: Set<String> = []
+
+    private mutating func touch(_ key: CodingKeys) {
+        if !fallbackKeys.isEmpty { fallbackKeys.remove(key.stringValue) }
+    }
 
     var isEmpty: Bool { self == DocumentFilter() }
 
@@ -79,7 +86,18 @@ struct DocumentFilter: Equatable {
         case documentDate, createdAt
     }
 
-    /// A calendar day, stored as `"yyyy-MM-dd"`. The same day on every device, whatever its time zone.
+    /// The calendar days are counted in: always Gregorian (a `"yyyy-MM-dd"` day must mean the same
+    /// date on a device set to the Japanese or Buddhist calendar), in the time zone of `calendar`
+    /// (the device's), so a day is still the day the user sees on this device.
+    static func dayCalendar(_ calendar: Calendar = .current) -> Calendar {
+        guard calendar.identifier != .gregorian else { return calendar }
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        return gregorian
+    }
+
+    /// A calendar day, stored as `"yyyy-MM-dd"` in the Gregorian calendar. The same day on every
+    /// device, whatever its time zone or calendar.
     struct Day: Codable, Equatable, Hashable, Comparable {
         var year: Int
         var month: Int
@@ -91,10 +109,17 @@ struct DocumentFilter: Equatable {
             self.day = day
         }
 
-        /// The day `date` falls on in `calendar` (the device's calendar and time zone).
-        init(_ date: Date, calendar: Calendar) {
-            let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        /// The day `date` falls on in the time zone of `calendar` (the device's), counted in the
+        /// Gregorian calendar (`dayCalendar`), whatever calendar the device uses.
+        init(_ date: Date, calendar: Calendar = .current) {
+            let parts = DocumentFilter.dayCalendar(calendar).dateComponents([.year, .month, .day], from: date)
             self.init(year: parts.year ?? 0, month: parts.month ?? 0, day: parts.day ?? 0)
+        }
+
+        /// Noon of the day in the time zone of `calendar`, for date pickers.
+        func date(calendar: Calendar = .current) -> Date {
+            DocumentFilter.dayCalendar(calendar).date(from: DateComponents(year: year, month: month, day: day, hour: 12))
+                ?? Date()
         }
 
         init?(_ string: String) {
@@ -175,8 +200,10 @@ struct DocumentFilter: Equatable {
             }
         }
 
-        /// The first and last day of the range (inclusive), relative to `today`.
+        /// The first and last day of the range (inclusive), relative to `today`. Days are counted in
+        /// the Gregorian calendar (`dayCalendar`), whatever calendar is passed in.
         func bounds(today: Day, calendar: Calendar) -> (from: Day?, to: Day?) {
+            let calendar = DocumentFilter.dayCalendar(calendar)
             func shifted(_ component: Calendar.Component, by value: Int) -> Day {
                 let start = calendar.date(from: DateComponents(year: today.year, month: today.month, day: today.day))
                     ?? Date()
@@ -223,10 +250,9 @@ struct DocumentFilter: Equatable {
         if let allowed = context.documentTypeIDs {
             guard let ids = allowed, let id = document.documentType?.id, ids.contains(id) else { return false }
         }
-        if let dateRange {
+        if let bounds = context.dateBounds {
             let date = dateField == .documentDate ? document.documentDate : document.createdAt
             let day = Day(date, calendar: context.calendar)
-            let bounds = dateRange.bounds(today: Day(context.now, calendar: context.calendar), calendar: context.calendar)
             if let from = bounds.from, day < from { return false }
             if let to = bounds.to, to < day { return false }
         }
@@ -246,10 +272,13 @@ struct DocumentFilter: Equatable {
 // MARK: - Context
 
 /// Everything a filter needs besides the documents, built once per view and render: `now`, the
-/// calendar, and the references resolved to live ids (tag subtrees included).
+/// calendar, the date bounds, and the references resolved to live ids (tag subtrees included).
 struct FilterContext {
     let now: Date
+    /// Gregorian, in the device's time zone (`DocumentFilter.dayCalendar`).
     let calendar: Calendar
+    /// The date range's first and last day (inclusive), computed once; `nil`: no date criterion.
+    let dateBounds: (from: DocumentFilter.Day?, to: DocumentFilter.Day?)?
     /// `nil`: no tag criterion. `.some(nil)`: a reference could not be resolved (matches nothing).
     /// Otherwise one id set per referenced tag (with its subtree when `includeSubTags`).
     let requiredTags: [Set<UUID>]??
@@ -262,12 +291,17 @@ struct FilterContext {
     /// The references that could not be resolved, for the editor ("(deleted)").
     let unresolved: Set<UUID>
 
-    /// - Parameters: the live tags, correspondents and types (deleted objects are ignored).
+    /// - Parameters:
+    ///   - tags, correspondents, documentTypes: the live objects (deleted ones are ignored); only
+    ///     the kinds the filter refers to are used.
+    ///   - calendar: the device's calendar; only its time zone is used (`DocumentFilter.dayCalendar`).
     @MainActor
     init(filter: DocumentFilter, tags: [Tag], correspondents: [Correspondent], documentTypes: [DocumentType],
          now: Date = Date(), calendar: Calendar = .current) {
         self.now = now
+        let calendar = DocumentFilter.dayCalendar(calendar)
         self.calendar = calendar
+        dateBounds = filter.dateRange.map { $0.bounds(today: DocumentFilter.Day(now, calendar: calendar), calendar: calendar) }
         var unresolved = Set<UUID>()
 
         // Keys (tag paths) are computed only for the kinds the filter refers to.
@@ -319,18 +353,22 @@ struct FilterContext {
         hasUnresolvedReferences = !unresolved.isEmpty || undecodableReferences
     }
 
-    /// Fetches the tags, correspondents and types from `modelContext` (never the documents).
+    /// Fetches only the kinds the filter refers to (tags, correspondents, types) from
+    /// `modelContext`, never the documents.
     @MainActor
     init(filter: DocumentFilter, in modelContext: ModelContext, now: Date = Date(), calendar: Calendar = .current) {
+        func fetch<T: PersistentModel>(_ type: T.Type, if needed: Bool) -> [T] {
+            needed ? (try? modelContext.fetch(FetchDescriptor<T>())) ?? [] : []
+        }
         self.init(filter: filter,
-                  tags: (try? modelContext.fetch(FetchDescriptor<Tag>())) ?? [],
-                  correspondents: (try? modelContext.fetch(FetchDescriptor<Correspondent>())) ?? [],
-                  documentTypes: (try? modelContext.fetch(FetchDescriptor<DocumentType>())) ?? [],
+                  tags: fetch(Tag.self, if: !filter.tags.isEmpty || !filter.excludedTags.isEmpty),
+                  correspondents: fetch(Correspondent.self, if: !filter.correspondents.isEmpty),
+                  documentTypes: fetch(DocumentType.self, if: !filter.documentTypes.isEmpty),
                   now: now, calendar: calendar)
     }
 
     /// Resolution order: id → normalized key (the oldest object wins, like merges) → unresolved.
-    private struct Resolver<T> {
+    fileprivate struct Resolver<T> {
         let byID: [UUID: T]
         let byKey: [String: T]
 
@@ -350,6 +388,38 @@ struct FilterContext {
         func resolve(_ ref: DocumentFilter.Ref) -> T? {
             byID[ref.id] ?? (ref.key.isEmpty ? nil : byKey[ref.key])
         }
+    }
+}
+
+// MARK: - Editing
+
+extension DocumentFilter {
+    /// For the editor: every reference that resolves (by id or by key) is replaced by the live
+    /// object's current id, name and key, so the pickers show it as chosen. References that do not
+    /// resolve stay as they are (shown as deleted, removed only by the user). A field is set only
+    /// when something changed, so a newer version's value in an untouched field is kept.
+    @MainActor
+    func resolvingReferences(tags: [Tag], correspondents: [Correspondent], documentTypes: [DocumentType]) -> DocumentFilter {
+        var result = self
+        let tagResolver = FilterContext.Resolver(tags.filter { !$0.isDeleted }, id: \.id, createdAt: \.createdAt,
+                                                 key: Ref.key(for:))
+        let correspondentResolver = FilterContext.Resolver(correspondents.filter { !$0.isDeleted }, id: \.id,
+                                                           createdAt: \.createdAt, key: Ref.key(for:))
+        let typeResolver = FilterContext.Resolver(documentTypes.filter { !$0.isDeleted }, id: \.id,
+                                                  createdAt: \.createdAt, key: Ref.key(for:))
+        func live<T>(_ refs: [Ref], _ resolver: FilterContext.Resolver<T>, _ makeRef: (T) -> Ref) -> [Ref] {
+            var seen = Set<UUID>()
+            return refs.map { ref in resolver.resolve(ref).map(makeRef) ?? ref }.filter { seen.insert($0.id).inserted }
+        }
+        let tagRefs = live(self.tags, tagResolver, Ref.init(_:) as (Tag) -> Ref)
+        if tagRefs != self.tags { result.tags = tagRefs }
+        let excluded = live(excludedTags, tagResolver, Ref.init(_:) as (Tag) -> Ref)
+        if excluded != excludedTags { result.excludedTags = excluded }
+        let correspondentRefs = live(self.correspondents, correspondentResolver, Ref.init(_:) as (Correspondent) -> Ref)
+        if correspondentRefs != self.correspondents { result.correspondents = correspondentRefs }
+        let typeRefs = live(self.documentTypes, typeResolver, Ref.init(_:) as (DocumentType) -> Ref)
+        if typeRefs != self.documentTypes { result.documentTypes = typeRefs }
+        return result
     }
 }
 
@@ -456,20 +526,20 @@ extension DocumentFilter: Codable {
     /// - every key this version knows is replaced by the new encoding, and removed when the new
     ///   encoding leaves it out (a cleared field);
     /// - keys this version does not know are kept;
-    /// - a field that fell back when `existing` was decoded keeps its stored raw value, unless
-    ///   `filter` changed that field.
+    /// - a field that fell back when `existing` was decoded keeps its stored raw value while it
+    ///   is still in `filter.fallbackKeys`, that is, until the field is set. Setting it replaces
+    ///   the raw value, also with the value the field fell back to (the user chose "Added" for a
+    ///   newer version's sort, or cleared its date range). A filter built from scratch has no
+    ///   fallback keys and replaces every field.
     ///
     /// Sorted keys, so equal content gives an equal string.
     static func json(_ filter: DocumentFilter, preserving existing: String) -> String {
         let stored = (try? JSONSerialization.jsonObject(with: Data(existing.utf8))) as? [String: Any] ?? [:]
-        let previous = decode(existing)
         let new = object(filter)
-        let old = object(previous)
         var result = stored.filter { !knownKeys.contains($0.key) }
         for (key, value) in new { result[key] = value }
-        for key in previous.fallbackKeys {
-            guard let raw = stored[key] else { continue }
-            if (new[key] as? NSObject) == (old[key] as? NSObject) { result[key] = raw }
+        for key in filter.fallbackKeys {
+            if let raw = stored[key] { result[key] = raw }
         }
         guard let data = try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys, .withoutEscapingSlashes]),
               let string = String(data: data, encoding: .utf8) else { return existing }

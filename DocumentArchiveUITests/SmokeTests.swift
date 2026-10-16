@@ -247,6 +247,71 @@ final class SmokeTests: XCTestCase {
         return bar.buttons.element(boundBy: 0)
     }
 
+    /// Saved views (#14): the seeded view filters the list; "Save as View…" creates a view from
+    /// the list in front (editor: popover on iPad, sheet on iPhone) and opens it; the "Manage
+    /// Views" sheet reorders the views, and the sidebar follows.
+    func testSavedViewsCreateOpenAndReorder() {
+        showSidebar()
+        sidebarRow("sidebar.savedView.Taxes").tap()
+        XCTAssertTrue(row(firstDocument).waitForExistence(timeout: 5), "the seeded view misses a Tax document")
+        XCTAssertTrue(row(favoriteDocument).exists)
+        XCTAssertFalse(row("Water bill").exists, "the seeded view shows a document without Tax")
+        attachScreenshot("seeded view")
+
+        showSidebar()
+        sidebarRow("sidebar.favorites").tap()
+        XCTAssertTrue(row(favoriteDocument).waitForExistence(timeout: 5))
+        let options = element("documentList.options")
+        // iPad portrait: the sidebar lies over the list until it is closed.
+        if !waitUntilHittable(options) { app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        XCTAssertTrue(waitUntilHittable(options), "no menu with Save as View")
+        options.tap()
+        let saveAsView = element("documentList.saveAsView")
+        XCTAssertTrue(waitUntilHittable(saveAsView), "no Save as View in the menu")
+        saveAsView.tap()
+        let name = element("savedViewEditor.name")
+        XCTAssertTrue(name.waitForExistence(timeout: 5), "the editor did not open")
+        XCTAssertTrue(element("savedViewEditor.count").exists, "no live count")
+        attachScreenshot("editor from Favorites")
+        // Prefilled with the list's name; replaced by a fixed one for the identifiers below.
+        name.tap()
+        let current = name.value as? String ?? ""
+        name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 5) + "Starred")
+        element("savedViewEditor.save").tap()
+        XCTAssertTrue(name.waitForNonExistence(timeout: 5), "the editor did not close")
+        XCTAssertTrue(row(favoriteDocument).waitForExistence(timeout: 5), "the new view does not show its document")
+        XCTAssertFalse(row(firstDocument).exists, "the new view shows more than the favorites")
+
+        showSidebar()
+        let taxes = sidebarRow("sidebar.savedView.Taxes")
+        let starred = element("sidebar.savedView.Starred")
+        XCTAssertTrue(starred.waitForExistence(timeout: 5), "the new view is not in the sidebar")
+        XCTAssertLessThan(taxes.frame.minY, starred.frame.minY, "a new view goes after the others")
+        attachScreenshot("sidebar with two views")
+
+        element("sidebar.savedViews.menu").tap()
+        let manage = element("sidebar.savedViews.manage")
+        XCTAssertTrue(waitUntilHittable(manage), "no Manage Views in the menu")
+        manage.tap()
+        let starredRow = element("savedViewsManager.row.Starred")
+        XCTAssertTrue(starredRow.waitForExistence(timeout: 5), "the manage sheet did not open")
+        // The reorder handle of the row (the system's "line.horizontal.3" image), dragged above Taxes.
+        let taxesRow = element("savedViewsManager.row.Taxes")
+        let handle = app.images.matching(identifier: "line.horizontal.3").allElementsBoundByIndex
+            .first { abs($0.frame.midY - starredRow.frame.midY) < 10 }
+        XCTAssertNotNil(handle, "no reorder handle")
+        handle?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.8, thenDragTo: taxesRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.0)))
+        XCTAssertLessThan(starredRow.frame.minY, taxesRow.frame.minY, "dragging did not move the row")
+        attachScreenshot("manage sheet after moving")
+        element("savedViewsManager.done").tap()
+        XCTAssertTrue(starredRow.waitForNonExistence(timeout: 5), "the manage sheet did not close")
+        _ = sidebarRow("sidebar.savedView.Taxes")
+        XCTAssertLessThan(element("sidebar.savedView.Starred").frame.minY, element("sidebar.savedView.Taxes").frame.minY,
+                          "the sidebar does not follow the new order")
+        attachScreenshot("sidebar after reordering")
+    }
+
     func testInspectorOpensAndCloses() {
         openDocument(firstDocument)
         attachScreenshot("document")
