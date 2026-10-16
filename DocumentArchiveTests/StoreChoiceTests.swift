@@ -70,3 +70,24 @@ import Testing
         #expect(!SyncMonitor.cloudKitAvailable())
     }
 }
+
+/// UI test runs (`-UITestSeed`) never see the real Keychain item or Mistral (#21 review, point 2).
+@Suite struct UITestIsolationTests {
+    @Test func seedArgumentMarksAUITestRun() {
+        // The tests run in a DEBUG build, where the launch argument is honoured.
+        #expect(TestEnvironment.isUITestSeed(arguments: ["app", StoreChoice.uiTestSeedArgument]))
+        #expect(!TestEnvironment.isUITestSeed(arguments: ["app"]))
+    }
+
+    @Test func uiTestRunsUseTheirOwnKeychainService() {
+        let real = KeychainStore.serviceName(isUITestSeed: false)
+        #expect(real == "de.patrickklein.DocumentArchive")
+        #expect(KeychainStore.serviceName(isUITestSeed: true) != real)
+        // The hosted unit tests are not launched with the seed argument.
+        #expect(KeychainStore.service == real)
+    }
+
+    @Test func hostedTestRunIsIsolated() {
+        #expect(TestEnvironment.isIsolated)
+    }
+}

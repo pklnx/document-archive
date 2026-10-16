@@ -40,6 +40,7 @@ struct DocumentArchiveApp: App {
         #if os(macOS)
         Settings {
             SettingsView()
+                .accessibilityIdentifier(AccessibilityID.settings)
                 .frame(width: 560, height: 520)
                 .modelContainer(container)
         }

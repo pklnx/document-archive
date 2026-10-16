@@ -5,7 +5,13 @@ import Security
 /// Preferably in the iCloud Keychain, so the key is also available on iPhone and iPad.
 /// Unsigned development builds are not allowed to use it; then the key is stored locally.
 enum KeychainStore {
-    static let service = "de.patrickklein.DocumentArchive"
+    /// The app's service name; UI test runs (`-UITestSeed`) use their own, so they never see,
+    /// replace or delete the real Mistral key.
+    static let service = serviceName(isUITestSeed: TestEnvironment.isUITestSeed)
+
+    static func serviceName(isUITestSeed: Bool) -> String {
+        isUITestSeed ? "de.patrickklein.DocumentArchive.UITests" : "de.patrickklein.DocumentArchive"
+    }
 
     /// Variants in order of preference: (synchronizable, data protection keychain)
     private static let variants: [(sync: Bool, dataProtection: Bool)] = [

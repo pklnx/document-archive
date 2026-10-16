@@ -33,8 +33,9 @@ struct MistralConfig: Sendable {
         return String(localized: "\(String(key.prefix(4)))…\(String(key.suffix(4))) (\(key.count) characters)")
     }
 
-    /// Source of the current configuration; tests replace it with a stub.
-    nonisolated(unsafe) static var provider: () -> MistralConfig? = { TestEnvironment.isRunningTests ? nil : live() }
+    /// Source of the current configuration; tests replace it with a stub. Unit and UI test runs
+    /// never use the stored key.
+    nonisolated(unsafe) static var provider: () -> MistralConfig? = { TestEnvironment.isIsolated ? nil : live() }
 
     /// `nil` when no API key is stored.
     static func current() -> MistralConfig? { provider() }

@@ -13,18 +13,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  changes:
+    # Does the pull request change anything the app build depends on? Doc-only pull requests
+    # (docs/, Markdown, issue templates, labels, ...; see scripts/app-changes.py) skip the build
+    # and test jobs: a skipped job counts as passed for the required checks. Pushes to main
+    # always run everything. gitleaks always runs. Fail-safe: if this job fails, its output is
+    # empty and the build and test jobs run (`!= 'false'`), so a broken filter never skips them.
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the filter
+        run: python3 scripts/app-changes.py --self-test
+      - name: Filter changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            git diff --name-only "$BASE...$HEAD" | tee changed.txt
+            app=$(python3 scripts/app-changes.py < changed.txt)
+          else
+            app=true
+          fi
+          echo "app-relevant changes: $app"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+
+  # The two builds are separate jobs instead of a matrix: a matrix job skipped by `if` reports
+  # its unexpanded name ("build (${{ matrix.platform }})"), which would leave the required checks
+  # "build (macOS)" and "build (iOS)" waiting forever.
+  build-macos:
     # macOS and iOS are built from the same target; unsigned, so no secrets are needed.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macOS
-            args: -destination 'platform=macOS'
-          - platform: iOS
-            args: -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
-    name: build (${{ matrix.platform }})
+    name: build (macOS)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,14 +63,35 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            ${{ matrix.args }} -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 50
+            -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 50
       # Every UI string compiled for this platform must have a German translation.
+      - name: Check translations
+        run: python3 scripts/check-localization.py build
+
+  build-ios:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
+    runs-on: macos-latest
+    name: build (iOS)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 50
       - name: Check translations
         run: python3 scripts/check-localization.py build
 
   test:
     # Unit tests, hosted by the macOS app. They use an in-memory store and stub all
     # network access, so they need no secrets and never reach Mistral.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
     runs-on: macos-latest
     name: test (macOS)
     steps:
@@ -66,6 +116,8 @@ jobs:
   test-ios:
     # The same unit tests on the iPhone simulator with the smallest screen. The build is ad-hoc
     # signed ("Sign to Run Locally", no team, no secrets): the Keychain tests need a signature.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
     runs-on: macos-latest
     name: test (iOS)
     steps:

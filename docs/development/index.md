@@ -66,11 +66,15 @@ never touched. Rules for tests:
 
 ### UI tests
 
-`DocumentArchiveUITests/` holds a few XCUITest smoke tests for iPhone and iPad,
-run by their own scheme `DocumentArchiveUITests` (see [iPhone and iPad](./ios)).
+`DocumentArchiveUITests/` holds a few XCUITest smoke tests, run by their own
+scheme `DocumentArchiveUITests`: `SmokeTests` on iPhone and iPad (see
+[iPhone and iPad](./ios)) and `MacSmokeTests` on the Mac. The target is
+multi-platform like the app; iOS-only steps (swipes, rotation, edit mode) stay
+in `#if os(iOS)`, the Mac suite in `#if os(macOS)`.
 The app is started with the launch argument `-UITestSeed` (DEBUG builds only):
-it then opens an in-memory store filled by `App/UITestSeed.swift`, so the tests
-never see the real archive and never call Mistral. Rules:
+it then opens an in-memory store filled by `App/UITestSeed.swift`, uses its own
+Keychain service name and never calls Mistral (`TestEnvironment.isUITestSeed`),
+so the tests never see the real archive or the stored Mistral key. Rules:
 
 - Find elements by accessibility identifier only, never by their (German) text.
   Every identifier lives in `Views/AccessibilityID.swift`; a view a UI test
@@ -82,13 +86,43 @@ never see the real archive and never call Mistral. Rules:
 - `SmokeTests.launchApp()` launches once more when the first launch fails or
   shows neither the list nor the sidebar (slow CI runners); wait for an
   element before using it instead of adding sleeps.
+- Attach screenshots of the screens a test visits (`XCTAttachment`, kept
+  always), so a review can look at them; on the Mac, screenshot a window, not
+  the app (`app.screenshot()` is the whole screen there).
 
-Pull requests do not run them on GitHub. The reviewer runs them locally on the
-smallest iPhone and iPad and posts the results as a test report in the review;
-a pull request is merged on that report plus the required checks. The workflow
-`UI tests` (`.github/workflows/ui-tests.yml`) runs them every night on `main`
-and on demand (Actions → UI tests → Run workflow) on the hosted runners, which
-have an older iOS (26.x); a failure there is handled like a bug report.
+Run the Mac tests with:
+
+```sh
+xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
+  -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS=
+```
+
+`CODE_SIGN_IDENTITY=-` signs ad hoc, which the test runner needs;
+`CODE_SIGN_ENTITLEMENTS=` leaves out the app's iCloud and sandbox entitlements,
+which an ad-hoc signature cannot carry (the sample data run needs neither). The
+tests need automation mode (`automationmodetool` shows its state; Xcode enables
+it, asking for a password unless it was set up with
+`sudo automationmodetool enable-automationmode-without-authentication`).
+**They take over the pointer and keyboard of the Mac** while they run, and quit
+any running copy of the app (same bundle identifier); run them when you are not
+using the Mac, and as rarely as needed. Export the screenshots with
+`xcrun xcresulttool export attachments --path <result>.xcresult --output-path <folder>`.
+
+### Test strategy
+
+Who runs what, so every test runs where it is cheapest and nothing twice:
+
+| When | Who | What |
+|---|---|---|
+| While working | implementer | Differential: only the suites touched (`-only-testing:DocumentArchiveTests/<Suite>`). |
+| Before opening a pull request | implementer | All macOS unit tests, the localization check (`scripts/check-localization.py`), a build with slow type-check warnings (`OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -warn-long-expression-type-checking=300'`; CI's older Xcode times out on long SwiftUI expressions), and the UI tests of the screens the change touches (iPhone, iPad, Mac) when it changes UI or navigation. |
+| Review | reviewer | No second run of the unit tests (CI runs them). The UI tests of the changed screens, with their screenshots, as the test report in the review. |
+| Every pull request that changes the app | CI (`ci.yml`) | Builds for macOS and iOS and all unit tests on macOS and the iPhone simulator (required checks), gitleaks. Doc-only pull requests (`docs/`, Markdown, issue templates, labels, …; see `scripts/app-changes.py`) skip the build and test jobs; skipped jobs count as passed. gitleaks always runs. Pushes to `main` run everything. |
+| Every night | CI (`ui-tests.yml`) | The full UI suite on the hosted runners: iPhone, iPad (older iOS, 26.x) and the Mac. A failure is handled like a bug report. |
+| Before a release | maintainer | A full local run: all unit tests on macOS and iOS; all UI tests on the smallest and the largest iPhone, iPad mini, iPad Pro and the Mac. A manual run of the nightly workflow (Actions → UI tests → Run workflow) for iOS 26. Then the [manual check list](./ios#manual-check-before-a-release). |
+
+Pull requests do not run the UI tests on GitHub; a pull request is merged on
+the reviewer's test report plus the required checks.
 
 ## Project layout
 
@@ -472,8 +506,9 @@ file changes on `main`.
 - The app uses only Apple frameworks; adding a Swift package needs a reason
   in the plan.
 - CI builds the macOS and the iOS app, runs the tests on macOS and on the
-  iPhone simulator, and scans for credentials with gitleaks on every pull request (see [Tests](#tests) and
-  [Secrets](#secrets)).
+  iPhone simulator on every pull request that changes the app, and scans for
+  credentials with gitleaks on every pull request (see [Test strategy](#test-strategy)
+  and [Secrets](#secrets)).
 - Dependabot opens weekly update pull requests for GitHub Actions.
 - GitHub Actions are pinned to commit SHAs; workflows run with read-only
   permissions unless a job needs more.
