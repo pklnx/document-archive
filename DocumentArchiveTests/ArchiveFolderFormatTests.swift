@@ -28,8 +28,12 @@ import Testing
         #expect(try ArchiveFolderFormat.encode(document) == bytes, "same record, same bytes")
 
         let tag = EntityRecord(id: UUID(), name: "Tax", matchText: "Steuer", matchMode: "any", createdAt: date,
-                               changedAt: date, colorHex: "#EF4444", writtenBy: "device-A", formatVersion: "1.0")
+                               changedAt: date, colorHex: "#EF4444", symbol: "car.fill", parent: UUID(),
+                               writtenBy: "device-A", formatVersion: "1.1")
         #expect(try ArchiveFolderFormat.decode(EntityRecord.self, from: ArchiveFolderFormat.encode(tag)) == tag)
+        var root = tag
+        root.parent = nil
+        #expect(try ArchiveFolderFormat.decode(EntityRecord.self, from: ArchiveFolderFormat.encode(root)) == root)
 
         let tombstone = Tombstone(id: UUID(), kind: .tag, deletedAt: date, deletedBy: "device-A",
                                   mergedInto: UUID(), formatVersion: "1.0")
@@ -63,6 +67,46 @@ import Testing
         #expect(record.source == "scan")
         #expect(record.formatVersion == ArchiveFolderFormat.currentVersion.description)
         #expect(record.modifiedAt == ArchiveFolderFormat.normalized(document.modifiedAt))
+    }
+
+    /// 1.1 (#13): a tag record carries its parent and symbol.
+    @Test @MainActor func tagRecordHasParentAndSymbol() throws {
+        let container = try TestSupport.makeContainer()
+        let auto = ArchiveTag(name: "Auto")
+        let golf = ArchiveTag(name: "Golf")
+        container.mainContext.insert(auto)
+        container.mainContext.insert(golf)
+        golf.parent = auto
+        golf.symbol = "car.fill"
+
+        let record = EntityRecord(golf, writtenBy: "device-A")
+        #expect(record.parent == auto.id)
+        #expect(record.symbol == "car.fill")
+        #expect(record.formatVersion == "1.1")
+        #expect(EntityRecord(auto, writtenBy: "device-A").parent == nil)
+    }
+
+    /// Moving a tag to the top level must reach the folder: `parent` is written as `null`, so
+    /// `overlay` does not keep the old parent from the existing file.
+    @Test func unnestedTagOverwritesTheOldParent() throws {
+        var record = EntityRecord(id: UUID(), name: "Golf", parent: UUID(), formatVersion: "1.1")
+        let existing = try ArchiveFolderFormat.encode(record)
+        record.parent = nil
+        let rewritten = try ArchiveFolderFormat.overlay(record, onto: existing)
+        let object = try #require(try JSONSerialization.jsonObject(with: rewritten) as? [String: Any])
+        #expect(object["parent"] is NSNull)
+        #expect(try ArchiveFolderFormat.decode(EntityRecord.self, from: rewritten).parent == nil)
+    }
+
+    /// Tags without a matching UUID are matched by parent and normalized name (#8 part 2 reader).
+    @Test func tagMatchKeyUsesParentAndNormalizedName() {
+        let parent = UUID()
+        #expect(EntityRecord.tagMatchKey(parent: parent, name: " Werkstätt ")
+                == EntityRecord.tagMatchKey(parent: parent, name: "werkstatt"))
+        #expect(EntityRecord.tagMatchKey(parent: parent, name: "Werkstatt")
+                != EntityRecord.tagMatchKey(parent: nil, name: "Werkstatt"))
+        #expect(EntityRecord.tagMatchKey(parent: parent, name: "Werkstatt")
+                != EntityRecord.tagMatchKey(parent: UUID(), name: "Werkstatt"))
     }
 
     @Test func datesAreUTCWithMilliseconds() throws {
@@ -115,7 +159,7 @@ import Testing
     }
 
     @Test func unknownMinorIsReadUnknownMajorIsRefused() throws {
-        #expect(FormatVersion("1.0") == ArchiveFolderFormat.currentVersion)
+        #expect(FormatVersion("1.1") == ArchiveFolderFormat.currentVersion)
         #expect(FormatVersion.isSupported("1.7"))
         #expect(FormatVersion.isSupported(nil))
         #expect(!FormatVersion.isSupported("2.0"))

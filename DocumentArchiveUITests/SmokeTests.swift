@@ -242,7 +242,9 @@ final class SmokeTests: XCTestCase {
         reveal(first, "row \(firstDocument)")
 
         first.swipeLeft()
-        element("documentList.deleteSwipe").tap()
+        let deleteSwipe = element("documentList.deleteSwipe")
+        XCTAssertTrue(waitUntilHittable(deleteSwipe), "no Delete swipe action")
+        deleteSwipe.tap()
         let confirm = element("documentList.deleteConfirm")
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         attachScreenshot("delete dialog")
@@ -252,7 +254,8 @@ final class SmokeTests: XCTestCase {
 
         let second = row(secondDocument)
         second.swipeLeft()
-        element("documentList.deleteSwipe").tap()
+        XCTAssertTrue(waitUntilHittable(deleteSwipe), "no Delete swipe action for the second document")
+        deleteSwipe.tap()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "dialog did not show again")
         confirm.tap()
         XCTAssertTrue(second.waitForNonExistence(timeout: 5), "document was not deleted")
@@ -280,12 +283,26 @@ final class SmokeTests: XCTestCase {
     /// column, with no list and no Show List button.
     func testDeletingTheOpenDocumentShowsTheList() {
         openDocument(firstDocument)
-        element("documentDetail.more").tap()
+        let more = element("documentDetail.more")
+        XCTAssertTrue(waitUntilHittable(more), "no More menu")
+        more.tap()
         let delete = element("documentDetail.delete")
-        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        // Not before the menu has finished opening: a tap on a menu still animating in can be lost.
+        XCTAssertTrue(waitUntilHittable(delete, timeout: 10), "no Delete in the More menu")
         delete.tap()
+        attachScreenshot("after tapping Delete")
         let confirm = element("documentDetail.deleteConfirm")
-        XCTAssertTrue(waitUntilHittable(confirm, timeout: 10), "no delete confirmation")
+        // Once failed on iPadOS 26.5 (CI) with the inspector column open; the marker tells
+        // whether the tap ran the action and only the dialog is missing.
+        if !waitUntilHittable(confirm, timeout: 10) {
+            let actionRan = element("documentDetail.deleteRequested").exists
+            attachScreenshot("no delete confirmation")
+            XCTFail(actionRan ? "no delete confirmation, although the Delete action ran"
+                              : "no delete confirmation: the Delete tap did not run the action")
+            return
+        }
+        attachScreenshot("delete confirmation of the open document")
+        XCTAssertTrue(element("documentDetail.deleteRequested").exists, "the marker for the Delete action is missing")
         confirm.tap()
         // Slow CI runners (iOS 26.5) close the dialog late; wait for it before looking at the list.
         XCTAssertTrue(confirm.waitForNonExistence(timeout: 15), "delete confirmation did not close")
@@ -324,6 +341,7 @@ final class SmokeTests: XCTestCase {
         }
         XCTAssertTrue(waitUntilHittable(delete), "no Delete for the selection")
         delete.tap()
+        attachScreenshot("after tapping Delete for the selection")
         let confirm = element("bulkActions.deleteConfirm")
         XCTAssertTrue(waitUntilHittable(confirm, timeout: 10), "no delete confirmation")
         attachScreenshot("bulk delete confirmation")

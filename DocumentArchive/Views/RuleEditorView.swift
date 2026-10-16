@@ -13,6 +13,10 @@ struct RuleEditorView: View {
     @State private var matchMode = MatchMode.any
     @State private var matchText = ""
     @State private var applyToExisting = false
+    /// Tags only: the parent tag's id, `nil` for the top level.
+    @State private var parentID: UUID?
+
+    @Query(sort: \Tag.name) private var allTags: [Tag]
 
     var body: some View {
         NavigationStack {
@@ -22,6 +26,19 @@ struct RuleEditorView: View {
                 }
 
                 if isTag {
+                    Section {
+                        Picker("Parent tag", selection: $parentID) {
+                            Text("None (top level)").tag(UUID?.none)
+                            ForEach(parentChoices, id: \.tag.id) { entry in
+                                Text(verbatim: String(repeating: "\u{2003}", count: entry.depth) + entry.tag.name)
+                                    .accessibilityLabel(Text(verbatim: TagHierarchy.displayPath(of: entry.tag)))
+                                    .tag(Optional(entry.tag.id))
+                            }
+                        }
+                    } footer: {
+                        Text("Documents with a nested tag also appear under its parent tag.")
+                    }
+
                     Section("Color") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
                             ForEach(Tag.palette, id: \.self) { hex in
@@ -109,6 +126,15 @@ struct RuleEditorView: View {
         #endif
     }
 
+    /// Every tag the edited tag may be nested in: not itself and none of its descendants.
+    private var parentChoices: [(tag: Tag, depth: Int)] {
+        let edited: Tag? = if case .tag(let tag) = target { tag } else { nil }
+        return TagHierarchy.flattened(allTags).filter { entry in
+            guard let edited else { return true }
+            return TagHierarchy.canMove(edited, under: entry.tag)
+        }
+    }
+
     private var isTag: Bool {
         if case .newTag = target { return true }
         if case .tag = target { return true }
@@ -146,6 +172,7 @@ struct RuleEditorView: View {
         switch target {
         case .tag(let tag):
             name = tag.name; colorHex = tag.colorHex; matchMode = tag.matchMode; matchText = tag.matchText
+            parentID = tag.parent?.id
         case .correspondent(let correspondent):
             name = correspondent.name; matchMode = correspondent.matchMode; matchText = correspondent.matchText
         case .documentType(let type):
@@ -167,6 +194,7 @@ struct RuleEditorView: View {
             let tag: Tag
             if case .tag(let existing) = target { tag = existing } else { tag = Tag(name: name); context.insert(tag) }
             tag.name = name; tag.colorHex = colorHex; tag.matchMode = matchMode; tag.matchText = matchText
+            TagHierarchy.move(tag, under: allTags.first { $0.id == parentID })
             rule = tag
         case .newCorrespondent, .correspondent:
             let correspondent: Correspondent

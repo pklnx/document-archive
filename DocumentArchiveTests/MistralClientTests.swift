@@ -84,6 +84,53 @@ extension GlobalStateTests {
             #expect(system.contains("title in German"))
         }
 
+        /// Mistral's strict mode: every property of every object, nested ones included, is in
+        /// `required`, and every object has `additionalProperties: false`. #16 and #11 add their
+        /// parts to `ClassificationRequest`; this test covers them too.
+        @Test func requestSchemaIsStrictEverywhere() throws {
+            let request = ClassificationRequest(correspondents: ["Telekom"], documentTypes: ["Rechnung"],
+                                                tags: ["Auto", "Auto › Golf"])
+            var nested = ClassificationRequest.Part(property: "nested", schema: [
+                "type": "array",
+                "items": [
+                    "type": "object",
+                    "properties": ["label": ["type": "string"], "value": ["type": ["string", "null"]]],
+                    "required": ["label", "value"],
+                    "additionalProperties": false,
+                ],
+            ], rule: "test")
+            let strict = ClassificationRequest(parts: request.parts + [nested])
+            var objects = 0
+            #expect(Self.strictnessProblems(in: strict.schema, path: "root", objects: &objects).isEmpty)
+            #expect(objects == 2)
+            #expect(strict.schema["required"] as? [String] == ["title", "correspondent", "document_type", "tags", "date", "nested"])
+
+            // The check itself finds a missing `required` entry and a missing `additionalProperties`.
+            nested.schema = ["type": "object", "properties": ["label": ["type": "string"]], "required": [String]()]
+            let loose = ClassificationRequest(parts: request.parts + [nested])
+            #expect(Self.strictnessProblems(in: loose.schema, path: "root", objects: &objects).count == 2)
+        }
+
+        /// Problems in a JSON schema for Mistral's strict mode, with their paths.
+        private static func strictnessProblems(in schema: Any, path: String, objects: inout Int) -> [String] {
+            guard let schema = schema as? [String: Any] else { return [] }
+            var problems: [String] = []
+            let types = (schema["type"] as? [String]) ?? [schema["type"] as? String].compactMap { $0 }
+            if types.contains("object") {
+                objects += 1
+                let properties = schema["properties"] as? [String: Any] ?? [:]
+                if Set(schema["required"] as? [String] ?? []) != Set(properties.keys) { problems.append("\(path): required") }
+                if schema["additionalProperties"] as? Bool != false { problems.append("\(path): additionalProperties") }
+                for (key, value) in properties {
+                    problems += strictnessProblems(in: value, path: "\(path).\(key)", objects: &objects)
+                }
+            }
+            if let items = schema["items"] {
+                problems += strictnessProblems(in: items, path: "\(path)[]", objects: &objects)
+            }
+            return problems
+        }
+
         @Test func appLanguageNameIsEnglishWord() {
             #expect(["English", "German"].contains(MistralClient.appLanguageName))
         }

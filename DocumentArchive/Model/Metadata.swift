@@ -4,6 +4,9 @@ import SwiftUI
 
 /// How a tag, correspondent or document type is assigned to a new document automatically
 /// (like the matching rules in paperless-ngx).
+///
+/// **Frozen:** never add a case. It is stored in synced models, and an older app version cannot
+/// decode a value it does not know.
 enum MatchMode: String, Codable, CaseIterable, Identifiable {
     case none
     case any
@@ -80,8 +83,18 @@ final class Tag: MatchingRule {
     var matchText: String = ""
     var matchMode: MatchMode = MatchMode.any
     var createdAt: Date = Date()
+    /// SF Symbol shown for the tag (#13). Older versions ignore it.
+    var symbol: String = "tag.fill"
 
     var documents: [Document]? = []
+
+    /// The tag this one is nested in (#13); `nil` for a root. Older versions ignore it and show a
+    /// flat list. Deleting a parent there nullifies `parent`, so its children become roots.
+    /// Never set it directly from the UI: `TagHierarchy.move(_:under:)` refuses cycles.
+    var parent: Tag?
+    /// The inverse of `parent`. Siblings are shown alphabetically (no sort index).
+    @Relationship(deleteRule: .nullify, inverse: \Tag.parent)
+    var children: [Tag]? = []
 
     init(name: String, colorHex: String = Tag.palette.randomElement()!) {
         self.name = name

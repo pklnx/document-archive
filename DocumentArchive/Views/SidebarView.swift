@@ -58,26 +58,10 @@ struct SidebarView: View {
             }
 
             Section {
-                ForEach(tags) { tag in
-                    NavigationLink(value: SidebarItem.tag(tag)) {
-                        HStack {
-                            Label {
-                                Text(tag.name)
-                            } icon: {
-                                Image(systemName: "tag.fill").foregroundStyle(tag.color)
-                            }
-                            Spacer()
-                            countBadge(tag.documentCount)
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(tag.name)
-                        .accessibilityValue(DocumentAccessibility.documentCount(tag.documentCount))
-                    }
-                    .accessibilityIdentifier(AccessibilityID.sidebarRow(.tag(tag)))
-                    .contextMenu {
-                        Button("Edit…", systemImage: "pencil") { editorTarget = .tag(tag) }
-                        Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
-                    }
+                // Counts include the tags nested in a tag, each document once (one pass).
+                let counts = TagHierarchy.subtreeCounts(documents: documents)
+                ForEach(TagHierarchy.flattened(tags), id: \.tag.id) { entry in
+                    tagRow(entry.tag, depth: entry.depth, count: counts[entry.tag.id] ?? 0)
                 }
             } header: {
                 sectionHeader(String(localized: "Tags"), id: "tag") { editorTarget = .newTag }
@@ -111,8 +95,32 @@ struct SidebarView: View {
         ) { deletion in
             Button("Delete", role: .destructive) { delete(deletion) }
             Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("The documents themselves are kept.")
+        } message: { deletion in
+            Text(deletion.message)
+        }
+    }
+
+    /// Nested tags are indented under their parent; VoiceOver reads the whole path.
+    private func tagRow(_ tag: Tag, depth: Int, count: Int) -> some View {
+        NavigationLink(value: SidebarItem.tag(tag)) {
+            HStack {
+                Label {
+                    Text(tag.name)
+                } icon: {
+                    Image(systemName: tag.symbol).foregroundStyle(tag.color)
+                }
+                Spacer()
+                countBadge(count)
+            }
+            .padding(.leading, CGFloat(depth) * 14)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(TagHierarchy.displayPath(of: tag))
+            .accessibilityValue(DocumentAccessibility.documentCount(count))
+        }
+        .accessibilityIdentifier(AccessibilityID.sidebarRow(.tag(tag)))
+        .contextMenu {
+            Button("Edit…", systemImage: "pencil") { editorTarget = .tag(tag) }
+            Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
         }
     }
 
@@ -154,15 +162,28 @@ struct SidebarView: View {
         }
     }
 
-    private enum PendingDeletion {
+    enum PendingDeletion {
         case tag(Tag), correspondent(Correspondent), documentType(DocumentType)
 
+        /// Without the name once the object is gone (deleted on another device while the dialog
+        /// is open).
         var title: String {
             switch self {
-            case .tag(let t): String(localized: "Delete tag “\(t.name)”?")
-            case .correspondent(let c): String(localized: "Delete correspondent “\(c.name)”?")
-            case .documentType(let d): String(localized: "Delete document type “\(d.name)”?")
+            case .tag(let t): String(localized: "Delete tag “\(Self.name(t, t.name))”?")
+            case .correspondent(let c): String(localized: "Delete correspondent “\(Self.name(c, c.name))”?")
+            case .documentType(let d): String(localized: "Delete document type “\(Self.name(d, d.name))”?")
             }
+        }
+
+        var message: String {
+            if case .tag(let tag) = self, !tag.isDeleted, tag.modelContext != nil, !(tag.children ?? []).isEmpty {
+                return String(localized: "The documents themselves are kept. Tags nested in this tag move up one level.")
+            }
+            return String(localized: "The documents themselves are kept.")
+        }
+
+        private static func name(_ model: some PersistentModel, _ name: String) -> String {
+            model.isDeleted || model.modelContext == nil ? "" : name
         }
     }
 
@@ -170,7 +191,7 @@ struct SidebarView: View {
         switch deletion {
         case .tag(let tag):
             if selection == .tag(tag) { selection = .all }
-            MetadataDeletion.delete(tag, in: context, recorder: DocumentDeletion.recorder())
+            TagHierarchy.delete(tag, in: context, recorder: DocumentDeletion.recorder())
         case .correspondent(let correspondent):
             if selection == .correspondent(correspondent) { selection = .all }
             MetadataDeletion.delete(correspondent, in: context, recorder: DocumentDeletion.recorder())

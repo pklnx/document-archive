@@ -72,8 +72,9 @@ final class Document {
     /// language the app ran in when they were imported.
     static let automaticTitlePrefixes = ["Scan ", "Photo ", "Foto ", "Document ", "Dokument "]
 
+    /// Sorted by display path ("Auto › Golf" before "Auto › Golf › Werkstatt" before "Bank").
     var sortedTags: [Tag] {
-        (tags ?? []).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        TagHierarchy.sortedByPath(tags ?? [])
     }
 
     func hasTag(_ tag: Tag) -> Bool {
@@ -90,14 +91,16 @@ final class Document {
         touch()
     }
 
-    /// Full-text search over title, notes, recognized text, correspondent, type, tags and ASN.
+    /// Full-text search over title, notes, recognized text, correspondent, type, tags (with their
+    /// parent tags) and ASN.
     func matches(_ query: String) -> Bool {
         let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !terms.isEmpty else { return true }
         let haystack = [
             title, notes, extractedText, originalFileName,
             correspondent?.name ?? "", documentType?.name ?? "",
-            (tags ?? []).map(\.name).joined(separator: " "),
+            // A document tagged "Werkstatt" is also found by "Auto" (its parent tags).
+            (tags ?? []).flatMap(TagHierarchy.path(of:)).map(\.name).joined(separator: " "),
             archiveSerialNumber.map { "ASN\($0) \($0)" } ?? "",
         ].joined(separator: "\n")
         return terms.allSatisfy { haystack.localizedStandardContains($0) }
@@ -117,6 +120,8 @@ final class Document {
     }
 }
 
+/// **Frozen:** never add a case. It is stored in synced documents, and an older app version
+/// cannot decode a value it does not know.
 enum DocumentSource: String, Codable, CaseIterable {
     case file
     case scan

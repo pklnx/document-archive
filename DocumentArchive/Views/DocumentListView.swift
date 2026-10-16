@@ -27,6 +27,7 @@ extension SidebarItem {
                 .flatMap { $0 }
                 .filter { $0.matches(searchText) }
         }
+        let includes = documentFilter()
         let filtered = allDocuments.filter { includes($0) && $0.matches(searchText) }
         switch sort {
         case .added:
@@ -170,7 +171,7 @@ struct DocumentListView<ImportMenu: View>: View {
                 .accessibilityIdentifier(AccessibilityID.deleteConfirm)
             Button("Cancel", role: .cancel) {}
         } message: { document in
-            Text("“\(document.isAlive ? document.title : "")” will be deleted on all devices.")
+            Text(DocumentDetailView.deleteMessage(for: document))
         }
     }
 

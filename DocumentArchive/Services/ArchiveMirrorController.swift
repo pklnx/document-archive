@@ -44,8 +44,8 @@ final class ArchiveMirrorController {
         self.folderAccess = folderAccess
     }
 
-    /// Called once at launch for a store on disk.
-    func start(container: ModelContainer) {
+    /// Called once at launch for a store on disk. `changes` is the app's shared observer.
+    func start(container: ModelContainer, changes observer: StoreChangeObserver) {
         guard let storeURL = container.configurations.first?.url,
               let identifier = ArchiveStore.storeIdentifier(at: storeURL) else { return }
         self.container = container
@@ -58,7 +58,6 @@ final class ArchiveMirrorController {
         refreshFromState()
         DocumentDeletion.recorder = { [weak self] in self?.recorder }
 
-        let observer = StoreChangeObserver(container: container)
         self.observer = observer
         observerTask = Task { [weak self] in
             for await _ in observer.changes() {

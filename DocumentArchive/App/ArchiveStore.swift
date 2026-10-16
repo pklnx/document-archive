@@ -36,7 +36,7 @@ enum StoreChoice: Equatable {
 @MainActor
 enum ArchiveStore {
     static let storeName = "DocumentArchive"
-    static let schema = Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
+    static let schema = DocumentArchiveApp.schema
 
     /// The persistent store's `NSStoreUUIDKey`. It identifies this store file: a lost, reset or
     /// fallback store has another one, which the folder copy uses to notice that its bookkeeping

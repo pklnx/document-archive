@@ -26,6 +26,20 @@ enum SidebarItem: Hashable {
     }
 
     func includes(_ document: Document) -> Bool {
+        documentFilter()(document)
+    }
+
+    /// The test `includes` applies, prepared once for a whole list: a tag's subtree is computed
+    /// once, not per document. A tag includes the documents of the tags nested in it.
+    func documentFilter() -> (Document) -> Bool {
+        if case .tag(let tag) = self {
+            let ids = TagHierarchy.subtreeIDs(of: tag)
+            return { document in document.tags?.contains { ids.contains($0.id) } ?? false }
+        }
+        return { document in self.matchesWithoutTags(document) }
+    }
+
+    private func matchesWithoutTags(_ document: Document) -> Bool {
         switch self {
         case .inbox: document.isInbox
         case .all: true
@@ -34,7 +48,7 @@ enum SidebarItem: Hashable {
         case .duplicates: false // needs all documents, see DocumentListView
         case .documentType(let type): document.documentType?.id == type.id
         case .correspondent(let correspondent): document.correspondent?.id == correspondent.id
-        case .tag(let tag): document.hasTag(tag)
+        case .tag(let tag): document.hasTag(tag) // handled by `documentFilter`
         }
     }
 }

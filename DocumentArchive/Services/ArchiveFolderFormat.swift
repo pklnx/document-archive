@@ -25,7 +25,8 @@ import Foundation
 ///   reading and writing it.
 enum ArchiveFolderFormat {
     /// 1.0: documents, tags, correspondents, document types, tombstones (#8 part 1).
-    static let currentVersion = FormatVersion(major: 1, minor: 0)
+    /// 1.1: tags have `parent` and `symbol` (#13).
+    static let currentVersion = FormatVersion(major: 1, minor: 1)
 
     /// The subfolder the app creates inside the folder the user chose.
     static let rootFolderName = "Document Archive"
@@ -255,10 +256,37 @@ struct EntityRecord: Codable, Equatable {
     var changedAt: Date?
     /// Tags only.
     var colorHex: String?
-    /// Document types only.
+    /// Document types and tags (tags from 1.1).
     var symbol: String?
+    /// Tags (from 1.1): the parent tag's UUID, `null` for a root. Always written, also as `null`,
+    /// so moving a tag to the top level reaches the other devices (`overlay` would otherwise keep
+    /// the old parent). Correspondents and types write `null` (nesting for them comes later).
+    var parent: UUID?
     var writtenBy: String?
     var formatVersion: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(matchText, forKey: .matchText)
+        try container.encodeIfPresent(matchMode, forKey: .matchMode)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(changedAt, forKey: .changedAt)
+        try container.encodeIfPresent(colorHex, forKey: .colorHex)
+        try container.encodeIfPresent(symbol, forKey: .symbol)
+        try container.encode(parent, forKey: .parent)
+        try container.encodeIfPresent(writtenBy, forKey: .writtenBy)
+        try container.encodeIfPresent(formatVersion, forKey: .formatVersion)
+    }
+
+    /// How a reader matches a tag from the folder that has no local tag with its UUID (#8 part 2):
+    /// the same parent and the same normalized name, like `MetadataMaintenance` merges duplicates.
+    static func tagMatchKey(parent: UUID?, name: String) -> String {
+        let normalized = name.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(parent?.uuidString ?? "root")/\(normalized)"
+    }
 
     func isNewer(than other: EntityRecord) -> Bool {
         let mine = changedAt ?? .distantPast
@@ -323,7 +351,7 @@ extension EntityRecord {
     init(_ tag: Tag, writtenBy: String) {
         self.init(id: tag.id, name: tag.name, matchText: tag.matchText, matchMode: tag.matchMode.rawValue,
                   createdAt: ArchiveFolderFormat.normalized(tag.createdAt), colorHex: tag.colorHex,
-                  writtenBy: writtenBy, formatVersion: ArchiveFolderFormat.currentVersion.description)
+                  symbol: tag.symbol, parent: tag.parent?.id, writtenBy: writtenBy, formatVersion: ArchiveFolderFormat.currentVersion.description)
     }
 
     @MainActor
