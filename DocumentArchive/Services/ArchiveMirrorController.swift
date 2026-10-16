@@ -38,7 +38,7 @@ final class ArchiveMirrorController {
     @ObservationIgnored private var observer: StoreChangeObserver?
     @ObservationIgnored private var observerTask: Task<Void, Never>?
     @ObservationIgnored private var runTask: Task<Void, Never>?
-    @ObservationIgnored private var rerunRequested = false
+    @ObservationIgnored private var requests = PassRequests()
 
     init(folderAccess: FolderAccess = FolderAccess(key: ArchiveMirrorController.bookmarkKey)) {
         self.folderAccess = folderAccess
@@ -79,8 +79,9 @@ final class ArchiveMirrorController {
     /// reading it comes with #8 part 2, and nothing is written into it.
     func choose(_ url: URL) async {
         guard isAvailable else { return }
+        let deviceID = stateStore?.state.deviceID
         let contents = await FolderAccess.withAccess(to: url) {
-            await Task.detached(priority: .userInitiated) { ArchiveMirror.inspect(url) }.value
+            await Task.detached(priority: .userInitiated) { ArchiveMirror.inspect(url, deviceID: deviceID) }.value
         }
         switch contents {
         case .archive(let count):
@@ -89,7 +90,7 @@ final class ArchiveMirrorController {
         case .newerFormat(let version):
             notice = ArchiveMirror.MirrorError.newerFormat(version).localizedDescription
             return
-        case .empty:
+        case .empty, .ownArchive:
             break
         }
         do {
@@ -98,7 +99,8 @@ final class ArchiveMirrorController {
             notice = error.localizedDescription
             return
         }
-        runTask?.cancel()
+        // A pass for the previous folder must not record its files in the new folder's state.
+        await stopRunningPass()
         stateStore?.reset(storeIdentifier: storeIdentifier)   // a new folder starts from scratch
         folderURL = url
         isEnabled = true
@@ -106,52 +108,64 @@ final class ArchiveMirrorController {
         syncNow()
     }
 
-    /// Writes what changed now (also "Sync Now" in the settings).
-    func syncNow(confirmDeletions: Bool = false) {
+    /// Writes what changed now (also "Sync Now" in the settings). While a pass runs, the request
+    /// waits and one more pass follows.
+    /// - Parameter confirming: deletions the user confirmed (see `confirmDeletions`).
+    func syncNow(confirming: [DeletionRecord] = []) {
         guard isEnabled else { return }
-        if runTask != nil {
-            rerunRequested = true
-            return
-        }
+        requests.add(confirming: confirming)
+        startNextPass()
+    }
+
+    private func startNextPass() {
+        guard runTask == nil, let confirming = requests.take() else { return }
         runTask = Task {
-            await performPass(confirmDeletions: confirmDeletions)
+            await performPass(confirming: confirming)
             runTask = nil
-            if rerunRequested {
-                rerunRequested = false
-                syncNow()
-            }
+            startNextPass()
         }
     }
 
     /// Stops the running pass; it continues with the next one (at the latest on the next launch).
     func cancel() {
-        rerunRequested = false
+        requests = PassRequests()
         runTask?.cancel()
+    }
+
+    /// Cancels the running pass and waits until it has stopped.
+    private func stopRunningPass() async {
+        cancel()
+        await runTask?.value
     }
 
     /// "Back to Default": stops using the folder. The files in it stay.
     func useDefaultLocation() {
-        cancel()
         folderAccess.clear()
         isEnabled = false
-        stateStore?.reset(storeIdentifier: storeIdentifier)
         folderURL = nil
-        refreshFromState()
+        Task {
+            await stopRunningPass()
+            guard !isEnabled else { return }   // another folder was chosen meanwhile
+            stateStore?.reset(storeIdentifier: storeIdentifier)
+            refreshFromState()
+        }
     }
 
+    /// Confirms exactly the deletions shown right now; deletions recorded later are checked
+    /// again. Kept for the next pass when one is running.
     func confirmDeletions() {
-        syncNow(confirmDeletions: true)
+        syncNow(confirming: stateStore?.state.heldDeletions ?? [])
     }
 
-    /// The deleted documents stay in the folder.
+    /// The held-back documents stay in the folder.
     func discardDeletions() {
-        stateStore?.discardPendingDeletions()
+        stateStore?.discardHeldDeletions()
         refreshFromState()
     }
 
     // MARK: Pass
 
-    private func performPass(confirmDeletions: Bool) async {
+    private func performPass(confirming: [DeletionRecord]) async {
         guard let container, let stateStore, let storeIdentifier else { return }
         isRunning = true
         defer {
@@ -166,13 +180,16 @@ final class ArchiveMirrorController {
                 let mirror = ArchiveMirror(context: container.mainContext, folder: folder, stateStore: stateStore,
                                            storeIdentifier: storeIdentifier)
                 _ = try await BackgroundActivity.run("Folder copy") {
-                    try await mirror.run(confirmDeletions: confirmDeletions) { [weak self] done, total in
+                    try await mirror.run(confirming: confirming) { [weak self] done, total in
                         self?.progress = (done, total)
                     }
                 }
             }
         } catch {
-            stateStore.update { $0.lastError = error.localizedDescription }
+            // A cancelled pass may already belong to a previous folder: nothing is recorded.
+            if !Task.isCancelled {
+                stateStore.update { $0.lastError = error.localizedDescription }
+            }
         }
     }
 
@@ -181,5 +198,24 @@ final class ArchiveMirrorController {
         lastRun = state?.lastRun
         lastError = isEnabled ? state?.lastError : nil
         deletionsAwaitingConfirmation = isEnabled ? state?.deletionsAwaitingConfirmation : nil
+    }
+}
+
+/// Pass requests that arrive while a pass runs (launch, store change, app active, "Sync Now",
+/// "Confirm"). They are merged into one follow-up pass, and a confirmation is never lost.
+struct PassRequests: Equatable {
+    private var isWaiting = false
+    private var confirming: [DeletionRecord] = []
+
+    mutating func add(confirming shown: [DeletionRecord]) {
+        isWaiting = true
+        confirming += shown.filter { !confirming.contains($0) }
+    }
+
+    /// The next pass to run, with the deletions confirmed for it; `nil` when none is waiting.
+    mutating func take() -> [DeletionRecord]? {
+        guard isWaiting else { return nil }
+        defer { self = PassRequests() }
+        return confirming
     }
 }

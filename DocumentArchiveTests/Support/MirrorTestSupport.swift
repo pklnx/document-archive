@@ -54,10 +54,15 @@ struct MirrorFixture {
     }
 
     @discardableResult
-    func run(confirmDeletions: Bool = false, ubiquity: UbiquityStatusProviding = UbiquityStatus(),
-             io: ArchiveFileIO = ArchiveFileIO(), now: @escaping () -> Date = Date.init) async throws -> ArchiveMirror.PassResult {
-        try await mirror(ubiquity: ubiquity, io: io, now: now).run(confirmDeletions: confirmDeletions)
+    func run(confirming: [DeletionRecord] = [], ubiquity: UbiquityStatusProviding = UbiquityStatus(),
+             io: ArchiveFileIO = ArchiveFileIO(), options: ArchiveMirror.Options = .init(),
+             now: @escaping () -> Date = Date.init,
+             progress: ((Int, Int) -> Void)? = nil) async throws -> ArchiveMirror.PassResult {
+        try await mirror(ubiquity: ubiquity, io: io, options: options, now: now).run(confirming: confirming, progress: progress)
     }
+
+    /// The deletions the guard held back, as the settings show them.
+    var shownDeletions: [DeletionRecord] { stateStore.state.heldDeletions ?? [] }
 
     /// A processed document with small fake PDF bytes (the mirror does not read the PDF).
     @discardableResult

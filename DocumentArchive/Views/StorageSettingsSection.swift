@@ -71,10 +71,13 @@ struct StorageSettingsSection: View {
             Text(mirror.lastRun?.formatted(date: .abbreviated, time: .shortened) ?? "–")
         }
         if let error = mirror.lastError {
-            Label(error, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
-                .foregroundStyle(.red)
-                .textSelection(.enabled)
+            // Color only on the icon; the text keeps a contrast of at least 4.5:1.
+            Label {
+                Text(error).foregroundStyle(.secondary).textSelection(.enabled)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+            }
+            .font(.caption)
         }
         if let count = mirror.deletionsAwaitingConfirmation {
             PendingDeletionsView(count: count)
@@ -121,8 +124,11 @@ struct PendingDeletionsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Deletions waiting for confirmation: \(count)", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+            Label {
+                Text("Deletions waiting for confirmation: \(count)").foregroundStyle(.primary)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
             Text("They are removed from the folder only after you confirm. “Discard” keeps the documents in the folder.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -148,8 +154,11 @@ struct FolderCopyStatusView: View {
                 if let count = mirror.deletionsAwaitingConfirmation {
                     PendingDeletionsView(count: count)
                 } else if mirror.lastError != nil {
-                    Label("Folder copy failed – see Settings", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                    Label {
+                        Text("Folder copy failed – see Settings")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    }
                 } else if mirror.isRunning {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.mini)

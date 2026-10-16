@@ -98,7 +98,7 @@ import Testing
 
     /// 210 documents, so 21 deletions are exactly 10 %: only the count rule decides.
     @Test(arguments: [20, 21])
-    func moreThan20TombstonesWaitForConfirmation(deletions: Int) async throws {
+    func moreThan20DeletedDocumentsWaitForConfirmation(deletions: Int) async throws {
         let (device, documents) = try await mirroredDevice(documents: 210)
         DocumentDeletion.delete(Array(documents.prefix(deletions)), in: device.context, recorder: device.stateStore)
 
@@ -116,38 +116,70 @@ import Testing
 
             // Another pass does not apply them either; confirming does.
             #expect(try await device.run().tombstonesWritten == 0)
-            let confirmed = try await device.run(confirmDeletions: true)
+            let confirmed = try await device.run(confirming: device.shownDeletions)
             #expect(confirmed.tombstonesWritten == deletions)
             #expect(device.stateStore.state.deletionsAwaitingConfirmation == nil)
             #expect(device.files(in: device.layout.folder(.document)).count == (210 - deletions) * 2)
         }
     }
 
-    /// 20 documents in the folder: 2 deletions (10 %) pass, 3 (15 %) stop.
-    @Test(arguments: [2, 3])
-    func deletingMoreThanTenPercentWaitsForConfirmation(deletions: Int) async throws {
-        let (device, documents) = try await mirroredDevice(documents: 20)
+    /// The 10 % rule applies only from 50 documents in the folder (maintainer decision).
+    @Test(arguments: [(documents: 49, deletions: 6, stops: false),
+                      (documents: 50, deletions: 5, stops: false),
+                      (documents: 50, deletions: 6, stops: true)])
+    func deletingMoreThanTenPercentWaitsForConfirmation(documents count: Int, deletions: Int, stops: Bool) async throws {
+        let (device, documents) = try await mirroredDevice(documents: count)
         DocumentDeletion.delete(Array(documents.prefix(deletions)), in: device.context, recorder: device.stateStore)
 
         let result = try await device.run()
 
-        if deletions == 2 {
-            #expect(result.tombstonesWritten == 2)
-            #expect(result.deletionsAwaitingConfirmation == nil)
-        } else {
-            #expect(result.tombstonesWritten == 0)
-            #expect(result.deletionsAwaitingConfirmation == 3)
-        }
+        #expect(result.tombstonesWritten == (stops ? 0 : deletions))
+        #expect(result.deletionsAwaitingConfirmation == (stops ? deletions : nil))
+    }
+
+    /// Only documents count: deleting many tags never asks, also while documents are held back.
+    @Test func deletedTagsDoNotCountTowardsTheGuard() async throws {
+        let (device, documents) = try await mirroredDevice(documents: 50)
+        let tags = (0..<25).map { ArchiveTag(name: "Tag \($0)") }
+        tags.forEach(device.context.insert)
+        try device.context.save()
+        try await device.run()
+
+        for tag in tags { MetadataDeletion.delete(tag, in: device.context, recorder: device.stateStore) }
+        try device.context.save()
+        DocumentDeletion.delete(Array(documents.prefix(6)), in: device.context, recorder: device.stateStore)
+        let result = try await device.run()
+
+        #expect(result.tombstonesWritten == 25, "the tags pass")
+        #expect(result.deletionsAwaitingConfirmation == 6, "the documents wait")
+        #expect(device.files(in: device.layout.folder(.tag)).isEmpty)
+    }
+
+    /// "Confirm" applies the deletions that were shown; deletions recorded afterwards are checked
+    /// on their own.
+    @Test func confirmingAppliesOnlyTheShownDeletions() async throws {
+        let (device, documents) = try await mirroredDevice(documents: 60)
+        DocumentDeletion.delete(Array(documents[0..<7]), in: device.context, recorder: device.stateStore)
+        #expect(try await device.run().deletionsAwaitingConfirmation == 7)
+        let shown = device.shownDeletions
+
+        DocumentDeletion.delete(Array(documents[7..<14]), in: device.context, recorder: device.stateStore)
+        let result = try await device.run(confirming: shown)
+
+        #expect(result.tombstonesWritten == 7)
+        #expect(Set(tombstones(device)) == Set(documents[0..<7].map { "\($0.id.uuidString).json" }))
+        #expect(result.deletionsAwaitingConfirmation == 7, "7 of the 53 left are more than 10 %")
+        #expect(Set(device.shownDeletions.map(\.id)) == Set(documents[7..<14].map(\.id)))
     }
 
     @Test func discardingKeepsTheDocumentsInTheFolder() async throws {
-        let (device, documents) = try await mirroredDevice(documents: 10)
-        let deleted = Array(documents.prefix(5))
+        let (device, documents) = try await mirroredDevice(documents: 60)
+        let deleted = Array(documents.prefix(7))
         let ids = deleted.map(\.id)
         DocumentDeletion.delete(deleted, in: device.context, recorder: device.stateStore)
-        #expect(try await device.run().deletionsAwaitingConfirmation == 5)
+        #expect(try await device.run().deletionsAwaitingConfirmation == 7)
 
-        device.stateStore.discardPendingDeletions()
+        device.stateStore.discardHeldDeletions()
         let after = try await device.run()
 
         #expect(after.tombstonesWritten == 0)

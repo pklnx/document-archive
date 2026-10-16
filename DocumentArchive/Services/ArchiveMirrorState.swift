@@ -35,8 +35,11 @@ struct ArchiveMirrorState: Codable, Equatable {
     var entities: [String: EntityEntry] = [:]
     /// Explicit deletions not yet written as tombstones (`DocumentDeletion`, `MetadataDeletion`).
     var pendingDeletions: [DeletionRecord] = []
-    /// Set when the mass-delete guard stopped: the number of deletions waiting for confirmation.
-    var deletionsAwaitingConfirmation: Int?
+    /// Document deletions the mass-delete guard held back. This is what the settings and the
+    /// sidebar show, and exactly what "Confirm" confirms; later deletions are checked again.
+    var heldDeletions: [DeletionRecord]?
+
+    var deletionsAwaitingConfirmation: Int? { heldDeletions?.count }
     var lastRun: Date?
     var lastError: String?
     var lastPurge: Date?
@@ -79,16 +82,18 @@ final class ArchiveMirrorStateStore: DeletionRecording {
         update { $0.pendingDeletions += deletions }
     }
 
-    /// Drops the deletions the mass-delete guard stopped ("Discard"). Their files stay in the
-    /// folder, and the writer forgets them, so it never touches those files again.
-    func discardPendingDeletions() {
+    /// Drops the deletions the mass-delete guard held back ("Discard"). Their files stay in the
+    /// folder, and the writer forgets them, so it never touches those files again. Deletions
+    /// recorded after they were shown stay queued.
+    func discardHeldDeletions() {
         update { state in
-            for deletion in state.pendingDeletions {
+            let held = state.heldDeletions ?? []
+            for deletion in held {
                 state.documents[deletion.id.uuidString] = nil
                 state.entities[deletion.id.uuidString] = nil
             }
-            state.pendingDeletions = []
-            state.deletionsAwaitingConfirmation = nil
+            state.pendingDeletions.removeAll { held.contains($0) }
+            state.heldDeletions = nil
         }
     }
 

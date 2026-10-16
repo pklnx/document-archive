@@ -14,8 +14,8 @@ import SwiftData
 ///    newer is never overwritten, and files of objects this state has never written are only
 ///    touched when they were written by this device.
 /// 4. Explicit deletions (`DocumentDeletion`, `MetadataDeletion`) become tombstones; deleted
-///    documents move to `Deleted/`. More than 20 tombstones or more than 10 % of the folder's
-///    documents in one pass wait for confirmation.
+///    documents move to `Deleted/`. A pass that would delete more than 20 documents, or more than
+///    10 % of the folder's documents (only from 50 documents on), waits for confirmation.
 /// 5. Once a day: `Deleted/` older than 30 days and tombstones older than a year are purged.
 ///
 /// It needs only a `ModelContext` and a folder URL, so tests use an in-memory container and a
@@ -24,11 +24,15 @@ import SwiftData
 @MainActor
 final class ArchiveMirror {
     struct Options {
-        /// A pass that would write more tombstones than this waits for confirmation.
-        var maxTombstonesPerPass = 20
+        /// A pass that would delete more documents than this waits for confirmation. Only
+        /// documents count; deleted tags, correspondents and types never ask.
+        var maxDeletedDocuments = 20
         /// A pass that would delete more than this share (in percent) of the folder's documents
-        /// waits for confirmation.
+        /// waits for confirmation …
         var maxDeletedPercent = 10
+        /// … but only when the folder holds at least this many documents, so a small archive
+        /// does not ask for every single delete (maintainer decision on #8).
+        var minDocumentsForPercentRule = 50
         var deletedRetention: TimeInterval = 30 * 24 * 60 * 60
         var tombstoneRetention: TimeInterval = 365 * 24 * 60 * 60
         var purgeInterval: TimeInterval = 24 * 60 * 60
@@ -62,7 +66,7 @@ final class ArchiveMirror {
         var leftInFolder = 0
         /// Evicted files whose download was requested; retried in a later pass.
         var waitingForDownload = 0
-        /// Set when the mass-delete guard stopped the deletions.
+        /// Set when the mass-delete guard held deletions back: the number of documents.
         var deletionsAwaitingConfirmation: Int?
         /// The state belonged to another store and was discarded.
         var stateWasReset = false
@@ -75,6 +79,9 @@ final class ArchiveMirror {
     enum FolderContents: Equatable {
         /// No `Document Archive/`, or one without documents.
         case empty
+        /// An archive whose documents were all written by this device (e.g. chosen again after
+        /// "Back to Default"). Safe to use: the writer only overwrites its own files.
+        case ownArchive(documents: Int)
         /// An archive with documents: reading it comes with #8 part 2.
         case archive(documents: Int)
         case newerFormat(String)
@@ -113,26 +120,51 @@ final class ArchiveMirror {
     }
 
     /// Checks a folder before it is used for the first time.
-    nonisolated static func inspect(_ folder: URL, ubiquity: UbiquityStatusProviding = UbiquityStatus()) -> FolderContents {
+    /// - Parameter deviceID: this device's id; a folder whose sidecars were all written by it is
+    ///   `.ownArchive`. Evicted sidecars cannot be checked, so they count as foreign.
+    nonisolated static func inspect(_ folder: URL, deviceID: String? = nil,
+                                    ubiquity: UbiquityStatusProviding = UbiquityStatus()) -> FolderContents {
         let layout = ArchiveFolderLayout(chosenFolder: folder)
+        let io = ArchiveFileIO()
         if ubiquity.state(of: layout.archiveInfo) == .available,
-           let data = try? ArchiveFileIO().read(layout.archiveInfo),
+           let data = try? io.read(layout.archiveInfo),
            let info = try? ArchiveFolderFormat.decode(ArchiveInfo.self, from: data),
            !FormatVersion.isSupported(info.formatVersion) {
             return .newerFormat(info.formatVersion ?? "")
         }
-        let count = ArchiveFolderLayout.recordIDs(in: layout.folder(.document)).count
-        return count == 0 ? .empty : .archive(documents: count)
+        let ids = ArchiveFolderLayout.recordIDs(in: layout.folder(.document))
+        guard !ids.isEmpty else { return .empty }
+        let allOwn = deviceID != nil && ids.allSatisfy { id in
+            let url = layout.record(.document, id)
+            guard ubiquity.state(of: url) == .available, let data = try? io.read(url),
+                  let record = try? ArchiveFolderFormat.decode(DocumentRecord.self, from: data) else { return false }
+            return record.writtenBy == deviceID
+        }
+        return allOwn ? .ownArchive(documents: ids.count) : .archive(documents: ids.count)
     }
 
     // MARK: - Pass
 
+    /// A cancelled pass (folder changed, "Back to Default", Cancel) stops after the running step
+    /// and **does not update the state** with what that step wrote: the state may already belong
+    /// to another folder. Files it wrote to its own folder are simply written again next time.
     /// - Parameters:
-    ///   - confirmDeletions: the user confirmed deletions the guard stopped.
+    ///   - confirming: the deletions the user confirmed – exactly those that were shown
+    ///     (`ArchiveMirrorState.heldDeletions`). Deletions recorded later go through the guard again.
     ///   - progress: documents done and total, after each batch.
     @discardableResult
-    func run(confirmDeletions: Bool = false, progress: ((Int, Int) -> Void)? = nil) async throws -> PassResult {
+    func run(confirming: [DeletionRecord] = [], progress: ((Int, Int) -> Void)? = nil) async throws -> PassResult {
         var result = PassResult()
+        do {
+            try await pass(confirming: confirming, result: &result, progress: progress)
+        } catch is CancellationError {
+            result.wasCancelled = true
+        }
+        return result
+    }
+
+    private func pass(confirming: [DeletionRecord], result: inout PassResult,
+                      progress: ((Int, Int) -> Void)?) async throws {
         if stateStore.state.storeIdentifier != storeIdentifier {
             result.stateWasReset = stateStore.state.storeIdentifier != nil
             stateStore.update { $0 = $0.reset(storeIdentifier: storeIdentifier) }
@@ -144,16 +176,15 @@ final class ArchiveMirror {
         try await Self.background {
             try Self.prepareFolder(layout, io: io, ubiquity: ubiquity, appVersion: appVersion, now: now)
         }
+        try Task.checkCancellation()
         try await writeEntities(deviceID: deviceID, now: now, result: &result)
         try await writeDocuments(deviceID: deviceID, result: &result, progress: progress)
-        if result.wasCancelled { return result }
-        try await applyDeletions(deviceID: deviceID, now: now, confirm: confirmDeletions, result: &result)
-        await purgeIfDue(now: now)
+        try await applyDeletions(deviceID: deviceID, now: now, confirming: confirming, result: &result)
+        try await purgeIfDue(now: now)
         stateStore.update {
             $0.lastRun = now
             $0.lastError = nil
         }
-        return result
     }
 
     // MARK: Folder
@@ -191,6 +222,8 @@ final class ArchiveMirror {
 
     private enum Outcome: Sendable {
         case written(pdf: Bool)
+        /// The content is what was written last time (e.g. `modifiedAt` changed, nothing else).
+        case unchanged
         /// The folder already holds the same content (written by another device or before a reset).
         case adopted(changedAt: Date?)
         case leftInFolder
@@ -221,13 +254,14 @@ final class ArchiveMirror {
         let outcomes = try await Self.background {
             try work.map { try Self.write($0, deviceID: deviceID, layout: layout, io: io, ubiquity: ubiquity) }
         }
+        try Task.checkCancellation()
         stateStore.update { state in
             for (item, outcome) in zip(work, outcomes) {
                 switch outcome {
-                case .written:
+                case .written, .unchanged:
                     state.entities[item.id.uuidString] = .init(kind: item.kind, recordHash: item.recordHash,
                                                                changedAt: item.record.changedAt ?? now)
-                    result.entitiesWritten += 1
+                    if case .written = outcome { result.entitiesWritten += 1 }
                 case .adopted(let changedAt):
                     state.entities[item.id.uuidString] = .init(kind: item.kind, recordHash: item.recordHash,
                                                                changedAt: changedAt ?? now)
@@ -268,12 +302,14 @@ final class ArchiveMirror {
 
     private struct DocumentWork: Sendable {
         var id: UUID
+        /// `pdfSHA256` is filled in off the main actor when `pdf` is set.
         var record: DocumentRecord
-        var recordHash: String
-        /// Only when the PDF must be written.
+        var previous: ArchiveMirrorState.DocumentEntry?
+        var fileSize: Int
+        var modifiedAt: Date
+        /// Loaded only when the PDF's hash must be computed: new document, or `fileSize` or
+        /// `modifiedAt` changed.
         var pdf: Data?
-        var isKnown: Bool
-        var entry: ArchiveMirrorState.DocumentEntry
     }
 
     private func writeDocuments(deviceID: String, result: inout PassResult, progress: ((Int, Int) -> Void)?) async throws {
@@ -282,26 +318,27 @@ final class ArchiveMirror {
         var done = 0
         progress?(0, documents.count)
         for start in stride(from: 0, to: documents.count, by: max(options.batchSize, 1)) {
-            if Task.isCancelled {
-                result.wasCancelled = true
-                return
-            }
+            try Task.checkCancellation()
             let batch = documents[start..<min(start + options.batchSize, documents.count)]
-            let work = try batch.compactMap { try makeWork(for: $0, deviceID: deviceID) }
+            // Checked again for every batch: the user can delete a document while an earlier batch
+            // is written, and reading a deleted model crashes.
+            let work = try batch.filter { $0.isAlive && !$0.isProcessing }
+                .compactMap { try makeWork(for: $0, deviceID: deviceID) }
             if !work.isEmpty {
                 let (layout, io, ubiquity) = (layout, io, ubiquity)
                 let outcomes = try await Self.background {
                     try work.map { try Self.write($0, deviceID: deviceID, layout: layout, io: io, ubiquity: ubiquity) }
                 }
+                try Task.checkCancellation()
                 stateStore.update { state in
-                    for (item, outcome) in zip(work, outcomes) {
+                    for (item, (outcome, entry)) in zip(work, outcomes) {
                         switch outcome {
                         case .written(let pdf):
-                            state.documents[item.id.uuidString] = item.entry
+                            state.documents[item.id.uuidString] = entry
                             result.documentsWritten += 1
                             if pdf { result.pdfsWritten += 1 }
-                        case .adopted:
-                            state.documents[item.id.uuidString] = item.entry
+                        case .adopted, .unchanged:
+                            state.documents[item.id.uuidString] = entry
                         case .leftInFolder: result.leftInFolder += 1
                         case .waitingForDownload: result.waitingForDownload += 1
                         }
@@ -316,53 +353,58 @@ final class ArchiveMirror {
     /// `nil` when nothing changed, or when the PDF is not on this device yet (iCloud download).
     private func makeWork(for document: Document, deviceID: String) throws -> DocumentWork? {
         let entry = stateStore.state.documents[document.id.uuidString]
-        var pdf: Data?
-        let pdfSHA256: String
+        var work = DocumentWork(id: document.id, record: DocumentRecord(document, pdfSHA256: "", writtenBy: deviceID),
+                                previous: entry, fileSize: document.fileSize, modifiedAt: document.modifiedAt)
         if let entry, entry.fileSize == document.fileSize, entry.modifiedAt == document.modifiedAt {
-            pdfSHA256 = entry.pdfSHA256   // a normal pass does not hash every PDF
-        } else {
-            guard let data = document.pdfData else { return nil }
-            pdf = data
-            pdfSHA256 = ArchiveFolderFormat.sha256(data)
+            // A normal pass does not hash every PDF; an unchanged record is skipped right here.
+            work.record.pdfSHA256 = entry.pdfSHA256
+            return try Self.hash(work.record) == entry.recordHash ? nil : work
         }
-        let record = DocumentRecord(document, pdfSHA256: pdfSHA256, writtenBy: deviceID)
-        let recordHash = try Self.hash(record)
-        let pdfChanged = entry.map { $0.pdfSHA256 != pdfSHA256 || $0.fileSize != document.fileSize } ?? true
-        if !pdfChanged, entry?.recordHash == recordHash { return nil }
-        let newEntry = ArchiveMirrorState.DocumentEntry(recordHash: recordHash, pdfSHA256: pdfSHA256,
-                                                        fileSize: document.fileSize, modifiedAt: document.modifiedAt)
-        return DocumentWork(id: document.id, record: record, recordHash: recordHash, pdf: pdfChanged ? pdf : nil,
-                            isKnown: entry != nil, entry: newEntry)
+        guard let data = document.pdfData else { return nil }
+        work.pdf = data
+        return work
     }
 
+    /// Hashes the PDF if needed, then writes what changed. Returns the state entry to remember.
     nonisolated private static func write(_ item: DocumentWork, deviceID: String, layout: ArchiveFolderLayout,
-                                          io: ArchiveFileIO, ubiquity: UbiquityStatusProviding) throws -> Outcome {
+                                          io: ArchiveFileIO, ubiquity: UbiquityStatusProviding)
+        throws -> (Outcome, ArchiveMirrorState.DocumentEntry) {
+        var record = item.record
+        let pdfSHA256 = item.pdf.map(ArchiveFolderFormat.sha256) ?? record.pdfSHA256 ?? ""
+        record.pdfSHA256 = pdfSHA256
+        let recordHash = try hash(record)
+        let entry = ArchiveMirrorState.DocumentEntry(recordHash: recordHash, pdfSHA256: pdfSHA256,
+                                                     fileSize: item.fileSize, modifiedAt: item.modifiedAt)
+        let pdfChanged = item.previous.map { $0.pdfSHA256 != pdfSHA256 || $0.fileSize != item.fileSize } ?? true
+        if !pdfChanged, item.previous?.recordHash == recordHash { return (.unchanged, entry) }
+
         let sidecar = layout.record(.document, item.id)
         let state = ubiquity.state(of: sidecar)
         if state.needsDownload {
             ubiquity.startDownloading(sidecar)
-            return .waitingForDownload
+            return (.waitingForDownload, entry)
         }
         var existingData: Data?
         if state == .available {
             existingData = try io.read(sidecar)
             if let existing = try? ArchiveFolderFormat.decode(DocumentRecord.self, from: existingData!),
                let writer = existing.writtenBy, writer != deviceID {
-                if !item.isKnown {
+                if item.previous == nil {
                     // Never written by this state: only take it over when it is the same document.
                     var same = existing
                     same.writtenBy = deviceID
-                    return (try? hash(same)) == item.recordHash ? .adopted(changedAt: nil) : .leftInFolder
+                    return ((try? hash(same)) == recordHash ? .adopted(changedAt: nil) : .leftInFolder, entry)
                 }
                 // Newer data from another device belongs to the read step (#8 part 2).
-                if existing.isNewer(than: item.record) { return .leftInFolder }
+                if existing.isNewer(than: record) { return (.leftInFolder, entry) }
             }
         }
-        if let pdf = item.pdf {
+        let pdf = pdfChanged ? item.pdf : nil
+        if let pdf {
             try io.write(pdf, to: layout.pdf(item.id))
         }
-        try io.write(ArchiveFolderFormat.overlay(item.record, onto: existingData), to: sidecar)
-        return .written(pdf: item.pdf != nil)
+        try io.write(ArchiveFolderFormat.overlay(record, onto: existingData), to: sidecar)
+        return (.written(pdf: pdf != nil), entry)
     }
 
     // MARK: Deletions
@@ -374,31 +416,41 @@ final class ArchiveMirror {
         case waitingForDownload
     }
 
-    private func applyDeletions(deviceID: String, now: Date, confirm: Bool, result: inout PassResult) async throws {
+    /// The mass-delete guard: more than `maxDeletedDocuments` documents, or more than
+    /// `maxDeletedPercent` of the folder's documents (from `minDocumentsForPercentRule` on).
+    /// Only document deletions count. Deletions in `confirming` were confirmed and pass.
+    private func applyDeletions(deviceID: String, now: Date, confirming: [DeletionRecord],
+                                result: inout PassResult) async throws {
         let pending = stateStore.state.pendingDeletions
         guard !pending.isEmpty else { return }
         let (layout, io, ubiquity, options) = (layout, io, ubiquity, options)
 
+        let unconfirmed = pending.filter { !confirming.contains($0) }
         let documentsInFolder = await Self.inBackground { ArchiveFolderLayout.recordIDs(in: layout.folder(.document)) }
-        let deletedFromFolder = pending.filter { $0.kind == .document && documentsInFolder.contains($0.id) }.count
-        let tooMany = pending.count > options.maxTombstonesPerPass
-        let tooLarge = deletedFromFolder * 100 > documentsInFolder.count * options.maxDeletedPercent
-        if !confirm, tooMany || tooLarge {
-            stateStore.update { $0.deletionsAwaitingConfirmation = pending.count }
-            result.deletionsAwaitingConfirmation = pending.count
-            return
+        try Task.checkCancellation()
+        let documentDeletions = unconfirmed.filter { $0.kind == .document }
+        let deletedFromFolder = documentDeletions.filter { documentsInFolder.contains($0.id) }.count
+        let tooMany = documentDeletions.count > options.maxDeletedDocuments
+        let tooLarge = documentsInFolder.count >= options.minDocumentsForPercentRule
+            && deletedFromFolder * 100 > documentsInFolder.count * options.maxDeletedPercent
+        // Only documents are held back; deleted tags, correspondents and types always pass.
+        let held = tooMany || tooLarge ? documentDeletions : []
+        let toApply = pending.filter { !held.contains($0) }
+        if !held.isEmpty {
+            result.deletionsAwaitingConfirmation = held.count
         }
 
         let known = Set(stateStore.state.documents.keys).union(stateStore.state.entities.keys)
         let outcomes = try await Self.background {
-            try pending.map { deletion in
+            try toApply.map { deletion in
                 try Self.apply(deletion, wasMirrored: known.contains(deletion.id.uuidString), deviceID: deviceID,
                                now: now, layout: layout, io: io, ubiquity: ubiquity)
             }
         }
+        try Task.checkCancellation()
         stateStore.update { state in
             var finished: [DeletionRecord] = []
-            for (deletion, outcome) in zip(pending, outcomes) {
+            for (deletion, outcome) in zip(toApply, outcomes) {
                 switch outcome {
                 case .tombstoneWritten:
                     result.tombstonesWritten += 1
@@ -414,7 +466,8 @@ final class ArchiveMirror {
             }
             // Deletions recorded while the files were moved stay for the next pass.
             state.pendingDeletions.removeAll { finished.contains($0) }
-            state.deletionsAwaitingConfirmation = nil
+            // What the settings and the sidebar show, and what "Confirm" confirms.
+            state.heldDeletions = held.isEmpty ? nil : held
         }
     }
 
@@ -451,12 +504,13 @@ final class ArchiveMirror {
 
     // MARK: Retention
 
-    private func purgeIfDue(now: Date) async {
+    private func purgeIfDue(now: Date) async throws {
         if let last = stateStore.state.lastPurge, now.timeIntervalSince(last) < options.purgeInterval { return }
         let (layout, io, ubiquity, options) = (layout, io, ubiquity, options)
         await Self.inBackground {
             Self.purge(layout: layout, io: io, ubiquity: ubiquity, options: options, now: now)
         }
+        try Task.checkCancellation()
         stateStore.update { $0.lastPurge = now }
     }
 

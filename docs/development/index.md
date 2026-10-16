@@ -198,9 +198,13 @@ Location, `ArchiveMirror` writes the archive into `<folder>/Document Archive/`
 "Sync Now" and when `StoreChangeObserver` reports a change (debounced 5 s).
 Its bookkeeping (`ArchiveMirror.json` next to the store) belongs to one store
 (`NSStoreUUIDKey`); for another store it starts over and never writes
-tombstones. A pass that would write more than 20 tombstones or delete more
-than 10 % of the folder's documents waits for confirmation in the settings and
-the sidebar footer. Files are written atomically and coordinated; evicted
+tombstones. A pass that would delete more than 20 documents, or more than 10 %
+of the folder's documents once the folder holds at least 50, waits for
+confirmation in the settings and the sidebar footer (deleted tags,
+correspondents and types never count). "Confirm" applies exactly the deletions
+shown; later ones are checked again. A folder that already holds an archive is
+only accepted when all its documents were written by this device (chosen
+again after "Back to Default"); reading other archives comes with #8 part 2. Files are written atomically and coordinated; evicted
 iCloud files are detected through `UbiquityStatus` and retried later. Tests and
 the UI test sample data never start the folder copy; tests use temporary
 folders only.
