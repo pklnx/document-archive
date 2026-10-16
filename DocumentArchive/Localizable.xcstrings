@@ -251,6 +251,16 @@
         }
       }
     },
+    "Add a text layer to scans": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Textebene zu Scans hinzufügen"
+          }
+        }
+      }
+    },
     "Add to Favorites": {
       "localizations": {
         "de": {
@@ -3341,6 +3351,46 @@
         }
       }
     },
+    "Text layer added to the first %lld pages only.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Textebene nur für die ersten %lld Seiten hinzugefügt."
+          }
+        }
+      }
+    },
+    "Text layer skipped: the PDF could not be rewritten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Textebene übersprungen: Das PDF konnte nicht neu geschrieben werden."
+          }
+        }
+      }
+    },
+    "Text layer skipped: the result did not match the original.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Textebene übersprungen: Das Ergebnis stimmte nicht mit dem Original überein."
+          }
+        }
+      }
+    },
+    "Text layer skipped: the result would be too large.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Textebene übersprungen: Das Ergebnis wäre zu groß."
+          }
+        }
+      }
+    },
     "Text recognition": {
       "localizations": {
         "de": {
@@ -3767,6 +3817,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arbeit"
+          }
+        }
+      }
+    },
+    "Writes the recognized text invisibly into scanned PDFs, so the text can be selected, copied and found in other apps. Applies to documents processed on this device. Documents processed on your other devices may still get a text layer there.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schreibt den erkannten Text unsichtbar in gescannte PDFs, damit er markiert, kopiert und in anderen Apps gefunden werden kann. Gilt für Dokumente, die auf diesem Gerät verarbeitet werden. Dokumente, die auf deinen anderen Geräten verarbeitet werden, können dort trotzdem eine Textebene erhalten."
           }
         }
       }

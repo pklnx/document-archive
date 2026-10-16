@@ -344,6 +344,42 @@ Pull requests that touch `DocumentArchive/Model` get the `schema-change`
 label automatically. The plan must say why the change is compatible with
 devices still running the previous version.
 
+## Text layer in scanned PDFs (#9)
+
+`Services/TextLayer.swift` makes scans and image-only PDFs searchable outside the
+app: processing writes the words Apple Vision recognizes into the PDF as invisible
+text (each word at its own box, Helvetica subset with a `ToUnicode` map, so copied
+umlauts paste correctly). The setting "Add a text layer to scans" (Settings →
+General → Text recognition, `UserDefaults` `addTextLayer`, per device) is on by
+default.
+
+- **Which PDFs:** scans and photos (the app built them) always; PDFs imported from
+  elsewhere only when every page is image-only and none of the skip rules applies
+  (encrypted or locked, `/AcroForm`, `/Perms`, `/Outlines`, `/StructTreeRoot`,
+  `/OCProperties`, `/PageLabels`, embedded files, XMP conformance such as PDF/A or
+  PDF/X, annotations, and images filtered with
+  CCITT, JBIG2 or JPEG 2000, also inside nested Form XObjects). Anything that cannot
+  be read counts as "skip". Mixed PDFs are skipped. A page needs a layer when it
+  has fewer than 15 characters of text, so a second run does nothing. Pages beyond
+  the OCR limit (40) stay image-only.
+- **Geometry:** every page is rewritten in its displayed geometry (crop box,
+  rotation baked into the content), and Vision reads the same upright rendering.
+- **Check before replacing:** `TextLayer.check` (same page count, every page
+  renders within a pixel tolerance of the original, as a whole and in every tile of
+  a 16 × 16 grid so a lost stamp is caught, at most 10 % + 20 KB larger); otherwise
+  the old PDF stays and the processing note says why.
+- **Words** are written as one glyph run each at the font's own advance widths,
+  stretched only through the text matrix. Core Text's line drawing added character
+  spacing and per-glyph adjustments, which PDFKit on macOS/iOS 26 extracted as
+  spaces inside words.
+- **Writing back:** `DocumentImporter.replacePDF` replaces `pdfData` only when the
+  stored bytes are still the analyzed ones (a sync or edit during the analysis
+  wins), then calls `touch()` for the folder copy. `contentHash` stays the hash of
+  the original import; `existingDocument(for:)` also compares the stored PDFs of
+  documents with the same size, so an exported layered PDF is still a duplicate.
+- **Mistral:** the layer always comes from Vision on the device; nothing more is
+  sent to Mistral. With Mistral OCR on, `extractedText` still comes from Mistral.
+
 ## Files from other apps (#12)
 
 Every file that arrives from outside goes through `ExternalImport` and then

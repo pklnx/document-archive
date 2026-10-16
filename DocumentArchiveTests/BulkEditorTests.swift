@@ -317,11 +317,12 @@ extension GlobalStateTests {
             return documents
         }
 
-        /// Which document an OCR request was for (its PDF is in the request body).
-        private func documentIndex(of body: Data, among documents: [Document]) -> Int? {
+        /// Which document an OCR request was for (its PDF is in the request body). Takes the PDFs
+        /// as they were sent: processing replaces `pdfData` with its text-layer version afterwards.
+        private func documentIndex(of body: Data, among pdfs: [Data]) -> Int? {
             let json = MistralStub.json(body)
             let url = (json["document"] as? [String: Any])?["document_url"] as? String ?? ""
-            return documents.firstIndex { url.contains($0.pdfData!.base64EncodedString()) }
+            return pdfs.firstIndex { url.contains($0.base64EncodedString()) }
         }
 
         @Test func analyzesOneDocumentAfterAnother() async throws {
@@ -331,6 +332,7 @@ extension GlobalStateTests {
             defer { MistralStub.reset() }
             MistralStub.delay = 0.2
             let documents = try makeDocuments(3)
+            let originals = documents.map { $0.pdfData! }
 
             // Watch how many documents are processed at the same time.
             var maxProcessing = 0
@@ -349,7 +351,7 @@ extension GlobalStateTests {
 
             #expect(maxProcessing == 1)
             #expect(reported == [1, 2, 3])
-            #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: documents) } == [0, 1, 2])
+            #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: originals) } == [0, 1, 2])
             #expect(documents.allSatisfy { $0.extractedText == "Text from Mistral" && !$0.isProcessing })
         }
 
@@ -360,6 +362,7 @@ extension GlobalStateTests {
             }
             defer { MistralStub.reset() }
             let documents = try makeDocuments(3)
+            let originals = documents.map { $0.pdfData! }
             documents[1].isProcessing = true
 
             var reported: [String] = []
@@ -368,7 +371,7 @@ extension GlobalStateTests {
             }
 
             #expect(reported == ["1/3", "2/3", "3/3"])
-            #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: documents) } == [0, 2])
+            #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: originals) } == [0, 2])
             #expect(documents[1].extractedText.isEmpty)
         }
 

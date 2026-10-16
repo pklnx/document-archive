@@ -122,10 +122,10 @@ enum DocumentImporter {
         let title = (name as NSString).deletingPathExtension
         let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
         guard type.conforms(to: .pdf) || type.conforms(to: .image) else { throw ImportError.unsupported(name) }
-        let hash = sha256(data)
-        if let existing = existingDocument(withHash: hash, in: context) {
+        if let existing = existingDocument(for: data, in: context) {
             return .duplicate(of: existing)
         }
+        let hash = sha256(data)
         let pdfData: Data
         let source: DocumentSource
         if type.conforms(to: .pdf) {
@@ -150,14 +150,32 @@ enum DocumentImporter {
     /// Several photos from the library become one multi-page document.
     /// - Returns: The new document, or the existing one if exactly these photos were imported before.
     static func importImageData(_ items: [Data], into context: ModelContext) -> (document: Document?, isDuplicate: Bool) {
-        let hash = sha256(items.reduce(Data(), +))
-        if let existing = existingDocument(withHash: hash, in: context) { return (existing, true) }
+        let combined = items.reduce(Data(), +)
+        if let existing = existingDocument(for: combined, in: context) { return (existing, true) }
+        let hash = sha256(combined)
         guard let data = PDFBuilder.makePDF(fromImageData: items) else { return (nil, false) }
         return (insert(title: defaultTitle(for: .image), pdfData: data, source: .image, hash: hash, context: context), false)
     }
 
     static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The document that already holds these bytes: first by `contentHash` (the hash of the
+    /// originally imported file), then, for PDFs whose stored data was replaced later (text
+    /// layer, cleanup) and exported, by comparing the stored PDF of documents with the same size.
+    /// Every import path uses this check; #12 and #20 reuse it.
+    static func existingDocument(for data: Data, in context: ModelContext) -> Document? {
+        let hash = sha256(data)
+        if let existing = existingDocument(withHash: hash, in: context) { return existing }
+        let size = data.count
+        let descriptor = FetchDescriptor<Document>(predicate: #Predicate { $0.fileSize == size },
+                                                   sortBy: [SortDescriptor(\.createdAt)])
+        guard let candidates = try? context.fetch(descriptor) else { return nil }
+        return candidates.first { candidate in
+            guard let stored = candidate.pdfData, stored.count == size else { return false }
+            return sha256(stored) == hash
+        }
     }
 
     static func existingDocument(withHash hash: String, in context: ModelContext) -> Document? {
@@ -211,8 +229,10 @@ enum DocumentImporter {
         guard document.isAlive, let data = document.pdfData else { return }
         document.isProcessing = true
         let mistral = MistralConfig.current()
+        let layerSource: DocumentSource? = TextLayer.isEnabled ? document.source : nil
+        let rewriteHook = TextLayer.rewriteHookForTesting
         let result = await Task.detached(priority: .utility) {
-            await DocumentProcessor.analyze(data, mistral: mistral)
+            await DocumentProcessor.analyze(data, mistral: mistral, textLayerSource: layerSource, rewriteHook: rewriteHook)
         }.value
         guard document.isAlive else { return }
         document.pageCount = result.pageCount
@@ -220,7 +240,10 @@ enum DocumentImporter {
         document.extractedText = result.text
         document.textSource = result.textSource
         document.processingNote = result.note
-        document.fileSize = data.count
+        if let searchablePDF = result.searchablePDF {
+            replacePDF(of: document, analyzed: data, with: searchablePDF)
+        }
+        document.fileSize = document.pdfData?.count ?? data.count
         if classify {
             let outcome = await AutoClassifier.classify(document, context: context)
             if let error = outcome.aiError {
@@ -230,6 +253,24 @@ enum DocumentImporter {
         guard document.isAlive else { return }
         document.isProcessing = false
         try? context.save()
+    }
+
+    /// Replaces the stored PDF with its text-layer version, but only when the stored bytes are
+    /// still the ones that were analyzed: a sync, a merge or another edit may have changed
+    /// `pdfData` during the analysis, and that newer data wins (the next processing run adds the
+    /// layer to it). `contentHash` stays the hash of the original import, so duplicate detection
+    /// keeps working; `touch()` makes the folder copy write the new PDF.
+    /// #22 adds: never for documents in the vault (`isInVault`).
+    /// - Returns: Whether the PDF was replaced.
+    @discardableResult
+    static func replacePDF(of document: Document, analyzed: Data, with newData: Data) -> Bool {
+        guard document.isAlive, let current = document.pdfData,
+              current.count == analyzed.count, sha256(current) == sha256(analyzed)
+        else { return false }
+        document.pdfData = newData
+        document.fileSize = newData.count
+        document.touch()
+        return true
     }
 
     /// Resumes interrupted processing (e.g. when the app was quit in the middle).
