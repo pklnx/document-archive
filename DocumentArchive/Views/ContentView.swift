@@ -122,6 +122,9 @@ struct ContentView: View {
     var body: some View {
         let visibleDocuments = visibleDocuments
         let selectedDocuments = DocumentSelection.resolve(selection, in: visibleDocuments)
+        // The open document stays open while an edit hides it from the list (see DocumentSelection).
+        let openDocument = DocumentSelection.openDocument(selection, in: allDocuments)
+            ?? (selectedDocuments.count == 1 ? selectedDocuments.first : nil)
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: $sidebarSelection, editorTarget: $editorTarget, showSettings: $showSettings)
         } content: {
@@ -140,7 +143,7 @@ struct ContentView: View {
             #endif
         } detail: {
             Group {
-                if selectedDocuments.count == 1, let document = selectedDocuments.first {
+                if let document = openDocument {
                     DocumentDetailView(document: document, editorTarget: $editorTarget) {
                         selection.remove(document.id)
                     }
@@ -177,8 +180,11 @@ struct ContentView: View {
         }
         // Search text, sync or an action changed what is visible: nothing hidden stays selected.
         .onChange(of: visibleDocuments.map(\.id)) {
-            let pruned = DocumentSelection.pruned(selection, to: self.visibleDocuments)
-            if pruned != selection { selection = pruned }
+            prune(keepingOpen: true)
+        }
+        // A new search closes an open document it hides.
+        .onChange(of: searchText) {
+            prune(keepingOpen: false)
         }
         #if os(iOS)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
@@ -296,6 +302,21 @@ struct ContentView: View {
         }
     }
 
+    /// Removes hidden documents from the selection. `keepingOpen`: the open document stays,
+    /// because the list changed through an edit (not in edit mode, where bulk rules apply).
+    private func prune(keepingOpen: Bool) {
+        var open: Document?
+        if keepingOpen {
+            #if os(iOS)
+            if !editMode.isEditing { open = DocumentSelection.openDocument(selection, in: allDocuments) }
+            #else
+            open = DocumentSelection.openDocument(selection, in: allDocuments)
+            #endif
+        }
+        let pruned = DocumentSelection.pruned(selection, to: visibleDocuments, keepingOpen: open)
+        if pruned != selection { selection = pruned }
+    }
+
     /// The one selected document, which the detail column shows; `nil` for none or several.
     private var openDocumentID: Document.ID? {
         selection.count == 1 ? selection.first : nil
@@ -314,7 +335,9 @@ struct ContentView: View {
     }
 
     private var reanalysisTitle: String {
-        String(localized: "Analyze \(bulkActions.pendingReanalysis?.documents.count ?? 0) documents again?")
+        let count = bulkActions.pendingReanalysis?.documents.count ?? 0
+        return count == 1 ? String(localized: "Analyze 1 document again?")
+                          : String(localized: "Analyze \(count) documents again?")
     }
 
     static func reanalysisMessage(usesMistral: Bool) -> String {

@@ -183,6 +183,76 @@ import Testing
         #expect(DocumentSelection.resolve([], in: byTitle).isEmpty)
     }
 
+    // MARK: The open document
+
+    /// What `ContentView` does when the visible list changes through an edit (outside edit mode).
+    private func prunedAfterEdit(_ selection: Set<Document.ID>, filter: SidebarItem,
+                                 searchText: String) throws -> Set<Document.ID> {
+        let all = try allDocuments()
+        let visible = filter.visibleDocuments(in: all, searchText: searchText, sort: .added)
+        return DocumentSelection.pruned(selection, to: visible,
+                                        keepingOpen: DocumentSelection.openDocument(selection, in: all))
+    }
+
+    /// Review finding: the document matched the search only through its correspondent;
+    /// changing the correspondent in the inspector closed it.
+    @Test func openDocumentFoundThroughItsCorrespondentStaysOpenWhenItIsChanged() throws {
+        let document = try makeDocuments(["Electricity bill"])[0]
+        let stadtwerke = Correspondent(name: "Stadtwerke")
+        let bank = Correspondent(name: "Musterbank")
+        context.insert(stadtwerke)
+        context.insert(bank)
+        document.correspondent = stadtwerke
+        let selection: Set<Document.ID> = [document.id]
+
+        document.correspondent = bank
+        #expect(try prunedAfterEdit(selection, filter: .all, searchText: "Stadtwerke") == selection)
+        #expect(DocumentSelection.openDocument(selection, in: try allDocuments())?.id == document.id)
+
+        // A new search that hides it closes it.
+        let visible = SidebarItem.all.visibleDocuments(in: try allDocuments(), searchText: "Stadtwerk", sort: .added)
+        #expect(DocumentSelection.pruned(selection, to: visible).isEmpty)
+    }
+
+    /// Review finding: editing the title so that it no longer matches the search closed the
+    /// document after the first keystroke.
+    @Test func openDocumentStaysOpenWhileItsTitleIsEdited() throws {
+        let document = try makeDocuments(["Electricity bill"])[0]
+        let selection: Set<Document.ID> = [document.id]
+        document.title = "Electricity"
+        #expect(try prunedAfterEdit(selection, filter: .all, searchText: "bill") == selection)
+    }
+
+    /// Review finding: with a sidebar filter on a type, changing the type closed the document.
+    @Test func openDocumentStaysOpenWhenTheFilteredFieldChanges() throws {
+        let document = try makeDocuments(["Electricity bill"])[0]
+        let invoice = DocumentType(name: "Invoice", symbol: "doc.text")
+        let letter = DocumentType(name: "Letter", symbol: "envelope")
+        context.insert(invoice)
+        context.insert(letter)
+        document.documentType = invoice
+        let selection: Set<Document.ID> = [document.id]
+
+        document.documentType = letter
+        #expect(try prunedAfterEdit(selection, filter: .documentType(invoice), searchText: "") == selection)
+    }
+
+    @Test func deletedOpenDocumentIsDropped() throws {
+        let documents = try makeDocuments(["A", "B"])
+        let selection: Set<Document.ID> = [documents[0].id]
+        BulkEditor.delete([documents[0]], in: context)
+        #expect(DocumentSelection.openDocument(selection, in: try allDocuments()) == nil)
+        #expect(try prunedAfterEdit(selection, filter: .all, searchText: "").isEmpty)
+    }
+
+    /// The exception is only for one open document: a bulk selection is still pruned.
+    @Test func bulkSelectionIsStillPrunedAfterAnEdit() throws {
+        let documents = try makeDocuments(["A", "B", "C"])
+        let selection = Set(documents.prefix(2).map(\.id))
+        BulkEditor.setInbox(false, for: [documents[0]], in: context)
+        #expect(try prunedAfterEdit(selection, filter: .inbox, searchText: "") == [documents[1].id])
+    }
+
     /// An action that moves documents out of the current list (done in the inbox) ends their
     /// selection.
     @Test func markingAsDoneInTheInboxEndsTheSelection() throws {
@@ -250,6 +320,25 @@ extension GlobalStateTests {
             #expect(reported == [1, 2, 3])
             #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: documents) } == [0, 1, 2])
             #expect(documents.allSatisfy { $0.extractedText == "Text from Mistral" && !$0.isProcessing })
+        }
+
+        /// Documents still being processed are skipped but counted, so "x of n" never jumps.
+        @Test func skippedDocumentsCountAsDone() async throws {
+            MistralStub.install(config: MistralStub.config(useOCR: true, useLLM: false)) { _, _ in
+                .json(["pages": [["index": 0, "markdown": "Text from Mistral"]]])
+            }
+            defer { MistralStub.reset() }
+            let documents = try makeDocuments(3)
+            documents[1].isProcessing = true
+
+            var reported: [String] = []
+            await BulkEditor.reanalyze(documents, context: context) { done, total in
+                reported.append("\(done)/\(total)")
+            }
+
+            #expect(reported == ["1/3", "2/3", "3/3"])
+            #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: documents) } == [0, 2])
+            #expect(documents[1].extractedText.isEmpty)
         }
 
         @Test func cancellingFinishesTheCurrentDocumentAndSkipsTheRest() async throws {

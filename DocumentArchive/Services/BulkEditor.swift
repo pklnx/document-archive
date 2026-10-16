@@ -81,17 +81,20 @@ enum BulkEditor {
     /// resolution and Mistral requests (when turned on in the settings) never run in parallel.
     ///
     /// Cancelling the calling task finishes the current document and skips the rest. Documents
-    /// that are already being processed or have no PDF yet (still downloading) are skipped.
+    /// that are already being processed or have no PDF yet (still downloading) are skipped and
+    /// count as done, so the total stays the number of documents. Each PDF is loaded only when
+    /// its turn comes.
     /// - Parameter progress: Called after each document with the number done and the total.
     static func reanalyze(_ documents: [Document], context: ModelContext,
                           progress: (_ done: Int, _ total: Int) -> Void = { _, _ in }) async {
-        let pending = documents.filter { $0.isAlive && !$0.isProcessing && $0.pdfData != nil }
-        for (index, document) in pending.enumerated() {
+        for (index, document) in documents.enumerated() {
             guard !Task.isCancelled else { return }
-            // A separate task, so cancelling stops before the next document instead of
-            // interrupting this one halfway (e.g. in the middle of a Mistral request).
-            await Task { await DocumentImporter.processAndWait(document, context: context, classify: true) }.value
-            progress(index + 1, pending.count)
+            if document.isAlive, !document.isProcessing, document.pdfData != nil {
+                // A separate task, so cancelling stops before the next document instead of
+                // interrupting this one halfway (e.g. in the middle of a Mistral request).
+                await Task { await DocumentImporter.processAndWait(document, context: context, classify: true) }.value
+            }
+            progress(index + 1, documents.count)
         }
     }
 

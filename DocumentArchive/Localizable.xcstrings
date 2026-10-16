@@ -301,6 +301,16 @@
         }
       }
     },
+    "Analyze 1 document again?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Dokument erneut analysieren?"
+          }
+        }
+      }
+    },
     "Analyze Again": {
       "localizations": {
         "de": {
