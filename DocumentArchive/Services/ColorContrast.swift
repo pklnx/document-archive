@@ -51,8 +51,11 @@ enum ColorContrast {
         dark ? [RGB.black, RGB(hex: "#1C1C1E")] : [RGB.white, RGB(hex: "#F2F2F7")]
     }
 
-    /// Background of a selected row: the app's accent color (AccentColor asset).
-    static let selectedRowBackground = RGB(red: 0.13, green: 0.56, blue: 0.40)
+    /// Background of a selected row: the app's accent color (AccentColor asset, Petrol).
+    /// `ColorContrastTests` checks that these match the asset.
+    static func selectedRowBackground(dark: Bool) -> RGB {
+        dark ? RGB(hex: "#3CC3C6") : RGB(hex: "#0B7480")
+    }
 
     /// Relative luminance (WCAG 2.x).
     static func luminance(_ color: RGB) -> Double {
@@ -68,30 +71,48 @@ enum ColorContrast {
         return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
     }
 
-    /// The tag color, darkened (light appearance) or lightened (dark appearance) just enough to
-    /// reach `minimum` against every background. Keeps the hue recognizable.
+    /// The tag color, changed as little as possible to reach `minimum` against every background,
+    /// so the hue stays recognizable. It is darkened first in the light appearance and lightened
+    /// first in the dark one. If both backgrounds are far apart (black and the light dark-mode
+    /// accent), only a narrow mid-tone band works, so the search uses small steps. Without any
+    /// solution, the candidate with the best worst-case contrast wins.
     static func adjusted(_ color: RGB, against backgrounds: [RGB], dark: Bool, minimum: Double) -> RGB {
-        let target = dark ? RGB.white : RGB.black
-        var amount = 0.0
-        var result = color
-        while backgrounds.contains(where: { ratio(result, $0) < minimum }), amount < 1 {
-            amount = min(1, amount + 0.02)
-            result = color.mixed(with: target, amount: amount)
+        func worstRatio(_ candidate: RGB) -> Double {
+            backgrounds.map { ratio(candidate, $0) }.min() ?? .infinity
         }
-        return result
+        let targets = dark ? [RGB.white, RGB.black] : [RGB.black, RGB.white]
+        var best = color
+        var bestRatio = worstRatio(color)
+        if bestRatio >= minimum { return color }
+        for step in 1...500 {
+            let amount = Double(step) / 500
+            for target in targets {
+                let candidate = color.mixed(with: target, amount: amount)
+                let candidateRatio = worstRatio(candidate)
+                if candidateRatio >= minimum { return candidate }
+                if candidateRatio > bestRatio { (best, bestRatio) = (candidate, candidateRatio) }
+            }
+        }
+        return best
     }
 
-    /// Text color of a tag chip: readable (4.5:1) on the chip's tinted background on every row
-    /// background of the appearance.
-    static func chipText(tagHex: String, dark: Bool) -> RGB {
+    /// The backgrounds a chip can sit on: the normal rows, or the accent color of a selected row.
+    /// One color cannot reach 3:1 against both in dark mode (dark grey and the light Petrol), so
+    /// the chip asks which one it is on (`backgroundProminence`).
+    static func backgrounds(dark: Bool, selected: Bool) -> [RGB] {
+        selected ? [selectedRowBackground(dark: dark)] : rowBackgrounds(dark: dark)
+    }
+
+    /// Text color of a tag chip: readable (4.5:1) on the chip's tinted background.
+    static func chipText(tagHex: String, dark: Bool, selected: Bool = false) -> RGB {
         let tag = RGB(hex: tagHex)
-        let chipBackgrounds = rowBackgrounds(dark: dark).map { tag.over($0, opacity: chipBackgroundOpacity) }
+        let chipBackgrounds = backgrounds(dark: dark, selected: selected).map { tag.over($0, opacity: chipBackgroundOpacity) }
         return adjusted(tag, against: chipBackgrounds, dark: dark, minimum: minimumTextContrast)
     }
 
-    /// Border of a tag chip with Increase Contrast: 3:1 against the normal and the selected row.
-    static func chipBorder(tagHex: String, dark: Bool) -> RGB {
-        let backgrounds = rowBackgrounds(dark: dark) + [selectedRowBackground]
-        return adjusted(RGB(hex: tagHex), against: backgrounds, dark: dark, minimum: minimumNonTextContrast)
+    /// Border of a tag chip with Increase Contrast: 3:1 against the row it is on.
+    static func chipBorder(tagHex: String, dark: Bool, selected: Bool = false) -> RGB {
+        adjusted(RGB(hex: tagHex), against: backgrounds(dark: dark, selected: selected), dark: dark,
+                 minimum: minimumNonTextContrast)
     }
 }
