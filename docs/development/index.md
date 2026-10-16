@@ -82,9 +82,10 @@ or **⌘U** in Xcode. CI runs the same command as the required check
 - **Next Xcode:** `build (macOS, next Xcode)` builds both platforms and runs
   the macOS unit tests with the default Xcode of the `xcode-27` preview image,
   without warnings as errors. It is not a required check: a red run means
-  "look at it", the pull request may still be merged. Apple Vision's text
-  recognition does not run on that preview image, so the job skips the tests
-  that need recognized text (listed in `ci.yml`).
+  "look at it", the pull request may still be merged. Apple Vision's models
+  (text recognition, perspective correction) do not run on that preview
+  image, so the job skips the tests that need them (listed in `ci.yml`); a
+  new Vision test that fails only there goes into that list.
 - **Moving the pin** (when a newer runner image is generally available) is a
   small pull request: the version in `.xcode-version` and `runs-on` of the
   macOS jobs in `ci.yml` and `ui-tests.yml`.
