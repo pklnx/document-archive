@@ -16,7 +16,7 @@ The app is available in English and German.
 - **Add documents:** camera scan (iPhone/iPad, with automatic edge detection), PDFs and images from Files, photos from the library, drag and drop (Mac: also ⌘O)
 - **Text recognition (OCR)** for scans and image-only PDFs (German and English), then **full-text search**
 - **Mistral AI** (optional): Mistral OCR for text recognition, Mistral Medium for title, correspondent, type, tags and date
-- **Correspondents, document types, tags** and **ASN** (archive serial number), as in paperless
+- **Correspondents, document types, tags** and **ASN** (archive serial number), as in paperless; tags can be nested ("Auto › Golf"), and a tag shows the documents of the tags inside it
 - **Automatic assignment** with matching rules (any/all words, exact phrase, regex), sender detection and **issue date detection**
 - **Duplicate detection:** identical files are skipped on import
 - **Inbox** for new documents, favorites, sorting, sharing and PDF export

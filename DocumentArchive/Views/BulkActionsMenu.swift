@@ -134,8 +134,9 @@ struct BulkTagsMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(tags) { tag in
+            ForEach(TagHierarchy.sortedByPath(tags)) { tag in
                 let state = BulkEditor.tagState(tag, in: documents)
+                let title = TagHierarchy.displayPath(of: tag)
                 Button {
                     if state == .all {
                         BulkEditor.removeTag(tag, from: documents, in: context)
@@ -144,9 +145,9 @@ struct BulkTagsMenu: View {
                     }
                 } label: {
                     switch state {
-                    case .all: Label(tag.name, systemImage: "checkmark")
-                    case .some: Label(tag.name, systemImage: "minus")
-                    case .none: Text(tag.name)
+                    case .all: Label(title, systemImage: "checkmark")
+                    case .some: Label(title, systemImage: "minus")
+                    case .none: Text(title)
                     }
                 }
                 .accessibilityValue(Self.stateDescription(state))

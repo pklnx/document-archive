@@ -15,7 +15,7 @@ typealias ArchiveTag = DocumentArchive.Tag
 enum TestSupport {
     /// A fresh in-memory archive, never synced.
     static func makeContainer() throws -> ModelContainer {
-        let schema = Schema([Document.self, ArchiveTag.self, Correspondent.self, DocumentType.self])
+        let schema = DocumentArchiveApp.schema
         return try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)

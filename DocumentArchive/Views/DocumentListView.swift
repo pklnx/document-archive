@@ -27,6 +27,7 @@ extension SidebarItem {
                 .flatMap { $0 }
                 .filter { $0.matches(searchText) }
         }
+        let includes = documentFilter()
         let filtered = allDocuments.filter { includes($0) && $0.matches(searchText) }
         switch sort {
         case .added:

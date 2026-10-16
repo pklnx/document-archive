@@ -65,7 +65,7 @@ enum AutoClassifier {
                     fileName: document.originalFileName,
                     correspondents: correspondents.map(\.name),
                     documentTypes: types.map(\.name),
-                    tags: tags.map(\.name)
+                    tags: TagHierarchy.sortedByPath(tags).map(TagHierarchy.displayPath(of:))
                 )
                 guard !document.isDeleted else { return outcome }
                 outcome.usedAI = true
@@ -143,8 +143,9 @@ enum AutoClassifier {
             document.documentType = type
             outcome.changes.append(String(localized: "Document type (AI): \(type.name)"))
         }
+        let byPath = tagsByPath(tags)
         for name in suggestion.tags ?? [] {
-            if let tag = tags.first(where: { sameName($0.name, name) }), !document.hasTag(tag) {
+            if let tag = tag(forSuggested: name, byPath: byPath, among: tags), !document.hasTag(tag) {
                 document.toggleTag(tag)
                 outcome.changes.append(String(localized: "Tag (AI): \(tag.name)"))
             }
@@ -159,6 +160,30 @@ enum AutoClassifier {
             document.title = String(title.prefix(120))
             outcome.changes.append(String(localized: "Title (AI): \(document.title)"))
         }
+    }
+
+    /// Tags by normalized display path. Two tags can share a path (duplicates before a merge, or a
+    /// tag literally named "Auto › Golf"); the oldest wins (`createdAt`, then `id`), never a crash.
+    static func tagsByPath(_ tags: [Tag]) -> [String: Tag] {
+        let ordered = MetadataMaintenance.keeperOrder(tags, createdAt: \.createdAt, id: \.id)
+        return Dictionary(ordered.map { (pathKey(TagHierarchy.displayPath(of: $0)), $0) },
+                          uniquingKeysWith: { oldest, _ in oldest })
+    }
+
+    /// A suggested tag: by its path, otherwise by its last name when exactly one tag has that name.
+    static func tag(forSuggested suggestion: String, byPath: [String: Tag], among tags: [Tag]) -> Tag? {
+        if let tag = byPath[pathKey(suggestion)] { return tag }
+        let leaf = suggestion.components(separatedBy: TagHierarchy.separator.trimmingCharacters(in: .whitespaces))
+            .last?.trimmingCharacters(in: .whitespaces) ?? suggestion
+        let named = tags.filter { sameName($0.name, leaf) }
+        return named.count == 1 ? named[0] : nil
+    }
+
+    private static func pathKey(_ path: String) -> String {
+        path.components(separatedBy: TagHierarchy.separator.trimmingCharacters(in: .whitespaces))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .joined(separator: TagHierarchy.separator)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 
     private static func findOrCreateCorrespondent(named name: String, matchText: String, among existing: [Correspondent],

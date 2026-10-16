@@ -140,6 +140,79 @@ extension GlobalStateTests {
             #expect(user.contains("Invoice number GIK14I5L-0014"))
         }
 
+        // MARK: Nested tags (#13)
+
+        @Test func classificationSendsTagPathsAndSpecificityRule() async throws {
+            let auto = ArchiveTag(name: "Auto")
+            let golf = ArchiveTag(name: "Golf")
+            [auto, golf].forEach(context.insert)
+            golf.parent = auto
+            stubMistral()
+            await AutoClassifier.classify(makeDocument(Self.invoiceText), context: context)
+
+            let body = MistralStub.json(try #require(MistralStub.requests.first).body)
+            let messages = body["messages"] as? [[String: Any]] ?? []
+            let system = messages.first?["content"] as? String ?? ""
+            let user = messages.last?["content"] as? String ?? ""
+            #expect(user.contains("Existing tags: Auto; Auto › Golf"))
+            #expect(system.contains("choose the most specific matching tag; never add its parent tag as well"))
+            let schema = ((body["response_format"] as? [String: Any])?["json_schema"] as? [String: Any])?["schema"] as? [String: Any]
+            let tags = (schema?["properties"] as? [String: Any])?["tags"] as? [String: Any]
+            #expect((tags?["items"] as? [String: Any])?["enum"] as? [String] == ["Auto", "Auto › Golf"])
+        }
+
+        @Test func suggestedTagPathMapsToNestedTag() async throws {
+            let auto = ArchiveTag(name: "Auto")
+            let golf = ArchiveTag(name: "Golf")
+            let werkstatt = ArchiveTag(name: "Werkstatt")
+            let otherWerkstatt = ArchiveTag(name: "Werkstatt")
+            let polo = ArchiveTag(name: "Polo")
+            [auto, golf, werkstatt, otherWerkstatt, polo].forEach(context.insert)
+            golf.parent = auto
+            werkstatt.parent = golf
+            polo.parent = auto
+            otherWerkstatt.parent = polo
+            stubMistral(tags: ["auto › golf › werkstatt", "Polo"])
+            let doc = makeDocument(Self.invoiceText)
+
+            await AutoClassifier.classify(doc, context: context)
+
+            #expect(doc.sortedTags.map(\.id) == [werkstatt.id, polo.id],
+                    "the path picks the right Werkstatt; a unique leaf name works too; no parent is added")
+        }
+
+        /// Before a merge, two roots share the path "Werkstatt", and a tag literally named
+        /// "Auto › Golf" has the same path as the real Auto › Golf. The oldest wins, no crash.
+        @Test func duplicatePathsDoNotCrash() async throws {
+            func tag(_ name: String, _ seconds: TimeInterval, under parent: ArchiveTag? = nil) -> ArchiveTag {
+                let tag = ArchiveTag(name: name)
+                tag.createdAt = Date(timeIntervalSince1970: seconds)
+                context.insert(tag)
+                tag.parent = parent
+                return tag
+            }
+            let newerWerkstatt = tag("Werkstatt", 2000)
+            let olderWerkstatt = tag("Werkstatt", 1000)
+            let auto = tag("Auto", 500)
+            let realGolf = tag("Golf", 3000, under: auto)
+            let literal = tag("Auto › Golf", 4000)
+
+            let byPath = AutoClassifier.tagsByPath([newerWerkstatt, olderWerkstatt, auto, realGolf, literal])
+            #expect(byPath["werkstatt"]?.id == olderWerkstatt.id)
+            #expect(byPath["auto › golf"]?.id == realGolf.id)
+
+            stubMistral(tags: ["Werkstatt", "Auto › Golf"])
+            let doc = makeDocument(Self.invoiceText)
+            await AutoClassifier.classify(doc, context: context)
+            #expect(Set(doc.tags?.map(\.id) ?? []) == [olderWerkstatt.id, realGolf.id])
+
+            let body = MistralStub.json(try #require(MistralStub.requests.first).body)
+            let schema = ((body["response_format"] as? [String: Any])?["json_schema"] as? [String: Any])?["schema"] as? [String: Any]
+            let tags = (schema?["properties"] as? [String: Any])?["tags"] as? [String: Any]
+            #expect((tags?["items"] as? [String: Any])?["enum"] as? [String] == ["Auto", "Auto › Golf", "Werkstatt"],
+                    "each path is sent once")
+        }
+
         @Test func userRulesWinOverMistralForCorrespondents() async throws {
             let rule = Correspondent(name: "Anthropic")
             context.insert(rule)

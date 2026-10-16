@@ -176,6 +176,11 @@ restricts what a change may do:
   property or model, and never change a property's type. Once the schema is in
   the CloudKit *Production* environment it cannot be undone, and older app
   versions on other devices still read and write the old fields.
+- **`MatchMode` and `DocumentSource` are frozen:** never add a case. They are
+  stored in synced objects, and an older app version cannot decode a value it
+  does not know. A new kind of thing gets a new property instead.
+- New fields must be **deployed to the CloudKit Production schema** (CloudKit
+  dashboard, Development → Production) before a signed release ships them.
 - Data that must be converted goes into a one-time migration in
   `DocumentArchive/App` (see `LegacyMigration.swift`), guarded by a flag so it
   runs once per device.
@@ -187,12 +192,39 @@ restricts what a change may do:
   sidecar, not separate files. Only a change older app versions cannot read
   at all raises the major version, which makes them stop using the folder.
 - **Deleting documents** only goes through `DocumentDeletion.delete(_:in:)`,
-  and deleting tags, correspondents and document types through
-  `MetadataDeletion` (merges with `mergedInto`). They record the deletion for
+  deleting tags through `TagHierarchy.delete` (it moves the children up one
+  level), correspondents and document types through `MetadataDeletion`, and
+  merges through `MetadataMaintenance.merge(_:into:)` (tombstones with
+  `mergedInto`; features that refer to these objects by id hook into its
+  `didMerge`). They record the deletion for
   the folder copy; `ModelContext.delete` alone would leave the document in the
   folder, because the copy never infers deletions from missing objects.
 - **Replacing `pdfData`** (text layer, cleanup, vault) calls `touch()`, so the
   folder copy writes the new PDF.
+
+### Nested tags (#13)
+
+A tag can be nested in another (`Tag.parent`, `Tag.children`), shown as
+"Auto › Golf › Werkstatt". The logic lives in `Services/TagHierarchy.swift`:
+
+- A document keeps only the tags the user chose; a parent is never added
+  implicitly. A tag's filter, count and search include the tags nested in it
+  (computed when reading; counts in one pass over the list's documents).
+- `TagHierarchy.move(_:under:)` refuses moves that would create a cycle.
+  Concurrent moves on two devices (or a merge) can still produce one:
+  `repairCycles` makes the oldest member a root (`createdAt`, then
+  `id.uuidString`, so every device decides the same way). It runs after the
+  launch merge and after store changes (`TagCycleRepair`, through
+  `StoreChangeObserver` and CloudKit import events) and saves only when it
+  changed something. Until then, a tag whose chain never reaches a root is
+  shown as a root.
+- Duplicates are tags with the same parent and name; `mergeDuplicates` merges
+  them top-down in one call.
+- Older app versions ignore `parent` and show a flat list; if they delete a
+  parent, `nullify` makes its children roots and no document loses a tag.
+- Mistral receives the tags' display paths with the rule to pick the most
+  specific tag; a returned path is mapped back with the oldest tag winning
+  when two share a path.
 
 ### Copy in a folder (#8)
 

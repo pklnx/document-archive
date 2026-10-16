@@ -172,8 +172,9 @@ struct DocumentInfoForm: View {
                         Label("Tags", systemImage: "tag")
                         Spacer()
                         Menu {
-                            ForEach(tags) { tag in
-                                Toggle(tag.name, isOn: Binding(
+                            // Nested menus per parent come with #13 part 2; until then the path.
+                            ForEach(TagHierarchy.sortedByPath(tags)) { tag in
+                                Toggle(TagHierarchy.displayPath(of: tag), isOn: Binding(
                                     get: { document.hasTag(tag) },
                                     set: { _ in document.toggleTag(tag) }
                                 ))

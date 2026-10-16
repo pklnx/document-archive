@@ -140,47 +140,14 @@ struct MistralClient: Sendable {
 
     func classify(text: String, fileName: String, correspondents: [String], documentTypes: [String], tags: [String],
                   titleLanguage: String = MistralClient.appLanguageName) async throws -> Suggestion {
-        let nullableString: [String: Any] = ["type": ["string", "null"]]
-        var typeSchema = nullableString
-        if !documentTypes.isEmpty { typeSchema["enum"] = documentTypes + [NSNull()] }
-        var tagItems: [String: Any] = ["type": "string"]
-        if !tags.isEmpty { tagItems["enum"] = tags }
+        try await classify(text: text, fileName: fileName, request: ClassificationRequest(
+            correspondents: correspondents, documentTypes: documentTypes, tags: tags, titleLanguage: titleLanguage))
+    }
 
-        let schema: [String: Any] = [
-            "type": "object",
-            "properties": [
-                "title": ["type": "string"],
-                "correspondent": nullableString,
-                "document_type": typeSchema,
-                "tags": ["type": "array", "items": tagItems],
-                "date": nullableString,
-            ],
-            "required": ["title", "correspondent", "document_type", "tags", "date"],
-            "additionalProperties": false,
-        ]
-
-        let system = """
-        You are the assistant of a personal document archive (similar to paperless-ngx). \
-        Analyze the document and answer only with JSON that follows the schema.
-        Rules:
-        - title: a short, meaningful title in \(titleLanguage) (at most 60 characters), without a date and without \
-        the sender's name, e.g. for German "Rechnung Max-Abo", "Stromabschlag September", "Kfz-Versicherung Beitragsrechnung".
-        - correspondent: the sender or issuer of the document (not the recipient). If it is one of the existing \
-        correspondents, use exactly that name; otherwise the official name of the company or authority. null if unclear.
-        - document_type: exactly one of the existing document types, or null if none fits.
-        - tags: only fitting existing tags, otherwise an empty list.
-        - date: the issue date of the document as YYYY-MM-DD (not a due date or service period), null if there is none.
-        """
-
-        let user = """
-        Existing correspondents: \(correspondents.isEmpty ? "(none)" : correspondents.joined(separator: "; "))
-        Existing document types: \(documentTypes.isEmpty ? "(none)" : documentTypes.joined(separator: "; "))
-        Existing tags: \(tags.isEmpty ? "(none)" : tags.joined(separator: "; "))
-        File name: \(fileName)
-
-        Document text:
-        \(String(text.prefix(16000)))
-        """
+    func classify(text: String, fileName: String, request: ClassificationRequest) async throws -> Suggestion {
+        let schema = request.schema
+        let system = request.systemPrompt
+        let user = request.userMessage(text: text, fileName: fileName)
 
         let body: [String: Any] = [
             "model": config.chatModel,
@@ -260,4 +227,118 @@ struct MistralClient: Sendable {
         guard let json else { throw MistralError.invalidResponse }
         return json
     }
+}
+
+/// The structured-output request of the classification, assembled from parts. Each part brings
+/// its JSON schema property, its prompt rule and the context line listing what exists. Later
+/// features add their parts here (#16 subjects, #11 deadlines).
+///
+/// Mistral's strict mode requires every property of every object to be in `required` and
+/// `additionalProperties: false` on every object; the schema is built that way, and
+/// `requestSchemaIsStrictEverywhere` checks it for every part, nested objects included.
+struct ClassificationRequest {
+    struct Part {
+        /// The property name in the answer.
+        var property: String
+        var schema: [String: Any]
+        /// One line under "Rules:" in the system prompt.
+        var rule: String
+        /// A line of the user message, e.g. "Existing tags: …"; `nil` for none.
+        var context: String?
+    }
+
+    var parts: [Part]
+
+    /// The standard parts: title, correspondent, document type, tags and date.
+    /// - Parameter tags: the tags' display paths ("Auto › Golf"), see `TagHierarchy`.
+    init(correspondents: [String], documentTypes: [String], tags: [String],
+         titleLanguage: String = MistralClient.appLanguageName) {
+        parts = [
+            Self.title(language: titleLanguage),
+            Self.correspondent(correspondents),
+            Self.documentType(documentTypes),
+            Self.tags(tags),
+            Self.date,
+        ]
+    }
+
+    init(parts: [Part]) {
+        self.parts = parts
+    }
+
+    var schema: [String: Any] {
+        [
+            "type": "object",
+            "properties": Dictionary(parts.map { ($0.property, $0.schema) }, uniquingKeysWith: { first, _ in first }),
+            "required": parts.map(\.property),
+            "additionalProperties": false,
+        ]
+    }
+
+    var systemPrompt: String {
+        """
+        You are the assistant of a personal document archive (similar to paperless-ngx). \
+        Analyze the document and answer only with JSON that follows the schema.
+        Rules:
+        \(parts.map { "- \($0.property): \($0.rule)" }.joined(separator: "\n"))
+        """
+    }
+
+    func userMessage(text: String, fileName: String) -> String {
+        let lines = parts.compactMap(\.context) + ["File name: \(fileName)"]
+        return """
+        \(lines.joined(separator: "\n"))
+
+        Document text:
+        \(String(text.prefix(16000)))
+        """
+    }
+
+    // MARK: Parts
+
+    private static let nullableString: [String: Any] = ["type": ["string", "null"]]
+
+    private static func list(_ names: [String]) -> String {
+        names.isEmpty ? "(none)" : names.joined(separator: "; ")
+    }
+
+    static func title(language: String) -> Part {
+        Part(property: "title", schema: ["type": "string"],
+             rule: "a short, meaningful title in \(language) (at most 60 characters), without a date and without "
+                + "the sender's name, e.g. for German \"Rechnung Max-Abo\", \"Stromabschlag September\", "
+                + "\"Kfz-Versicherung Beitragsrechnung\".")
+    }
+
+    static func correspondent(_ names: [String]) -> Part {
+        Part(property: "correspondent", schema: nullableString,
+             rule: "the sender or issuer of the document (not the recipient). If it is one of the existing "
+                + "correspondents, use exactly that name; otherwise the official name of the company or authority. "
+                + "null if unclear.",
+             context: "Existing correspondents: \(list(names))")
+    }
+
+    static func documentType(_ names: [String]) -> Part {
+        var schema = nullableString
+        if !names.isEmpty { schema["enum"] = names + [NSNull()] }
+        return Part(property: "document_type", schema: schema,
+                    rule: "exactly one of the existing document types, or null if none fits.",
+                    context: "Existing document types: \(list(names))")
+    }
+
+    /// Tags are sent as display paths; duplicates (before a merge) are sent once.
+    static func tags(_ paths: [String]) -> Part {
+        var seen = Set<String>()
+        let unique = paths.filter { seen.insert($0).inserted }
+        var items: [String: Any] = ["type": "string"]
+        if !unique.isEmpty { items["enum"] = unique }
+        return Part(property: "tags", schema: ["type": "array", "items": items],
+                    rule: "only fitting existing tags, otherwise an empty list. Nested tags are written as paths "
+                        + "(\"Parent\(TagHierarchy.separator)Child\"): choose the most specific matching tag; never "
+                        + "add its parent tag as well.",
+                    context: "Existing tags: \(list(unique))")
+    }
+
+    static let date = Part(property: "date", schema: nullableString,
+                           rule: "the issue date of the document as YYYY-MM-DD (not a due date or service period), "
+                               + "null if there is none.")
 }
