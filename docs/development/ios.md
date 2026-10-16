@@ -104,5 +104,5 @@ and landscape:
 | Document | PDF view, inspector (sheet on iPhone, column on iPad), share, export |
 | Sheets and dialogs | settings, rule editor, alerts and delete confirmations can be dismissed |
 | Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad |
-| iPad | keyboard shortcuts (⌘O, ⌘,) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list |
+| iPad | keyboard shortcuts (⌘O, ⌘,) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list, also after rotating with it open; after deleting the open document the list is back |
 | Sidebar footer | sync status matches the build (local only on unsigned builds) |
