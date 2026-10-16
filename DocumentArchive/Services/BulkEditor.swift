@@ -69,14 +69,6 @@ enum BulkEditor {
         }
     }
 
-    /// Deletes the documents (on all devices). Tags, correspondents and types stay.
-    static func delete(_ documents: [Document], in context: ModelContext) {
-        for document in documents where document.isAlive {
-            context.delete(document)
-        }
-        try? context.save()
-    }
-
     /// Text recognition and auto-assignment again, **one document at a time**: Vision at full
     /// resolution and Mistral requests (when turned on in the settings) never run in parallel.
     ///

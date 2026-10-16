@@ -411,6 +411,16 @@
         }
       }
     },
+    "Back to Default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum Standard"
+          }
+        }
+      }
+    },
     "Back to the inbox": {
       "localizations": {
         "de": {
@@ -481,12 +491,42 @@
         }
       }
     },
+    "Choose Another Folder…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderen Ordner wählen …"
+          }
+        }
+      }
+    },
+    "Choose Folder…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner wählen …"
+          }
+        }
+      }
+    },
     "Color": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Farbe"
+          }
+        }
+      }
+    },
+    "Confirm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bestätigen"
           }
         }
       }
@@ -517,6 +557,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vertrag"
+          }
+        }
+      }
+    },
+    "Copy in folder is up to date": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopie im Ordner ist aktuell"
+          }
+        }
+      }
+    },
+    "Copying to the folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopie in den Ordner"
+          }
+        }
+      }
+    },
+    "Copying to the folder…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopiere in den Ordner …"
           }
         }
       }
@@ -711,6 +781,16 @@
         }
       }
     },
+    "Deletions waiting for confirmation: %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschungen warten auf Bestätigung: %lld"
+          }
+        }
+      }
+    },
     "Deselect All": {
       "localizations": {
         "de": {
@@ -737,6 +817,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erkennt den Absender per KI oder über Firmennamen (GmbH, AG, Inc. …) bzw. die E-Mail-Adresse, wenn noch kein passender Korrespondent existiert."
+          }
+        }
+      }
+    },
+    "Discard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwerfen"
           }
         }
       }
@@ -971,6 +1061,36 @@
         }
       }
     },
+    "Folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner"
+          }
+        }
+      }
+    },
+    "Folder copy failed – see Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopie im Ordner fehlgeschlagen – siehe Einstellungen"
+          }
+        }
+      }
+    },
+    "Folder not available": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner nicht verfügbar"
+          }
+        }
+      }
+    },
     "For every identical file, the document imported first is kept. Missing details such as tags or notes are taken over from the duplicates.": {
       "localizations": {
         "de": {
@@ -1181,6 +1301,16 @@
         }
       }
     },
+    "Last copy": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte Kopie"
+          }
+        }
+      }
+    },
     "Last sync": {
       "localizations": {
         "de": {
@@ -1227,6 +1357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF wird geladen …"
+          }
+        }
+      }
+    },
+    "Location": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ort"
           }
         }
       }
@@ -1601,6 +1741,16 @@
         }
       }
     },
+    "No folder has been chosen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es wurde kein Ordner gewählt."
+          }
+        }
+      }
+    },
     "No page of the scan could be read.": {
       "localizations": {
         "de": {
@@ -1707,6 +1857,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "Only on this device": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur auf diesem Gerät"
           }
         }
       }
@@ -2111,6 +2271,26 @@
         }
       }
     },
+    "Show in Files": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Dateien zeigen"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Finder zeigen"
+          }
+        }
+      }
+    },
     "Signature": {
       "localizations": {
         "de": {
@@ -2181,6 +2361,36 @@
         }
       }
     },
+    "Stop using the folder?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner nicht mehr verwenden?"
+          }
+        }
+      }
+    },
+    "Storage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speicherort"
+          }
+        }
+      }
+    },
+    "Storage Location": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speicherort"
+          }
+        }
+      }
+    },
     "Storage used": {
       "localizations": {
         "de": {
@@ -2217,6 +2427,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Synchronisation"
+          }
+        }
+      }
+    },
+    "Sync Now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt abgleichen"
           }
         }
       }
@@ -2371,6 +2591,26 @@
         }
       }
     },
+    "The archive is then stored only on this device. The files in the folder are kept.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Archiv wird dann nur noch auf diesem Gerät gespeichert. Die Dateien im Ordner bleiben erhalten."
+          }
+        }
+      }
+    },
+    "The archive itself always stays on this device. With a folder, the app also keeps a copy there: a PDF and a file with the details for every document. If the folder is in iCloud Drive, Dropbox, OneDrive or a similar service, that provider receives the PDFs, the recognized text and all details in readable form; they are not encrypted.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Archiv selbst bleibt immer auf diesem Gerät. Mit einem Ordner legt die App dort zusätzlich eine Kopie an: für jedes Dokument ein PDF und eine Datei mit den Angaben. Liegt der Ordner in iCloud Drive, Dropbox, OneDrive oder einem ähnlichen Dienst, erhält dieser Anbieter die PDFs, den erkannten Text und alle Angaben in lesbarer Form; sie werden nicht verschlüsselt."
+          }
+        }
+      }
+    },
     "The documents themselves are kept.": {
       "localizations": {
         "de": {
@@ -2387,6 +2627,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Datei wird gerade aus iCloud geladen."
+          }
+        }
+      }
+    },
+    "The folder copy is off while the app runs with sample data.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kopie im Ordner ist aus, solange die App mit Beispieldaten läuft."
+          }
+        }
+      }
+    },
+    "The folder is still downloading. The copy continues later.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner wird noch geladen. Die Kopie wird später fortgesetzt."
+          }
+        }
+      }
+    },
+    "The folder was created by a newer app version (format %@). Update the app to use it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner wurde von einer neueren App-Version angelegt (Format %@). Aktualisiere die App, um ihn zu verwenden."
+          }
+        }
+      }
+    },
+    "The folder “%@” is not available. It may have been deleted, or it is on a drive that is not connected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner „%@“ ist nicht verfügbar. Vielleicht wurde er gelöscht, oder er liegt auf einem Laufwerk, das nicht angeschlossen ist."
           }
         }
       }
@@ -2421,12 +2701,32 @@
         }
       }
     },
+    "They are removed from the folder only after you confirm. “Discard” keeps the documents in the folder.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie werden erst nach deiner Bestätigung aus dem Ordner entfernt. „Verwerfen“ behält die Dokumente im Ordner."
+          }
+        }
+      }
+    },
     "This file is already in the archive and was skipped:": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Diese Datei ist bereits vorhanden und wurde übersprungen:"
+          }
+        }
+      }
+    },
+    "This folder already contains an archive with %lld documents. Reading an existing archive comes with the next update, so nothing was written to it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Ordner enthält bereits ein Archiv mit %lld Dokumenten. Das Einlesen eines vorhandenen Archivs kommt mit dem nächsten Update, deshalb wurde nichts hineingeschrieben."
           }
         }
       }

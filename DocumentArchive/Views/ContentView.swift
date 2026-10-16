@@ -90,6 +90,7 @@ struct ImportNotice {
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
 
     @Query(sort: \Document.createdAt, order: .reverse) private var allDocuments: [Document]
     @AppStorage("documentSort") private var sort: DocumentSort = .added
@@ -283,6 +284,10 @@ struct ContentView: View {
             newDocumentType: { editorTarget = .newDocumentType },
             showSettings: { showSettings = true }
         ))
+        // The folder copy catches up with changes made while the app was in the background.
+        .onChange(of: scenePhase) {
+            if scenePhase == .active { ArchiveMirrorController.shared.syncNow() }
+        }
         .task {
             DocumentType.upgradeDefaults(in: context)
             MetadataMaintenance.mergeDuplicates(in: context)
@@ -356,7 +361,7 @@ struct ContentView: View {
     private func deleteConfirmed(_ request: BulkRequest) {
         let documents = DocumentSelection.resolve(Set(request.documents.map(\.id)), in: visibleDocuments)
         selection.subtract(documents.map(\.id))
-        BulkEditor.delete(documents, in: context)
+        DocumentDeletion.delete(documents, in: context)
     }
 
     private var showsBulkToolbar: Bool {

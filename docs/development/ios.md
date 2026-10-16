@@ -107,3 +107,4 @@ and landscape:
 | Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad |
 | iPad | keyboard shortcuts (⌘O, ⌘,) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list, also after rotating with it open; after deleting the open document the list is back |
 | Sidebar footer | sync status matches the build (local only on unsigned builds) |
+| Storage Location | "Choose Folder…" opens the folder picker (iCloud Drive, On My iPhone); the copy appears in `Document Archive/`; "Show in Files" opens it or shows the path with a share button; "Back to Default" keeps the files |

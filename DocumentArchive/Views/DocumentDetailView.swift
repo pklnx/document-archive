@@ -98,8 +98,7 @@ struct DocumentDetailView: View {
         .confirmationDialog("Delete document?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 onDelete()
-                context.delete(document)
-                try? context.save()
+                DocumentDeletion.delete([document], in: context)
             }
             .accessibilityIdentifier(AccessibilityID.documentDeleteConfirm)
         } message: {

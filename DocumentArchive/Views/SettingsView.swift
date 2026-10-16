@@ -14,11 +14,15 @@ struct SettingsView: View {
             Form { SyncSettingsSections() }
                 .formStyle(.grouped)
                 .tabItem { Label("iCloud", systemImage: "icloud") }
+            Form { StorageSettingsSection() }
+                .formStyle(.grouped)
+                .tabItem { Label("Storage", systemImage: "folder") }
         }
         #else
         Form {
             MistralSettingsSection()
             GeneralSettingsSections()
+            StorageSettingsSection()
             SyncSettingsSections()
         }
         .formStyle(.grouped)

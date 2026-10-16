@@ -175,6 +175,35 @@ restricts what a change may do:
 - Data that must be converted goes into a one-time migration in
   `DocumentArchive/App` (see `LegacyMigration.swift`), guarded by a flag so it
   runs once per device.
+- **Folder format:** every pull request that changes `DocumentArchive/Model`
+  also extends `ArchiveFolderFormat` (`Services/ArchiveFolderFormat.swift`):
+  the new fields go into the matching record, `currentVersion.minor` goes up
+  by one, and the round trip in `ArchiveFolderFormatTests` covers them.
+  Children of a document (deadlines, facts, …) are fields of the document's
+  sidecar, not separate files. Only a change older app versions cannot read
+  at all raises the major version, which makes them stop using the folder.
+- **Deleting documents** only goes through `DocumentDeletion.delete(_:in:)`,
+  and deleting tags, correspondents and document types through
+  `MetadataDeletion` (merges with `mergedInto`). They record the deletion for
+  the folder copy; `ModelContext.delete` alone would leave the document in the
+  folder, because the copy never infers deletions from missing objects.
+- **Replacing `pdfData`** (text layer, cleanup, vault) calls `touch()`, so the
+  folder copy writes the new PDF.
+
+### Copy in a folder (#8)
+
+The live store never moves. With a folder chosen in Settings → Storage
+Location, `ArchiveMirror` writes the archive into `<folder>/Document Archive/`
+(layout in `ArchiveFolderFormat`): at launch, when the app becomes active, on
+"Sync Now" and when `StoreChangeObserver` reports a change (debounced 5 s).
+Its bookkeeping (`ArchiveMirror.json` next to the store) belongs to one store
+(`NSStoreUUIDKey`); for another store it starts over and never writes
+tombstones. A pass that would write more than 20 tombstones or delete more
+than 10 % of the folder's documents waits for confirmation in the settings and
+the sidebar footer. Files are written atomically and coordinated; evicted
+iCloud files are detected through `UbiquityStatus` and retried later. Tests and
+the UI test sample data never start the folder copy; tests use temporary
+folders only.
 
 Pull requests that touch `DocumentArchive/Model` get the `schema-change`
 label automatically. The plan must say why the change is compatible with
@@ -185,6 +214,9 @@ devices still running the previous version.
 Documents leave the device only through features the user turns on:
 
 - **iCloud** (CloudKit private database) for sync.
+- **The folder copy** (off by default): the provider of the chosen folder
+  (iCloud Drive, Dropbox, …) receives the PDFs, the recognized text and the
+  metadata in readable form. The settings section says so.
 - **Mistral AI** for OCR and auto-assignment, only with an API key in the
   settings and the corresponding switch on. Without a key or on errors, the
   app falls back to Apple Vision and the local rules.

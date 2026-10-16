@@ -96,9 +96,12 @@ struct SidebarView: View {
         }
         #endif
         .safeAreaInset(edge: .bottom) {
-            SyncStatusView()
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+            VStack(alignment: .leading, spacing: 6) {
+                SyncStatusView()
+                FolderCopyStatusView()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
         }
         .confirmationDialog(
             pendingDeletion?.title ?? "",
@@ -167,13 +170,13 @@ struct SidebarView: View {
         switch deletion {
         case .tag(let tag):
             if selection == .tag(tag) { selection = .all }
-            context.delete(tag)
+            MetadataDeletion.delete(tag, in: context, recorder: DocumentDeletion.recorder())
         case .correspondent(let correspondent):
             if selection == .correspondent(correspondent) { selection = .all }
-            context.delete(correspondent)
+            MetadataDeletion.delete(correspondent, in: context, recorder: DocumentDeletion.recorder())
         case .documentType(let type):
             if selection == .documentType(type) { selection = .all }
-            context.delete(type)
+            MetadataDeletion.delete(type, in: context, recorder: DocumentDeletion.recorder())
         }
         try? context.save()
     }
