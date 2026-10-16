@@ -29,7 +29,7 @@ final class SyncMonitor {
     var isICloudSignedIn: Bool { FileManager.default.ubiquityIdentityToken != nil }
 
     /// Info.plist key filled from the build setting `DA_CLOUDKIT_ENABLED` (see Config/Project.xcconfig).
-    static let cloudKitFlagKey = "DACloudKitEnabled"
+    nonisolated static let cloudKitFlagKey = "DACloudKitEnabled"
 
     /// Whether this build may use CloudKit. The build flag must be on – it is only set for builds
     /// signed with the paid Apple Developer team – and on macOS the CloudKit entitlement must be

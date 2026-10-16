@@ -12,15 +12,17 @@ on:
 permissions:
   contents: read
 
+# Per ref: a manual run on a branch never cancels the scheduled run on main, or the other way round.
 concurrency:
-  group: ui-tests
+  group: ui-tests-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test-ios-ui:
     # UI smoke tests on the smallest iPhone and the smallest iPad. The app starts with generated
     # sample data in memory (-UITestSeed), so no real archive, no iCloud and no Mistral.
-    runs-on: macos-latest
+    runs-on: macos-26
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +32,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: xcodebuild -version
+      - uses: ./.github/actions/select-xcode
       - name: Pick simulator
         id: simulator
         env:
@@ -43,9 +45,9 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
             -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
-            CODE_SIGN_IDENTITY=- | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)"
+            CODE_SIGN_IDENTITY=- | xcbeautify --renderer github-actions
       - name: Upload test results
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: TestResults-iOS-UI-${{ matrix.device }}
@@ -57,13 +59,15 @@ jobs:
     # "Sign to Run Locally", no team, no secrets) and needs automation mode, otherwise it hangs at
     # "Timed out while enabling automation mode". The app is signed without its entitlements
     # (iCloud, sandbox), which an ad-hoc signature cannot carry; the sample data run needs neither.
-    runs-on: macos-latest
+    runs-on: macos-26
+    # Bounds a hang in automation mode or in a test; the default would be 6 hours.
+    timeout-minutes: 30
     name: test (macOS UI)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: xcodebuild -version
+      - uses: ./.github/actions/select-xcode
       - name: Enable automation mode
         run: sudo automationmodetool enable-automationmode-without-authentication
       - name: UI tests
@@ -71,9 +75,9 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
             -destination 'platform=macOS' -resultBundlePath TestResults.xcresult \
-            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS= | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)"
+            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS= | xcbeautify --renderer github-actions
       - name: Upload test results
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: TestResults-macOS-UI

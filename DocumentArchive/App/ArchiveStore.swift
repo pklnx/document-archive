@@ -35,7 +35,8 @@ enum StoreChoice: Equatable {
 /// Creates the SwiftData container for a `StoreChoice`.
 @MainActor
 enum ArchiveStore {
-    static let storeName = "DocumentArchive"
+    // nonisolated: read by the default `migrate` closure below, which is not on the main actor.
+    nonisolated static let storeName = "DocumentArchive"
     static let schema = DocumentArchiveApp.schema
 
     /// The persistent store's `NSStoreUUIDKey`. It identifies this store file: a lost, reset or

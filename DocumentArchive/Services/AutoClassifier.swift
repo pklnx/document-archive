@@ -12,7 +12,8 @@ import SwiftData
 @MainActor
 enum AutoClassifier {
     /// Setting: create unknown senders as new correspondents automatically.
-    static let autoCreateCorrespondentsKey = "autoCreateCorrespondents"
+    // nonisolated: also read by `LegacyMigration.settingKeys`, which is not on the main actor.
+    nonisolated static let autoCreateCorrespondentsKey = "autoCreateCorrespondents"
 
     /// Settings source; tests use a throwaway suite.
     nonisolated(unsafe) static var defaults: UserDefaults = .standard

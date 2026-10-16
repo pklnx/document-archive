@@ -7,7 +7,14 @@ import Foundation
 enum OpenURLHandler {
     /// - Returns: Whether the URL was handled.
     @discardableResult
-    static func handle(_ url: URL, externalImport: ExternalImport = .shared) -> Bool {
+    static func handle(_ url: URL) -> Bool {
+        // Not a default argument: a default value is evaluated outside the main actor, where
+        // the main-actor `ExternalImport.shared` cannot be read (a warning before Swift 6).
+        handle(url, externalImport: .shared)
+    }
+
+    @discardableResult
+    static func handle(_ url: URL, externalImport: ExternalImport) -> Bool {
         if url.isFileURL {
             externalImport.receive([url], origin: .openWith)
             return true

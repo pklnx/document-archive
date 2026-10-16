@@ -4,8 +4,10 @@
 Reads the changed paths (one per line) from stdin and prints "true" when at least one of them
 is app-relevant, "false" when the pull request only changes documentation or repository
 metadata. CI skips the build and test jobs for "false"; skipped jobs satisfy the required checks.
+An empty list prints "true": no pull request changes nothing, so an empty list means the diff
+failed, and a broken filter must never skip the build.
 
-    git diff --name-only BASE...HEAD | python3 scripts/app-changes.py
+    git diff --no-renames --name-only BASE...HEAD | python3 scripts/app-changes.py
     python3 scripts/app-changes.py --self-test
 
 Not app-relevant: docs/, Markdown files anywhere, LICENSE, issue templates, labels, release
@@ -40,7 +42,8 @@ def is_app_relevant(path: str) -> bool:
 
 
 def needs_app_build(paths) -> bool:
-    return any(is_app_relevant(p) for p in (p.strip() for p in paths) if p)
+    paths = [p for p in (p.strip() for p in paths) if p]
+    return not paths or any(is_app_relevant(p) for p in paths)
 
 
 def self_test() -> None:
@@ -50,11 +53,17 @@ def self_test() -> None:
         ("LICENSE", ".github/ISSUE_TEMPLATE/bug.yml", ".github/labels.json"): False,
         (".github/workflows/labeler.yml", ".github/workflows/ui-tests.yml", ".gitleaks.toml"): False,
         ("DocumentArchive/Notes.md",): False,
-        (): False,
+        # Empty: the diff failed or listed nothing; build rather than skip.
+        (): True,
+        ("", "  "): True,
+        # A file moved out of the app: `git diff --no-renames` lists the old path too.
+        ("DocumentArchive/Services/Old.swift", "docs/old/Old.swift"): True,
         ("DocumentArchive/Views/ContentView.swift",): True,
         ("docs/development/index.md", "DocumentArchive/Localizable.xcstrings"): True,
         ("DocumentArchive.xcodeproj/project.pbxproj",): True,
         (".github/workflows/ci.yml",): True,
+        (".xcode-version",): True,
+        (".github/actions/select-xcode/action.yml",): True,
         ("scripts/pick-simulator.py",): True,
         ("Config/Project.xcconfig",): True,
         ("DocumentArchiveUITests/MacSmokeTests.swift",): True,
