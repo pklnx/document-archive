@@ -1,29 +1,33 @@
 import Foundation
 import SwiftData
+import Synchronization
 import Testing
 @testable import DocumentArchive
 
 /// Simulates evicted iCloud files: states set here win, everything else is decided by the real
 /// `UbiquityStatus` (which also detects real `.icloud` placeholder files). Records download requests.
-final class FakeUbiquityStatus: UbiquityStatusProviding, @unchecked Sendable {
-    private let lock = NSLock()
-    private var overrides: [String: UbiquitousFileState] = [:]
-    private var downloads: [URL] = []
+final class FakeUbiquityStatus: UbiquityStatusProviding {
+    private struct State {
+        var overrides: [String: UbiquitousFileState] = [:]
+        var downloads: [URL] = []
+    }
 
-    func set(_ state: UbiquitousFileState, for url: URL) {
-        lock.withLock { overrides[url.standardizedFileURL.path] = state }
+    private let state = Mutex(State())
+
+    func set(_ fileState: UbiquitousFileState, for url: URL) {
+        state.withLock { $0.overrides[url.standardizedFileURL.path] = fileState }
     }
 
     var downloadRequests: [String] {
-        lock.withLock { downloads.map(\.lastPathComponent) }
+        state.withLock { $0.downloads.map(\.lastPathComponent) }
     }
 
     func state(of url: URL) -> UbiquitousFileState {
-        lock.withLock { overrides[url.standardizedFileURL.path] } ?? UbiquityStatus().state(of: url)
+        state.withLock { $0.overrides[url.standardizedFileURL.path] } ?? UbiquityStatus().state(of: url)
     }
 
     func startDownloading(_ url: URL) {
-        lock.withLock { downloads.append(url) }
+        state.withLock { $0.downloads.append(url) }
     }
 }
 

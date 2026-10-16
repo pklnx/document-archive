@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import Synchronization
 
 /// The criteria of a saved view (#14): tags, correspondents, types, a date range, status flags, a
 /// search term and the sort order. No SwiftData dependency: it is stored as JSON in
@@ -19,7 +20,7 @@ import SwiftData
 ///
 /// The filter works on the list it is given (after any central exclusion, #22); it never fetches
 /// documents itself.
-struct DocumentFilter: Equatable {
+struct DocumentFilter: Equatable, Sendable {
     // Setting a field (even to the value it has) marks it as changed by the user: it leaves
     // `fallbackKeys`, so a value of a newer version is replaced, also by this version's default.
     var tags: [Ref] = [] { didSet { touch(.tags) } }
@@ -555,30 +556,40 @@ extension DocumentFilter: Codable {
 // MARK: - Decode cache
 
 /// Decoded filters by `filterJSON` string, so a sidebar render decodes each view once and not once
-/// per document. Thread-safe (`NSCache`).
-final class DocumentFilterCache: @unchecked Sendable {
+/// per document. Thread-safe (`Mutex`). `shared` is the only instance the views use.
+///
+/// Holds at most `limit` entries. When it is full, it removes **everything** before adding the
+/// next one; unlike `NSCache`, which it replaced, it has no other eviction (`NSCache` gave no
+/// ordering either). Saved views are few, so this only happens with many changed filters.
+final class DocumentFilterCache: Sendable {
     static let shared = DocumentFilterCache()
 
     /// One decoded filter; the same instance for the same JSON while it is cached.
-    final class Entry {
+    final class Entry: Sendable {
         let filter: DocumentFilter
         init(_ filter: DocumentFilter) { self.filter = filter }
     }
 
-    private let cache = NSCache<NSString, Entry>()
+    static let limit = 500
 
-    init() {
-        cache.countLimit = 500
-    }
+    private let entries = Mutex<[String: Entry]>([:])
 
     func entry(for json: String) -> Entry {
-        if let entry = cache.object(forKey: json as NSString) { return entry }
-        let entry = Entry(DocumentFilter.decode(json))
-        cache.setObject(entry, forKey: json as NSString)
-        return entry
+        if let entry = entries.withLock({ $0[json] }) { return entry }
+        // Decoded outside the lock; when two callers race, the first stored entry wins.
+        let decoded = Entry(DocumentFilter.decode(json))
+        return entries.withLock { entries in
+            if let entry = entries[json] { return entry }
+            if entries.count >= Self.limit { entries.removeAll() }
+            entries[json] = decoded
+            return decoded
+        }
     }
 
     func filter(for json: String) -> DocumentFilter {
         entry(for: json).filter
     }
+
+    /// The number of cached entries (for tests).
+    var count: Int { entries.withLock { $0.count } }
 }

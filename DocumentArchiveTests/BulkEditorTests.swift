@@ -295,104 +295,105 @@ import Testing
     }
 }
 
-extension GlobalStateTests {
-    /// Bulk "Analyze again": one document after another, cancellable.
-    @Suite @MainActor struct BulkReanalysisTests {
-        let container: ModelContainer
-        var context: ModelContext { container.mainContext }
+/// Bulk "Analyze again": one document after another, cancellable.
+@Suite @MainActor struct BulkReanalysisTests {
+    let container: ModelContainer
+    var context: ModelContext { container.mainContext }
 
-        init() throws {
-            container = try TestSupport.makeContainer()
+    init() throws {
+        container = try TestSupport.makeContainer()
+    }
+
+    private func makeDocuments(_ count: Int) throws -> [Document] {
+        let documents = (1...count).map { index in
+            let document = Document(title: "Letter \(index)", pdfData: TestSupport.samplePDF(lines: ["Letter \(index)"]),
+                                    source: .file)
+            document.isProcessing = false
+            context.insert(document)
+            return document
         }
+        try context.save()
+        return documents
+    }
 
-        private func makeDocuments(_ count: Int) throws -> [Document] {
-            let documents = (1...count).map { index in
-                let document = Document(title: "Letter \(index)", pdfData: TestSupport.samplePDF(lines: ["Letter \(index)"]),
-                                        source: .file)
-                document.isProcessing = false
-                context.insert(document)
-                return document
-            }
-            try context.save()
-            return documents
+    /// Which document an OCR request was for (its PDF is in the request body). Takes the PDFs
+    /// as they were sent: processing replaces `pdfData` with its text-layer version afterwards.
+    private func documentIndex(of body: Data, among pdfs: [Data]) -> Int? {
+        let json = MistralStub.json(body)
+        let url = (json["document"] as? [String: Any])?["document_url"] as? String ?? ""
+        return pdfs.firstIndex { url.contains($0.base64EncodedString()) }
+    }
+
+    private func installStub() -> MistralStub.Session {
+        MistralStub.install(config: MistralStub.config(useOCR: true, useLLM: false)) { _, _ in
+            .json(["pages": [["index": 0, "markdown": "Text from Mistral"]]])
         }
+    }
 
-        /// Which document an OCR request was for (its PDF is in the request body). Takes the PDFs
-        /// as they were sent: processing replaces `pdfData` with its text-layer version afterwards.
-        private func documentIndex(of body: Data, among pdfs: [Data]) -> Int? {
-            let json = MistralStub.json(body)
-            let url = (json["document"] as? [String: Any])?["document_url"] as? String ?? ""
-            return pdfs.firstIndex { url.contains($0.base64EncodedString()) }
+    @Test func analyzesOneDocumentAfterAnother() async throws {
+        let stub = installStub()
+        stub.delay = 0.2
+        let documents = try makeDocuments(3)
+        let originals = documents.map { $0.pdfData! }
+
+        // Watch how many documents are processed at the same time.
+        var maxProcessing = 0
+        let watcher = Task { @MainActor in
+            while !Task.isCancelled {
+                maxProcessing = max(maxProcessing, documents.filter(\.isProcessing).count)
+                try? await Task.sleep(for: .milliseconds(5))
+            }
         }
-
-        @Test func analyzesOneDocumentAfterAnother() async throws {
-            MistralStub.install(config: MistralStub.config(useOCR: true, useLLM: false)) { _, _ in
-                .json(["pages": [["index": 0, "markdown": "Text from Mistral"]]])
-            }
-            defer { MistralStub.reset() }
-            MistralStub.delay = 0.2
-            let documents = try makeDocuments(3)
-            let originals = documents.map { $0.pdfData! }
-
-            // Watch how many documents are processed at the same time.
-            var maxProcessing = 0
-            let watcher = Task { @MainActor in
-                while !Task.isCancelled {
-                    maxProcessing = max(maxProcessing, documents.filter(\.isProcessing).count)
-                    try? await Task.sleep(for: .milliseconds(5))
-                }
-            }
-            var reported: [Int] = []
+        var reported: [Int] = []
+        await ProcessingEnvironment.$current.withValue(stub.environment) {
             await BulkEditor.reanalyze(documents, context: context) { done, total in
                 #expect(total == 3)
                 reported.append(done)
             }
-            watcher.cancel()
-
-            #expect(maxProcessing == 1)
-            #expect(reported == [1, 2, 3])
-            #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: originals) } == [0, 1, 2])
-            #expect(documents.allSatisfy { $0.extractedText == "Text from Mistral" && !$0.isProcessing })
         }
+        watcher.cancel()
 
-        /// Documents still being processed are skipped but counted, so "x of n" never jumps.
-        @Test func skippedDocumentsCountAsDone() async throws {
-            MistralStub.install(config: MistralStub.config(useOCR: true, useLLM: false)) { _, _ in
-                .json(["pages": [["index": 0, "markdown": "Text from Mistral"]]])
-            }
-            defer { MistralStub.reset() }
-            let documents = try makeDocuments(3)
-            let originals = documents.map { $0.pdfData! }
-            documents[1].isProcessing = true
+        #expect(maxProcessing == 1)
+        #expect(reported == [1, 2, 3])
+        #expect(stub.requests.map { documentIndex(of: $0.body, among: originals) } == [0, 1, 2])
+        #expect(documents.allSatisfy { $0.extractedText == "Text from Mistral" && !$0.isProcessing })
+    }
 
-            var reported: [String] = []
+    /// Documents still being processed are skipped but counted, so "x of n" never jumps.
+    @Test func skippedDocumentsCountAsDone() async throws {
+        let stub = installStub()
+        let documents = try makeDocuments(3)
+        let originals = documents.map { $0.pdfData! }
+        documents[1].isProcessing = true
+
+        var reported: [String] = []
+        await ProcessingEnvironment.$current.withValue(stub.environment) {
             await BulkEditor.reanalyze(documents, context: context) { done, total in
                 reported.append("\(done)/\(total)")
             }
-
-            #expect(reported == ["1/3", "2/3", "3/3"])
-            #expect(MistralStub.requests.map { documentIndex(of: $0.body, among: originals) } == [0, 2])
-            #expect(documents[1].extractedText.isEmpty)
         }
 
-        @Test func cancellingFinishesTheCurrentDocumentAndSkipsTheRest() async throws {
-            MistralStub.install(config: MistralStub.config(useOCR: true, useLLM: false)) { _, _ in
-                .json(["pages": [["index": 0, "markdown": "Text from Mistral"]]])
-            }
-            defer { MistralStub.reset() }
-            let documents = try makeDocuments(3)
-            let context = context
+        #expect(reported == ["1/3", "2/3", "3/3"])
+        #expect(stub.requests.map { documentIndex(of: $0.body, among: originals) } == [0, 2])
+        #expect(documents[1].extractedText.isEmpty)
+    }
 
-            let task = Task { @MainActor in
+    @Test func cancellingFinishesTheCurrentDocumentAndSkipsTheRest() async throws {
+        let stub = installStub()
+        let documents = try makeDocuments(3)
+        let context = context
+
+        let task = ProcessingEnvironment.$current.withValue(stub.environment) {
+            Task { @MainActor in
                 await BulkEditor.reanalyze(documents, context: context) { done, _ in
                     if done == 1 { withUnsafeCurrentTask { $0?.cancel() } }
                 }
             }
-            await task.value
-
-            #expect(MistralStub.requests.count == 1)
-            #expect(documents[0].extractedText == "Text from Mistral")
-            #expect(documents[1...].allSatisfy { $0.extractedText.isEmpty && !$0.isProcessing })
         }
+        await task.value
+
+        #expect(stub.requests.count == 1)
+        #expect(documents[0].extractedText == "Text from Mistral")
+        #expect(documents[1...].allSatisfy { $0.extractedText.isEmpty && !$0.isProcessing })
     }
 }

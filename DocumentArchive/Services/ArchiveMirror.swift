@@ -552,10 +552,12 @@ final class ArchiveMirror {
         ArchiveFolderFormat.sha256(try ArchiveFolderFormat.encode(record))
     }
 
+    // Detached: reads no `ProcessingEnvironment`; pass it in if that changes.
     nonisolated private static func background<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await Task.detached(priority: .utility, operation: work).value
     }
 
+    // Detached: reads no `ProcessingEnvironment`; pass it in if that changes.
     nonisolated private static func inBackground<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
         await Task.detached(priority: .utility, operation: work).value
     }

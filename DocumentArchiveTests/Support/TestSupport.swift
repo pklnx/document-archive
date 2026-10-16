@@ -5,13 +5,10 @@ import Foundation
 import ImageIO
 import PDFKit
 import SwiftData
+import Synchronization
 import Testing
 import UniformTypeIdentifiers
 @testable import DocumentArchive
-
-/// Suites that change global state (Mistral stub, settings source) are nested here,
-/// so they run one after another and never see each other's stubs.
-@Suite(.serialized) struct GlobalStateTests {}
 
 /// The archive's tag model; plain `Tag` would clash with Swift Testing's `Tag`.
 typealias ArchiveTag = DocumentArchive.Tag
@@ -266,6 +263,15 @@ enum TestSupport {
     }
 }
 
+/// Collects values from `@Sendable` closures (stub handlers, environment hooks), which cannot
+/// change a test's local variables.
+final class Recorder<Value: Sendable>: Sendable {
+    private let storage = Mutex<[Value]>([])
+
+    func append(_ value: Value) { storage.withLock { $0.append(value) } }
+    var values: [Value] { storage.withLock { $0 } }
+}
+
 /// A deterministic random number generator (SplitMix64), so generated images are the same in every run.
 struct SeededGenerator: RandomNumberGenerator {
     private var state: UInt64
@@ -281,8 +287,15 @@ struct SeededGenerator: RandomNumberGenerator {
 }
 
 /// Answers requests to api.mistral.ai locally; no request leaves the machine.
+///
+/// Every `install` creates its own stub session: a fake API key (`stub-<uuid>`) in the returned
+/// `config`, its own `URLSession` with this protocol, and its own handler and recorded requests.
+/// A request is routed by its `Authorization: Bearer <key>` header, so stub sessions used by
+/// tests running in parallel never see each other's requests. A test runs its body in
+/// `ProcessingEnvironment.$current.withValue(stub.environment) { … }` or passes
+/// `stub.environment` to `MistralClient` / `DocumentProcessor.analyze`.
 final class MistralStub: URLProtocol {
-    struct Response {
+    struct Response: Sendable {
         var status: Int
         var body: Data
 
@@ -297,38 +310,71 @@ final class MistralStub: URLProtocol {
         }
     }
 
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var _handler: ((URLRequest, Data) -> Response)?
-    nonisolated(unsafe) private static var _requests: [(request: URLRequest, body: Data)] = []
-    nonisolated(unsafe) static var delay: TimeInterval = 0
+    typealias Handler = @Sendable (URLRequest, Data) -> Response
 
-    static var requests: [(request: URLRequest, body: Data)] { lock.withLock { _requests } }
-
-    /// Routes `MistralClient` through this stub and makes `config` the current configuration.
-    static func install(config: MistralConfig?, handler: @escaping (URLRequest, Data) -> Response) {
-        lock.withLock {
-            _handler = handler
-            _requests = []
-        }
-        delay = 0
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [MistralStub.self]
-        MistralClient.session = URLSession(configuration: configuration)
-        MistralConfig.provider = { config }
+    struct RecordedRequest: Sendable {
+        var request: URLRequest
+        var body: Data
     }
 
-    static func reset() {
-        lock.withLock {
-            _handler = nil
-            _requests = []
+    /// The handler and the recorded requests of one stub session.
+    final class Route: Sendable {
+        struct State {
+            var requests: [RecordedRequest] = []
+            var delay: TimeInterval = 0
         }
-        delay = 0
-        MistralClient.session = .shared
-        MistralConfig.provider = { nil }
+
+        let handler: Handler
+        let state = Mutex(State())
+
+        init(handler: @escaping Handler) { self.handler = handler }
     }
 
+    /// One installed stub: its configuration, its environment and what it received.
+    final class Session: Sendable {
+        /// The configuration passed to `install`, with this session's fake API key.
+        let config: MistralConfig
+        /// `.live` with this session's `URLSession` and `config`; tests change other fields as needed.
+        let environment: ProcessingEnvironment
+        let route: Route
+
+        fileprivate init(config: MistralConfig, route: Route) {
+            self.config = config
+            self.route = route
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [MistralStub.self]
+            var environment = ProcessingEnvironment.live
+            environment.session = URLSession(configuration: configuration)
+            environment.mistralConfig = { config }
+            self.environment = environment
+        }
+
+        var requests: [RecordedRequest] { route.state.withLock { $0.requests } }
+
+        /// Seconds to wait before each answer.
+        var delay: TimeInterval {
+            get { route.state.withLock { $0.delay } }
+            set { route.state.withLock { $0.delay = newValue } }
+        }
+    }
+
+    /// Stub sessions by their fake API key. Entries stay for the whole test run (a few hundred
+    /// small objects), so a request can never outlive its route.
+    static let routes = Mutex<[String: Route]>([:])
+
+    /// A new stub session answering with `handler`. `config` gives the models and switches; its
+    /// API key is replaced with a unique fake one.
+    static func install(config: MistralConfig = MistralStub.config(), handler: @escaping Handler) -> Session {
+        var config = config
+        config.apiKey = "stub-\(UUID().uuidString)"
+        let route = Route(handler: handler)
+        routes.withLock { $0[config.apiKey] = route }
+        return Session(config: config, route: route)
+    }
+
+    /// A configuration template for `install`; its API key is never sent.
     static func config(useOCR: Bool = true, useLLM: Bool = true) -> MistralConfig {
-        MistralConfig(apiKey: "test-key", ocrModel: MistralConfig.defaultOCRModel,
+        MistralConfig(apiKey: "template-key", ocrModel: MistralConfig.defaultOCRModel,
                       chatModel: MistralConfig.defaultChatModel, useOCR: useOCR, useLLM: useLLM)
     }
 
@@ -337,16 +383,32 @@ final class MistralStub: URLProtocol {
         (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
     }
 
+    /// The stub session a request belongs to, by its `Authorization: Bearer <key>` header.
+    static func route(for request: URLRequest) -> Route? {
+        guard let authorization = request.value(forHTTPHeaderField: "Authorization"),
+              authorization.hasPrefix("Bearer ") else { return nil }
+        let key = String(authorization.dropFirst("Bearer ".count))
+        return routes.withLock { $0[key] }
+    }
+
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "api.mistral.ai" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         let body = Self.readBody(of: request)
-        let handler = Self.lock.withLock { () -> ((URLRequest, Data) -> Response)? in
-            Self._requests.append((request, body))
-            return Self._handler
+        guard let route = Self.route(for: request) else {
+            let authorization = request.value(forHTTPHeaderField: "Authorization")
+            // Outside the test's task, so Swift Testing reports it without a test name; the
+            // error below fails the request in the test itself.
+            Issue.record("Mistral request without a known stub key (Authorization: \(authorization == nil ? "missing" : "unknown"))")
+            client?.urlProtocol(self, didFailWithError: URLError(.userAuthenticationRequired))
+            return
         }
-        let response = handler?(request, body) ?? Response(status: 500, body: Data("no stub".utf8))
+        let delay = route.state.withLock { state in
+            state.requests.append(RecordedRequest(request: request, body: body))
+            return state.delay
+        }
+        let response = route.handler(request, body)
         let respond = { [request = self.request, client = self.client] in
             client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: response.status,
                                                                   httpVersion: nil, headerFields: nil)!,
@@ -354,8 +416,8 @@ final class MistralStub: URLProtocol {
             client?.urlProtocol(self, didLoad: response.body)
             client?.urlProtocolDidFinishLoading(self)
         }
-        if Self.delay > 0 {
-            DispatchQueue.global().asyncAfter(deadline: .now() + Self.delay, execute: respond)
+        if delay > 0 {
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: respond)
         } else {
             respond()
         }

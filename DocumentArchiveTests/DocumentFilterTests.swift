@@ -858,6 +858,47 @@ import Testing
         #expect(first.filter.query == "cached")
     }
 
+    /// `DocumentFilterCache` is `Sendable` through a `Mutex` (#44): lookups from many tasks at once
+    /// return equal filters, and the same JSON keeps one entry.
+    @Test func decodeCacheIsSafeUnderConcurrentLookups() async {
+        let cache = DocumentFilterCache()
+        let jsons = (0..<10).map { #"{"query":"q\#($0)"}"# }
+        let results = await withTaskGroup(of: (Int, DocumentFilter, ObjectIdentifier).self) { group in
+            for index in 0..<1_000 {
+                group.addTask {
+                    let entry = cache.entry(for: jsons[index % jsons.count])
+                    return (index % jsons.count, entry.filter, ObjectIdentifier(entry))
+                }
+            }
+            var results: [(Int, DocumentFilter, ObjectIdentifier)] = []
+            for await result in group { results.append(result) }
+            return results
+        }
+        #expect(results.count == 1_000)
+        for (index, filter, _) in results {
+            #expect(filter.query == "q\(index)")
+        }
+        #expect(cache.count == jsons.count)
+        for (index, json) in jsons.enumerated() {
+            let ids = Set(results.filter { $0.0 == index }.map(\.2))
+            #expect(ids == [ObjectIdentifier(cache.entry(for: json))], "one entry per JSON")
+        }
+    }
+
+    /// When full, the cache starts over (unlike `NSCache`'s eviction); lookups still work.
+    @Test func decodeCacheEmptiesWhenFull() {
+        let cache = DocumentFilterCache()
+        for index in 0..<DocumentFilterCache.limit {
+            _ = cache.entry(for: #"{"query":"\#(index)"}"#)
+        }
+        #expect(cache.count == DocumentFilterCache.limit)
+        let next = cache.entry(for: #"{"query":"one more"}"#)
+        #expect(cache.count == 1)
+        #expect(cache.entry(for: #"{"query":"one more"}"#) === next)
+        #expect(cache.filter(for: #"{"query":"0"}"#).query == "0")
+        #expect(cache.count == 2)
+    }
+
     /// Deleting a view goes through `MetadataDeletion`, so the folder copy writes a tombstone.
     @Test func deletingAViewRecordsATombstone() throws {
         let recorder = RecordedDeletions()

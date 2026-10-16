@@ -39,19 +39,7 @@ enum TextLayer {
         defaults.object(forKey: enabledKey) as? Bool ?? true
     }
 
-    /// Source of the setting; tests replace it (inside `GlobalStateTests`).
-    nonisolated(unsafe) static var isEnabledProvider: () -> Bool = {
-        TestEnvironment.isRunningTests ? true : isEnabled(in: .standard)
-    }
-
-    static var isEnabled: Bool { isEnabledProvider() }
-
-    /// Test seam: changes a rewritten PDF before it is verified, so tests can force a rewrite
-    /// that fails the check. It receives the analyzed and the rewritten data, so a test changes
-    /// only its own document. Read on the main actor by `DocumentImporter.processAndWait`, which
-    /// passes it to `DocumentProcessor.analyze`; always `nil` in the app.
-    nonisolated(unsafe) static var rewriteHookForTesting: RewriteHook?
-
+    /// Changes a rewritten PDF before it is verified; see `ProcessingEnvironment.rewriteHook`.
     typealias RewriteHook = @Sendable (_ analyzed: Data, _ rewritten: Data) -> Data
 
     // MARK: Which pages and PDFs

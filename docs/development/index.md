@@ -96,16 +96,28 @@ by the app, which notices the test run (`TestEnvironment.isRunningTests`) and
 then opens an in-memory store and skips migrations, so the real archive is
 never touched. Rules for tests:
 
-- **No network.** Mistral is stubbed with `MistralStub` (a `URLProtocol`);
-  `MistralStub.install(config:handler:)` sets the configuration and the
-  responses, `MistralStub.reset()` removes them.
+- **No network.** Mistral is stubbed with `MistralStub` (a `URLProtocol`).
+  `MistralStub.install(config:handler:)` returns a stub session with its own
+  fake API key, `URLSession`, handler and recorded `requests`; requests are
+  routed by their `Authorization` header, so parallel tests never see each
+  other's requests. Run the test body in
+  `ProcessingEnvironment.$current.withValue(stub.environment) { … }`, or pass
+  `stub.environment` to `MistralClient` / `DocumentProcessor.analyze`.
 - **No real data.** Use `TestSupport.makeContainer()` for an in-memory archive,
   `TestSupport.makeDefaults()` for settings, `TestSupport.makeTemporaryDirectory()`
   for files and the test service name for the Keychain. Generate documents in
   the test (`TestSupport.renderPage`, `TestSupport.samplePDF`); never commit real
   documents.
-- **Global state** (the Mistral stub, `AutoClassifier.defaults`) is only changed
-  inside `GlobalStateTests`, whose nested suites run one after another.
+- **No global state.** Everything the import pipeline reads from outside (the
+  Mistral configuration and session, settings, test hooks) comes from
+  `ProcessingEnvironment.current`, a task-local: a test changes a copy and runs
+  its body in `ProcessingEnvironment.$current.withValue(…)`, so suites can run
+  in parallel. `Task {}` inherits it, `Task.detached` does not: code that
+  detaches captures the environment first and passes it on (as
+  `DocumentImporter.processAndWait` does). `MistralClient` and
+  `DocumentProcessor.analyze` take the environment without a default for that
+  reason. Values that `@Sendable` closures (stub handlers, hooks) collect go
+  into a `Recorder` or a `Mutex`.
 - The model type `Tag` clashes with Swift Testing's `Tag`; use `ArchiveTag` in tests.
 
 ### UI tests

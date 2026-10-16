@@ -81,7 +81,7 @@ import Testing
 
         container.mainContext.insert(ArchiveTag(name: "Tax"))
         try container.mainContext.save()
-        try await Task.sleep(for: .milliseconds(300))
+        try await waitUntil(notified, reaches: 1)
         #expect(notified.count >= 1)
     }
 
@@ -114,7 +114,9 @@ import Testing
 
         center.post(name: .NSPersistentStoreRemoteChange, object: nil,
                     userInfo: [StoreChangeObserver.storeURLKey: container.configurations.first!.url])
-        try await Task.sleep(for: .milliseconds(300))
+        // Waits instead of a fixed sleep: with tests running in parallel the main actor is busy.
+        try await waitUntil(first, reaches: 1)
+        try await waitUntil(second, reaches: 1)
         #expect(first.count == 1)
         #expect(second.count == 1)
     }
