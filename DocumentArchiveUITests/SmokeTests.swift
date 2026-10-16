@@ -135,6 +135,17 @@ final class SmokeTests: XCTestCase {
 
     private func showSidebar() { reveal(element("sidebar.settings"), "sidebar") }
 
+    /// A sidebar row further down (tags on a small iPhone): the list only creates rows once they
+    /// are scrolled into view.
+    private func sidebarRow(_ id: String) -> XCUIElement {
+        let row = element(id)
+        for _ in 0..<5 where !row.exists || !row.isHittable {
+            element("sidebar").swipeUp()
+        }
+        XCTAssertTrue(row.isHittable, "\(id) not reachable in the sidebar")
+        return row
+    }
+
     private func openDocument(_ title: String) {
         let row = row(title)
         reveal(row, "row \(title)")
@@ -175,7 +186,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(row(firstDocument).exists)
 
         showSidebar()
-        element("sidebar.tag.Important").tap()
+        sidebarRow("sidebar.tag.Important").tap()
         XCTAssertTrue(row("Credit card terms").waitForExistence(timeout: 5))
         XCTAssertFalse(row(firstDocument).exists)
     }
@@ -185,7 +196,7 @@ final class SmokeTests: XCTestCase {
     /// shows only top-level tags. On iPad the chip selects Golf in the sidebar's tag tree.
     func testNestedTagDrillDown() {
         showSidebar()
-        element("sidebar.tag.Auto").tap()
+        sidebarRow("sidebar.tag.Auto").tap()
         XCTAssertTrue(row("Car insurance").waitForExistence(timeout: 5), "Auto's own document missing")
         XCTAssertTrue(row("Golf inspection").exists, "Auto must include the documents of Golf")
         XCTAssertFalse(row(firstDocument).exists)
@@ -211,7 +222,7 @@ final class SmokeTests: XCTestCase {
             XCTAssertTrue(chip.exists)
             backButton().tap()
             XCTAssertTrue(waitUntilHittable(element("sidebar.settings")), "second Back did not return to the sidebar")
-            XCTAssertTrue(element("sidebar.tag.Auto").exists)
+            _ = sidebarRow("sidebar.tag.Auto")
             XCTAssertFalse(element("sidebar.tag.Golf").exists, "iPhone shows only top-level tags in the sidebar")
             attachScreenshot("sidebar after going back")
         } else {
