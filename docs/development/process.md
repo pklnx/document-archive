@@ -94,3 +94,4 @@ git fetch --tags
 git checkout v0.2.0
 open DocumentArchive.xcodeproj   # then Product → Archive
 ```
+
