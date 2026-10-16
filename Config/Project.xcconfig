@@ -14,6 +14,14 @@ CURRENT_PROJECT_VERSION = 1
 // Config/Local.xcconfig (not in git) for the signed build. See docs/development/ios.md.
 DA_CLOUDKIT_ENABLED = NO
 
+// Appended to the app's bundle identifier (de.patrickklein.DocumentArchive$(DA_BUNDLE_ID_SUFFIX)).
+// Empty for every real build. The sandboxed test build passes DA_BUNDLE_ID_SUFFIX=.SandboxTests,
+// so it gets its own sandbox container and never creates the real app's container, which would
+// stop the container migration of the first signed build. The test targets keep their own
+// identifiers. The Keychain service name (KeychainStore.service) does not follow the suffix.
+// See docs/development/index.md → Sandbox.
+DA_BUNDLE_ID_SUFFIX =
+
 // Optional local overrides, e.g. DEVELOPMENT_TEAM and DA_CLOUDKIT_ENABLED = YES. Keep this
 // include last, so it overrides everything above.
 #include? "Local.xcconfig"

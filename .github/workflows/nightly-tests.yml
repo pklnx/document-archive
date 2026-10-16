@@ -1,9 +1,10 @@
 name: Nightly tests
 
 # The unit tests in the configurations of TestPlans/Nightly.xctestplan, which are too slow or too
-# rarely affected for every pull request: in German, and with Thread Sanitizer. Nightly on main,
-# on demand, and on pull requests that change this setup, so such a change proves itself on its
-# own pull request. Not a required check; a failure is handled like a bug report.
+# rarely affected for every pull request: in German, and with Thread Sanitizer; and all unit tests
+# in the macOS App Sandbox. Nightly on main, on demand, and on pull requests that change this
+# setup, so such a change proves itself on its own pull request. Not a required check; a failure
+# is handled like a bug report.
 on:
   schedule:
     # After the UI tests (ui-tests.yml, 02:17).
@@ -13,6 +14,8 @@ on:
     paths:
       - .github/workflows/nightly-tests.yml
       - TestPlans/Nightly.xctestplan
+      - Config/DocumentArchive-macOS-SandboxTests.entitlements
+      - DocumentArchiveTests/SandboxTests.swift
 
 permissions:
   contents: read
@@ -83,4 +86,39 @@ jobs:
           path: |
             TestResults.xcresult
             ThreadSanitizer
+          retention-days: 7
+
+  test-sandboxed:
+    # All unit tests (TestPlans/Default.xctestplan) in the macOS App Sandbox, plus SandboxTests,
+    # which only run there. Release builds are sandboxed; the required jobs are unsigned and
+    # therefore not. The build is ad-hoc signed (no team, no secrets) with the CI-only
+    # entitlements (sandbox and file access, without iCloud and push, which an ad-hoc signature
+    # cannot carry) and its own bundle identifier, so the test host gets its own container.
+    # DA_EXPECT_SANDBOX makes SandboxTests fail instead of skipping when the host is not
+    # sandboxed. No Thread Sanitizer here: its reports go to /tmp, outside the container.
+    # A red run blocks pull requests that touch FolderAccess, the import entry points,
+    # ArchiveMirror or the entitlements (docs/development/index.md, "Test strategy").
+    runs-on: macos-26
+    timeout-minutes: 60
+    name: test (macOS, sandboxed)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/select-xcode
+      - name: Test
+        env:
+          TEST_RUNNER_DA_EXPECT_SANDBOX: "1"
+        run: |
+          set -o pipefail
+          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS=Config/DocumentArchive-macOS-SandboxTests.entitlements \
+            DA_BUNDLE_ID_SUFFIX=.SandboxTests | xcbeautify --renderer github-actions
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TestResults-macOS-sandboxed
+          path: TestResults.xcresult
           retention-days: 7
