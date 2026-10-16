@@ -71,9 +71,11 @@ struct DocumentDetailView: View {
                     Button("Export as PDF…", systemImage: "arrow.down.doc") { showExporter = true }
                     Divider()
                     Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                        .accessibilityIdentifier(AccessibilityID.documentDelete)
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }
+                .accessibilityIdentifier(AccessibilityID.documentMore)
 
                 Button {
                     showInspector.toggle()
@@ -99,6 +101,7 @@ struct DocumentDetailView: View {
                 context.delete(document)
                 try? context.save()
             }
+            .accessibilityIdentifier(AccessibilityID.documentDeleteConfirm)
         } message: {
             Text("“\(document.title)” will be deleted on all devices.")
         }

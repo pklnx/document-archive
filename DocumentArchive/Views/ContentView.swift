@@ -56,7 +56,8 @@ enum RuleEditorTarget: Identifiable {
     }
 }
 
-/// Which columns an iPad shows once a document is opened.
+/// Which columns an iPad shows around the open document (regular width only; iPhone and macOS
+/// leave this to the system).
 enum SplitLayout {
     /// Narrower windows show the list over the document instead of beside it.
     static let sideBySideMinimumWidth: CGFloat = 1000
@@ -65,6 +66,20 @@ enum SplitLayout {
     /// one tap away (`showList`). Wider windows keep the list beside the document.
     static func columnsAfterOpeningDocument(windowWidth: CGFloat) -> NavigationSplitViewVisibility {
         windowWidth < sideBySideMinimumWidth ? .detailOnly : .doubleColumn
+    }
+
+    /// The open document was closed (deleted): if only the document column was shown, nothing
+    /// but an empty column would be left, so the list comes back. Other choices stay.
+    static func columnsAfterClosingDocument(_ current: NavigationSplitViewVisibility) -> NavigationSplitViewVisibility {
+        current == .detailOnly ? .doubleColumn : current
+    }
+
+    /// The window width changed while a document is open (rotation, Stage Manager). The columns
+    /// are chosen again only when the width crosses `sideBySideMinimumWidth`, so a smaller resize
+    /// keeps what the user chose. `nil`: keep the current columns.
+    static func columnsAfterResize(from oldWidth: CGFloat, to newWidth: CGFloat) -> NavigationSplitViewVisibility? {
+        guard (oldWidth < sideBySideMinimumWidth) != (newWidth < sideBySideMinimumWidth) else { return nil }
+        return columnsAfterOpeningDocument(windowWidth: newWidth)
     }
 }
 
@@ -100,44 +115,54 @@ struct ContentView: View {
             DocumentListView(
                 filter: sidebarSelection ?? .all,
                 searchText: searchText,
-                selection: $selectedDocument,
+                selection: listSelection,
                 importMenu: { importMenu },
                 onDropFiles: { report(DocumentImporter.importDropped($0, into: context)) }
             )
             .searchable(text: $searchText, prompt: "Search full text")
         } detail: {
-            if let selectedDocument, selectedDocument.isAlive {
-                DocumentDetailView(document: selectedDocument, editorTarget: $editorTarget) {
-                    self.selectedDocument = nil
+            Group {
+                if let selectedDocument, selectedDocument.isAlive {
+                    DocumentDetailView(document: selectedDocument, editorTarget: $editorTarget) {
+                        self.selectedDocument = nil
+                    }
+                    .id(selectedDocument.id)
+                } else {
+                    ContentUnavailableView("No Document Selected", systemImage: "doc.text.magnifyingglass",
+                                           description: Text("Select a document on the left or add a new one."))
                 }
-                .id(selectedDocument.id)
-                #if os(iOS)
-                .toolbar {
-                    if showsListButton {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button("Show List", systemImage: "sidebar.leading") { columnVisibility = .doubleColumn }
-                                .accessibilityIdentifier(AccessibilityID.showList)
-                        }
+            }
+            #if os(iOS)
+            // On the whole column, so the way back is also there when the open document is gone
+            // (deleted in another window or by sync) and only the empty state is left.
+            .toolbar {
+                if showsListButton {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Show List", systemImage: "sidebar.leading") { columnVisibility = .doubleColumn }
+                            .accessibilityIdentifier(AccessibilityID.showList)
                     }
                 }
-                // Our own button instead of the system one: iPadOS 26 showed no sidebar button
-                // at all for an opened document, so there was no way back to the list.
-                .toolbar(removing: showsListButton ? .sidebarToggle : nil)
-                #endif
-            } else {
-                ContentUnavailableView("No Document Selected", systemImage: "doc.text.magnifyingglass",
-                                       description: Text("Select a document on the left or add a new one."))
             }
+            // Our own button instead of the system one: iPadOS 26 showed no sidebar button
+            // at all for an opened document, so there was no way back to the list.
+            .toolbar(removing: showsListButton ? .sidebarToggle : nil)
+            #endif
         }
         .onChange(of: sidebarSelection) { selectedDocument = nil }
         #if os(iOS)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
         .onChange(of: selectedDocument) {
-            // The opened document comes to the front. Forcing all columns kept the list laid
-            // over the document in portrait (iPad mini), and the first tap only closed the list.
-            if selectedDocument != nil, horizontalSizeClass == .regular {
-                columnVisibility = SplitLayout.columnsAfterOpeningDocument(windowWidth: windowWidth)
+            guard horizontalSizeClass == .regular else { return }
+            if selectedDocument != nil {
+                bringOpenDocumentToFront()
+            } else {
+                columnVisibility = SplitLayout.columnsAfterClosingDocument(columnVisibility)
             }
+        }
+        .onChange(of: windowWidth) { oldWidth, newWidth in
+            guard horizontalSizeClass == .regular, selectedDocument?.isAlive == true,
+                  let columns = SplitLayout.columnsAfterResize(from: oldWidth, to: newWidth) else { return }
+            columnVisibility = columns
         }
         #endif
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: DocumentImporter.importableTypes,
@@ -205,11 +230,33 @@ struct ContentView: View {
         }
     }
 
+    /// The list's selection. Tapping the document that is already open sets the same value,
+    /// so `onChange(of: selectedDocument)` does not fire; on iPad it must still bring the
+    /// document back to the front when the list was laid over it (Show List in a narrow window).
+    private var listSelection: Binding<Document?> {
+        Binding {
+            selectedDocument
+        } set: { document in
+            #if os(iOS)
+            if let document, document == selectedDocument, horizontalSizeClass == .regular {
+                bringOpenDocumentToFront()
+            }
+            #endif
+            selectedDocument = document
+        }
+    }
+
     #if os(iOS)
     /// Only the document is shown on an iPad: offer the way back to the list. On iPhone the
     /// navigation bar's back button does that.
     private var showsListButton: Bool {
         horizontalSizeClass == .regular && columnVisibility == .detailOnly
+    }
+
+    /// The opened document comes to the front. Forcing all columns kept the list laid over the
+    /// document in portrait (iPad mini), and the first tap only closed the list.
+    private func bringOpenDocumentToFront() {
+        columnVisibility = SplitLayout.columnsAfterOpeningDocument(windowWidth: windowWidth)
     }
     #endif
 

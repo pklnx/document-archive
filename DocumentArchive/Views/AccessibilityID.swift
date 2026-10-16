@@ -16,6 +16,9 @@ enum AccessibilityID {
     static let showList = "documentDetail.showList"
     static let inspectorToggle = "documentDetail.inspectorToggle"
     static let inspector = "documentDetail.inspector"
+    static let documentMore = "documentDetail.more"
+    static let documentDelete = "documentDetail.delete"
+    static let documentDeleteConfirm = "documentDetail.deleteConfirm"
 
     static let ruleEditorCancel = "ruleEditor.cancel"
 

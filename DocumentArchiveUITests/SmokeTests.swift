@@ -48,17 +48,47 @@ final class SmokeTests: XCTestCase {
             if showList.exists, showList.isHittable {
                 showList.tap()
             } else {
-                // Prefer a bar that is not the document's (iPad); on iPhone only the document's
-                // bar is there, and its first button is Back.
+                // Prefer a bar that is not the document's (iPad). Only on iPhone may it be the
+                // document's bar, whose first button is Back. On iPad that bar's first button is
+                // the document's own ("Mark as Done"), so stop and let the assertion fail.
                 let bars = app.navigationBars.allElementsBoundByIndex
-                let bar = bars.first { !$0.buttons["documentDetail.inspectorToggle"].exists } ?? bars.first
+                let bar = bars.first { !$0.buttons["documentDetail.inspectorToggle"].exists }
+                    ?? (isPhone ? bars.first : nil)
                 guard let button = bar?.buttons.element(boundBy: 0), button.exists,
-                      button.identifier != "documentDetail.inspectorToggle" else { break }
+                      !button.identifier.hasPrefix("documentDetail.") else { break }
                 button.tap()
             }
             _ = element.waitForExistence(timeout: 2)
         }
         XCTAssertTrue(element.isHittable, "\(what) not reachable")
+    }
+
+    /// An iPad window narrower than `SplitLayout.sideBySideMinimumWidth` (iPad mini, iPad Air
+    /// and iPad Pro 11" in portrait): an opened document is shown alone, with Show List.
+    private var isNarrowIPad: Bool { !isPhone && app.windows.firstMatch.frame.width < 1000 }
+
+    private func waitUntilHittable(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: element)
+        return XCTWaiter().wait(for: [hittable], timeout: timeout) == .completed
+    }
+
+    /// Rotates and waits until the window has the new orientation.
+    private func rotate(to orientation: UIDeviceOrientation) {
+        XCUIDevice.shared.orientation = orientation
+        let window = app.windows.firstMatch
+        let portrait = orientation.isPortrait
+        for _ in 0..<20 where (window.frame.width < window.frame.height) != portrait {
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        Thread.sleep(forTimeInterval: 1)   // the split view settles after the window
+    }
+
+    /// Narrow iPad with a document open: only the document is shown and Show List is offered.
+    private func assertOnlyTheDocumentIsShown(_ listRow: String, _ situation: String) {
+        XCTAssertTrue(element("documentDetail.showList").waitForExistence(timeout: 5),
+                      "\(situation): no Show List button")
+        XCTAssertTrue(element("documentDetail.inspectorToggle").isHittable, "\(situation): document not in front")
+        XCTAssertFalse(row(listRow).isHittable, "\(situation): the list covers the document")
     }
 
     private func showSidebar() { reveal(element("sidebar.settings"), "sidebar") }
@@ -76,11 +106,15 @@ final class SmokeTests: XCTestCase {
         openDocument(firstDocument)
         // The document comes to the front, not covered by the list.
         XCTAssertTrue(element("documentDetail.inspectorToggle").isHittable)
-        if !isPhone, element("documentDetail.showList").exists {
+        if isNarrowIPad {
             // Regression (iPadOS 26): with only the document shown there was no way back.
+            assertOnlyTheDocumentIsShown(secondDocument, "opened")
             element("documentDetail.showList").tap()
-            XCTAssertTrue(row(secondDocument).waitForExistence(timeout: 5) && row(secondDocument).isHittable,
-                          "Show List did not bring the list back")
+            XCTAssertTrue(waitUntilHittable(row(secondDocument)), "Show List did not bring the list back")
+            attachScreenshot("list over the document")
+            // Tapping the document that is already open brings it to the front again.
+            row(firstDocument).tap()
+            assertOnlyTheDocumentIsShown(secondDocument, "re-selected")
         }
         if isPhone {
             // On iPhone the inspector is a sheet that stays closed until Info is tapped.
@@ -180,5 +214,31 @@ final class SmokeTests: XCTestCase {
         attachScreenshot("landscape sidebar")
         element("sidebar.inbox").tap()
         openDocument("Water bill")
+
+        // Back to portrait with the document open: the narrow window shows only the document
+        // again instead of laying the list over it.
+        rotate(to: .portrait)
+        attachScreenshot("portrait document after rotation")
+        if isNarrowIPad { assertOnlyTheDocumentIsShown(firstDocument, "rotated to portrait") }
+        openDocument(firstDocument)
+    }
+
+    /// Regression: deleting the open document on a narrow iPad left only the empty document
+    /// column, with no list and no Show List button.
+    func testDeletingTheOpenDocumentShowsTheList() {
+        openDocument(firstDocument)
+        element("documentDetail.more").tap()
+        let delete = element("documentDetail.delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+        let confirm = element("documentDetail.deleteConfirm")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        XCTAssertTrue(row(firstDocument).waitForNonExistence(timeout: 5), "document was not deleted")
+        attachScreenshot("after deleting the open document")
+        // No reveal(): the list must be there without searching for a button.
+        XCTAssertTrue(waitUntilHittable(row(secondDocument)), "list not shown after deleting the open document")
+        openDocument(secondDocument)
     }
 }
