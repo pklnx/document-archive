@@ -47,7 +47,7 @@ import Testing
         #expect(typeFile.name == "Invoice")
         #expect(typeFile.changedAt != nil)
         let info = try ArchiveFolderFormat.decode(ArchiveInfo.self, from: Data(contentsOf: layout.archiveInfo))
-        #expect(info.formatVersion == "1.0")
+        #expect(info.formatVersion == ArchiveFolderFormat.currentVersion.description)
     }
 
     @Test func documentsStillProcessingWaitForTheirText() async throws {
@@ -288,7 +288,7 @@ import Testing
     /// The real store's identity: stable for one store file, different for another one.
     @Test func storeIdentifierBelongsToTheStoreFile() throws {
         let folder = try TestSupport.makeTemporaryDirectory()
-        let schema = Schema([Document.self, ArchiveTag.self, Correspondent.self, DocumentType.self])
+        let schema = DocumentArchiveApp.schema
         func open(_ name: String) throws -> URL {
             let url = folder.appending(path: "\(name).store")
             let container = try ModelContainer(for: schema, configurations: ModelConfiguration(

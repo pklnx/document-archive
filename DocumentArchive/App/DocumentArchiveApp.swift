@@ -3,6 +3,11 @@ import SwiftUI
 
 @main
 struct DocumentArchiveApp: App {
+    /// Every synced model: the store, the tests and the UI test data all use this one schema.
+    nonisolated static var schema: Schema {
+        Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
+    }
+
     let container: ModelContainer
 
     /// Creates the store chosen at launch (see `StoreChoice`). With CloudKit, SwiftData syncs
@@ -11,8 +16,12 @@ struct DocumentArchiveApp: App {
     init() {
         let choice = ArchiveStore.currentChoice()
         container = ArchiveStore.makeContainer(for: choice)
+        let changes = StoreChangeObserver(container: container)
         if choice.isOnDisk {
-            ArchiveMirrorController.shared.start(container: container)
+            ArchiveMirrorController.shared.start(container: container, changes: changes)
+        }
+        if !TestEnvironment.isRunningTests {
+            TagCycleRepair.shared.start(container: container, changes: changes)
         }
     }
 

@@ -50,4 +50,15 @@ import Testing
         doc.toggleTag(tag)
         #expect(!doc.hasTag(tag))
     }
+
+    /// #13: new tags are roots with the default symbol; older tags get the same defaults.
+    @Test @MainActor func newTagDefaults() throws {
+        let container = try TestSupport.makeContainer()
+        let tag = ArchiveTag(name: "Plain")
+        container.mainContext.insert(tag)
+        try container.mainContext.save()
+        #expect(tag.parent == nil)
+        #expect(tag.children?.isEmpty == true)
+        #expect(tag.symbol == "tag.fill")
+    }
 }

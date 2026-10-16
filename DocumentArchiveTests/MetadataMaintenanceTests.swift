@@ -110,4 +110,120 @@ import Testing
         // A stale reference must not show up as a duplicate group again
         #expect(MetadataMaintenance.duplicateDocumentGroups([original, copy]).isEmpty)
     }
+
+    // MARK: Nested tags (#13)
+
+    /// Two devices both created Auto › Golf › Werkstatt before syncing: one call merges all levels.
+    @Test func identicalTreesMergeInOneCall() throws {
+        func tree(_ createdAt: Date) -> [ArchiveTag] {
+            let auto = ArchiveTag(name: "Auto")
+            let golf = ArchiveTag(name: "Golf")
+            let werkstatt = ArchiveTag(name: "Werkstatt")
+            for tag in [auto, golf, werkstatt] {
+                tag.createdAt = createdAt
+                context.insert(tag)
+            }
+            golf.parent = auto
+            werkstatt.parent = golf
+            return [auto, golf, werkstatt]
+        }
+        let first = tree(Date(timeIntervalSince1970: 1000))
+        let second = tree(Date(timeIntervalSince1970: 2000))
+        let documents = (first + second).map { tag in
+            let document = insertDocument(tag.name)
+            document.tags = [tag]
+            return document
+        }
+        try context.save()
+
+        #expect(MetadataMaintenance.mergeDuplicates(in: context) == 3)
+
+        let tags = try context.fetch(FetchDescriptor<ArchiveTag>())
+        #expect(Set(tags.map(\.id)) == Set(first.map(\.id)), "the older tree is kept")
+        #expect(first[1].parent?.id == first[0].id)
+        #expect(first[2].parent?.id == first[1].id)
+        #expect(try context.fetchCount(FetchDescriptor<Document>()) == 6, "all documents kept")
+        for (index, document) in documents.enumerated() {
+            #expect(document.tags?.map(\.id) == [first[index % 3].id])
+        }
+    }
+
+    @Test func sameNameUnderDifferentParentsIsNotMerged() throws {
+        let golf = ArchiveTag(name: "Golf")
+        let polo = ArchiveTag(name: "Polo")
+        let golfWorkshop = ArchiveTag(name: "Werkstatt")
+        let poloWorkshop = ArchiveTag(name: "werkstatt")
+        [golf, polo, golfWorkshop, poloWorkshop].forEach(context.insert)
+        golfWorkshop.parent = golf
+        poloWorkshop.parent = polo
+        try context.save()
+
+        #expect(MetadataMaintenance.mergeDuplicates(in: context) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<ArchiveTag>()) == 4)
+    }
+
+    /// Device 1 put A under B, device 2 put B under A′ (a duplicate of A). Merging A′ into A must
+    /// not close the cycle A → B → A.
+    @Test func mergeThenRepairHasNoCycle() throws {
+        let a = ArchiveTag(name: "A")
+        a.createdAt = Date(timeIntervalSince1970: 1000)
+        let aPrime = ArchiveTag(name: "A")
+        aPrime.createdAt = Date(timeIntervalSince1970: 2000)
+        let b = ArchiveTag(name: "B")
+        [a, aPrime, b].forEach(context.insert)
+        a.parent = b
+        b.parent = aPrime
+        try context.save()
+
+        MetadataMaintenance.merge([aPrime], into: a, in: context, recorder: nil)
+        #expect(TagHierarchy.repairCycles(in: context) == 0, "the merge itself created no cycle")
+        try context.save()
+
+        let tags = try context.fetch(FetchDescriptor<ArchiveTag>())
+        #expect(tags.count == 2)
+        #expect(tags.allSatisfy { TagHierarchy.isRooted($0) })
+        #expect(b.parent == nil, "B was an ancestor of the keeper, so it became a root")
+        #expect(a.parent?.id == b.id)
+    }
+
+    /// A cycle that arrived by sync is repaired by the launch merge in the same call.
+    @Test func mergeDuplicatesRepairsCycles() throws {
+        let a = ArchiveTag(name: "A")
+        a.createdAt = Date(timeIntervalSince1970: 1000)
+        let b = ArchiveTag(name: "B")
+        [a, b].forEach(context.insert)
+        b.parent = a
+        a.parent = b
+        try context.save()
+
+        MetadataMaintenance.mergeDuplicates(in: context)
+        #expect(a.parent == nil)
+        #expect(b.parent?.id == a.id)
+        #expect(!context.hasChanges)
+    }
+
+    /// Merges record a tombstone with `mergedInto` for every kind.
+    @Test func mergesRecordTombstonesForEveryKind() throws {
+        let recorder = RecordedDeletions()
+        let keeperTag = ArchiveTag(name: "Tax")
+        keeperTag.createdAt = .distantPast
+        let duplicateTag = ArchiveTag(name: "tax")
+        let keeperType = DocumentType(name: "Invoice")
+        keeperType.createdAt = .distantPast
+        let duplicateType = DocumentType(name: "Invoice")
+        let keeperCorrespondent = Correspondent(name: "Telekom")
+        keeperCorrespondent.createdAt = .distantPast
+        let duplicateCorrespondent = Correspondent(name: "Telekom")
+        [keeperTag, duplicateTag].forEach(context.insert)
+        [keeperType, duplicateType].forEach(context.insert)
+        [keeperCorrespondent, duplicateCorrespondent].forEach(context.insert)
+        try context.save()
+
+        #expect(MetadataMaintenance.mergeDuplicates(in: context, recorder: recorder) == 3)
+        let merged = Dictionary(uniqueKeysWithValues: recorder.records.map { ($0.id, $0.mergedInto) })
+        #expect(merged[duplicateTag.id] == keeperTag.id)
+        #expect(merged[duplicateType.id] == keeperType.id)
+        #expect(merged[duplicateCorrespondent.id] == keeperCorrespondent.id)
+    }
 }
+

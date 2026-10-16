@@ -911,6 +911,16 @@
         }
       }
     },
+    "Documents with a nested tag also appear under its parent tag.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumente mit einem Untertag erscheinen auch unter seinem übergeordneten Tag."
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "de": {
@@ -1781,6 +1791,16 @@
         }
       }
     },
+    "None (top level)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keiner (oberste Ebene)"
+          }
+        }
+      }
+    },
     "None since the app started": {
       "localizations": {
         "de": {
@@ -1907,6 +1927,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Seiten"
+          }
+        }
+      }
+    },
+    "Parent tag": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übergeordneter Tag"
           }
         }
       }
@@ -2617,6 +2647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Dokumente selbst bleiben erhalten."
+          }
+        }
+      }
+    },
+    "The documents themselves are kept. Tags nested in this tag move up one level.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Dokumente selbst bleiben erhalten. Untertags rücken eine Ebene nach oben."
           }
         }
       }

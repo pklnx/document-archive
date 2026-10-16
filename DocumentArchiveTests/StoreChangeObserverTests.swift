@@ -44,7 +44,7 @@ import Testing
 
     /// An archive on disk, so its store has its own URL (in-memory stores share `/dev/null`).
     private func makeStoreOnDisk() throws -> ModelContainer {
-        let schema = Schema([Document.self, ArchiveTag.self, Correspondent.self, DocumentType.self])
+        let schema = DocumentArchiveApp.schema
         let url = try TestSupport.makeTemporaryDirectory().appending(path: "Test.store")
         return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, url: url,
                                                                                   cloudKitDatabase: .none))
