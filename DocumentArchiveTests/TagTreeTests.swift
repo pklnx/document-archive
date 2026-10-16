@@ -236,7 +236,7 @@ import UniformTypeIdentifiers
         #expect(!TagHierarchy.isRooted(auto))
 
         let clock = ContinuousClock()
-        let deadline = clock.now + TestSupport.scaled(.seconds(10))
+        let deadline = clock.now + TestSupport.scaled(.seconds(30))
         while !TagHierarchy.isRooted(auto), clock.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }

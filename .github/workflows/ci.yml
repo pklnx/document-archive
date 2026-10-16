@@ -153,9 +153,14 @@ jobs:
       - name: Pick simulator
         id: simulator
         run: echo "udid=$(python3 scripts/pick-simulator.py iphone smallest)" >> "$GITHUB_OUTPUT"
+      # The tests run in parallel (TestPlans/Default.xctestplan). On the simulator of the hosted
+      # runner the OCR tests then share a few slow cores and take minutes each, so the test waits
+      # get three times their timeout here (DA_TEST_TIMEOUT_SCALE; xcodebuild passes TEST_RUNNER_
+      # variables on to the tests).
       - name: Test
         env:
           UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_RUNNER_DA_TEST_TIMEOUT_SCALE: 3
         run: |
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \

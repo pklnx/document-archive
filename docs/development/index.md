@@ -86,7 +86,10 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 
 Every wait for something asynchronous in a test scales its timeout with
 `TestSupport.scaled(_:)` (`DA_TEST_TIMEOUT_SCALE`, default 1);
-`TestSupport.waitUntilProcessed` does this already. A Thread Sanitizer report
+`TestSupport.waitUntilProcessed` does this already. On the command line,
+`xcodebuild` passes it on as `TEST_RUNNER_DA_TEST_TIMEOUT_SCALE=3`; `test (iOS)`
+in CI does this, because the parallel OCR tests share the hosted runner's few
+slow cores there. A Thread Sanitizer report
 in app code becomes an issue labeled `bug`; a race in test code is fixed in
 the test.
 
