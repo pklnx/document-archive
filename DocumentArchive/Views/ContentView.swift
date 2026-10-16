@@ -91,13 +91,19 @@ struct ImportNotice {
 struct ContentView: View {
     @Environment(\.modelContext) private var context
 
+    @Query(sort: \Document.createdAt, order: .reverse) private var allDocuments: [Document]
+    @AppStorage("documentSort") private var sort: DocumentSort = .added
+
     @State private var sidebarSelection: SidebarItem? = .all
-    @State private var selectedDocument: Document?
+    /// The selected documents (see `DocumentSelection` for the rules).
+    @State private var selection: Set<Document.ID> = []
     @State private var searchText = ""
     @State private var columnVisibility = NavigationSplitViewVisibility.all
+    @State private var bulkActions = BulkActionCoordinator()
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var windowWidth: CGFloat = 0
+    @State private var editMode = EditMode.inactive
     #endif
 
     @State private var showFileImporter = false
@@ -108,25 +114,42 @@ struct ContentView: View {
     @State private var editorTarget: RuleEditorTarget?
     @State private var importNotice: ImportNotice?
 
+    /// What the list shows; the selection only ever refers to these documents.
+    private var visibleDocuments: [Document] {
+        (sidebarSelection ?? .all).visibleDocuments(in: allDocuments, searchText: searchText, sort: sort)
+    }
+
     var body: some View {
+        let visibleDocuments = visibleDocuments
+        let selectedDocuments = DocumentSelection.resolve(selection, in: visibleDocuments)
+        // The open document stays open while an edit hides it from the list (see DocumentSelection).
+        let openDocument = DocumentSelection.openDocument(selection, in: allDocuments)
+            ?? (selectedDocuments.count == 1 ? selectedDocuments.first : nil)
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: $sidebarSelection, editorTarget: $editorTarget, showSettings: $showSettings)
         } content: {
             DocumentListView(
                 filter: sidebarSelection ?? .all,
                 searchText: searchText,
+                documents: visibleDocuments,
                 selection: listSelection,
+                showsBulkToolbar: showsBulkToolbar,
                 importMenu: { importMenu },
                 onDropFiles: { report(DocumentImporter.importDropped($0, into: context)) }
             )
             .searchable(text: $searchText, prompt: "Search full text")
+            #if os(iOS)
+            .environment(\.editMode, $editMode)
+            #endif
         } detail: {
             Group {
-                if let selectedDocument, selectedDocument.isAlive {
-                    DocumentDetailView(document: selectedDocument, editorTarget: $editorTarget) {
-                        self.selectedDocument = nil
+                if let document = openDocument {
+                    DocumentDetailView(document: document, editorTarget: $editorTarget) {
+                        selection.remove(document.id)
                     }
-                    .id(selectedDocument.id)
+                    .id(document.id)
+                } else if selectedDocuments.count > 1 {
+                    BulkActionsView(documents: selectedDocuments)
                 } else {
                     ContentUnavailableView("No Document Selected", systemImage: "doc.text.magnifyingglass",
                                            description: Text("Select a document on the left or add a new one."))
@@ -148,19 +171,33 @@ struct ContentView: View {
             .toolbar(removing: showsListButton ? .sidebarToggle : nil)
             #endif
         }
-        .onChange(of: sidebarSelection) { selectedDocument = nil }
+        .environment(bulkActions)
+        .onChange(of: sidebarSelection) {
+            selection = []
+            #if os(iOS)
+            editMode = .inactive
+            #endif
+        }
+        // Search text, sync or an action changed what is visible: nothing hidden stays selected.
+        .onChange(of: visibleDocuments.map(\.id)) {
+            prune(keepingOpen: true)
+        }
+        // A new search closes an open document it hides.
+        .onChange(of: searchText) {
+            prune(keepingOpen: false)
+        }
         #if os(iOS)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
-        .onChange(of: selectedDocument) {
-            guard horizontalSizeClass == .regular else { return }
-            if selectedDocument != nil {
+        .onChange(of: openDocumentID) {
+            guard horizontalSizeClass == .regular, !editMode.isEditing else { return }
+            if openDocumentID != nil {
                 bringOpenDocumentToFront()
             } else {
                 columnVisibility = SplitLayout.columnsAfterClosingDocument(columnVisibility)
             }
         }
         .onChange(of: windowWidth) { oldWidth, newWidth in
-            guard horizontalSizeClass == .regular, selectedDocument?.isAlive == true,
+            guard horizontalSizeClass == .regular, openDocumentID != nil,
                   let columns = SplitLayout.columnsAfterResize(from: oldWidth, to: newWidth) else { return }
             columnVisibility = columns
         }
@@ -210,6 +247,25 @@ struct ContentView: View {
         .sheet(item: $editorTarget) { target in
             RuleEditorView(target: target)
         }
+        .confirmationDialog(Text(deleteTitle), isPresented: Binding(presenting: $bulkActions.pendingDelete),
+                            titleVisibility: .visible, presenting: bulkActions.pendingDelete) { request in
+            Button("Delete", role: .destructive) { deleteConfirmed(request) }
+                .accessibilityIdentifier(AccessibilityID.bulkDeleteConfirm)
+            Button("Cancel", role: .cancel) {}
+        } message: { request in
+            Text(Self.deleteMessage(for: request.documents))
+        }
+        .confirmationDialog(Text(reanalysisTitle), isPresented: Binding(presenting: $bulkActions.pendingReanalysis),
+                            titleVisibility: .visible, presenting: bulkActions.pendingReanalysis) { request in
+            Button("Analyze Again") {
+                bulkActions.startReanalysis(DocumentSelection.resolve(Set(request.documents.map(\.id)), in: visibleDocuments),
+                                            context: context)
+            }
+            .accessibilityIdentifier(AccessibilityID.bulkReanalyzeConfirm)
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text(Self.reanalysisMessage(usesMistral: MistralConfig.current().map { $0.useOCR || $0.useLLM } ?? false))
+        }
         .alert(importNotice?.title ?? "", isPresented: Binding(presenting: $importNotice), presenting: importNotice) { _ in
             Button("OK") {}
         } message: { notice in
@@ -231,19 +287,79 @@ struct ContentView: View {
     }
 
     /// The list's selection. Tapping the document that is already open sets the same value,
-    /// so `onChange(of: selectedDocument)` does not fire; on iPad it must still bring the
+    /// so `onChange(of: openDocumentID)` does not fire; on iPad it must still bring the
     /// document back to the front when the list was laid over it (Show List in a narrow window).
-    private var listSelection: Binding<Document?> {
+    private var listSelection: Binding<Set<Document.ID>> {
         Binding {
-            selectedDocument
-        } set: { document in
+            selection
+        } set: { newSelection in
             #if os(iOS)
-            if let document, document == selectedDocument, horizontalSizeClass == .regular {
+            if newSelection.count == 1, newSelection == selection, horizontalSizeClass == .regular, !editMode.isEditing {
                 bringOpenDocumentToFront()
             }
             #endif
-            selectedDocument = document
+            selection = newSelection
         }
+    }
+
+    /// Removes hidden documents from the selection. `keepingOpen`: the open document stays,
+    /// because the list changed through an edit (not in edit mode, where bulk rules apply).
+    private func prune(keepingOpen: Bool) {
+        var open: Document?
+        if keepingOpen {
+            #if os(iOS)
+            if !editMode.isEditing { open = DocumentSelection.openDocument(selection, in: allDocuments) }
+            #else
+            open = DocumentSelection.openDocument(selection, in: allDocuments)
+            #endif
+        }
+        let pruned = DocumentSelection.pruned(selection, to: visibleDocuments, keepingOpen: open)
+        if pruned != selection { selection = pruned }
+    }
+
+    /// The one selected document, which the detail column shows; `nil` for none or several.
+    private var openDocumentID: Document.ID? {
+        selection.count == 1 ? selection.first : nil
+    }
+
+    private var deleteTitle: String {
+        let count = bulkActions.pendingDelete?.documents.count ?? 0
+        return count == 1 ? String(localized: "Delete document?") : String(localized: "Delete \(count) documents?")
+    }
+
+    static func deleteMessage(for documents: [Document]) -> String {
+        if documents.count == 1, let document = documents.first {
+            return String(localized: "“\(document.isAlive ? document.title : "")” will be deleted on all devices.")
+        }
+        return String(localized: "\(documents.count) documents will be deleted on all devices.")
+    }
+
+    private var reanalysisTitle: String {
+        let count = bulkActions.pendingReanalysis?.documents.count ?? 0
+        return count == 1 ? String(localized: "Analyze 1 document again?")
+                          : String(localized: "Analyze \(count) documents again?")
+    }
+
+    static func reanalysisMessage(usesMistral: Bool) -> String {
+        let text = String(localized: "Text recognition and automatic assignment run again, one document after another. Correspondent, type, tags and date may change.")
+        guard usesMistral else { return text }
+        return text + " " + String(localized: "As set in the settings, the documents are sent to Mistral AI.")
+    }
+
+    /// Deletes what is still selected and visible of the confirmed documents.
+    private func deleteConfirmed(_ request: BulkRequest) {
+        let documents = DocumentSelection.resolve(Set(request.documents.map(\.id)), in: visibleDocuments)
+        selection.subtract(documents.map(\.id))
+        BulkEditor.delete(documents, in: context)
+    }
+
+    private var showsBulkToolbar: Bool {
+        #if os(iOS)
+        // Wide iPad windows show `BulkActionsView` beside the list instead.
+        horizontalSizeClass == .compact || windowWidth < SplitLayout.sideBySideMinimumWidth
+        #else
+        false
+        #endif
     }
 
     #if os(iOS)
@@ -310,12 +426,22 @@ struct ContentView: View {
     }
 
     private func showExisting(_ document: Document) {
+        prepareToShow(document)
         if let filter = sidebarSelection, filter.includes(document) {
-            selectedDocument = document
+            selection = [document.id]
         } else {
             sidebarSelection = .all
-            Task { @MainActor in selectedDocument = document }
+            Task { @MainActor in selection = [document.id] }
         }
+    }
+
+    /// Before opening a document: leave edit mode, and clear a search that would hide it (the
+    /// selection only keeps visible documents).
+    private func prepareToShow(_ document: Document) {
+        #if os(iOS)
+        editMode = .inactive
+        #endif
+        if !document.matches(searchText) { searchText = "" }
     }
 
     private func importPhotos(_ items: [PhotosPickerItem]) async {
@@ -340,13 +466,14 @@ struct ContentView: View {
     }
 
     private func select(_ document: Document) {
+        prepareToShow(document)
         // New documents are in the inbox; switch there if needed, so they are visible.
         if let filter = sidebarSelection, filter != .inbox, filter != .all, filter != .recent {
             sidebarSelection = .inbox
             // Select only after `onChange(of: sidebarSelection)` has reset the selection
-            Task { @MainActor in selectedDocument = document }
+            Task { @MainActor in selection = [document.id] }
         } else {
-            selectedDocument = document
+            selection = [document.id]
         }
     }
 }

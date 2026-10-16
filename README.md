@@ -20,6 +20,7 @@ The app is available in English and German.
 - **Automatic assignment** with matching rules (any/all words, exact phrase, regex), sender detection and **issue date detection**
 - **Duplicate detection:** identical files are skipped on import
 - **Inbox** for new documents, favorites, sorting, sharing and PDF export
+- **Several documents at once:** select them (Mac: ⌘/⇧-click, ⌘A; iPhone/iPad: "Select") and set tags, correspondent, type, inbox and favorite, analyze them again or delete them together
 
 ## Setup (once)
 

@@ -16,33 +16,21 @@ enum DocumentSort: String, CaseIterable, Identifiable {
     }
 }
 
-struct DocumentListView<ImportMenu: View>: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Document.createdAt, order: .reverse) private var allDocuments: [Document]
-
-    let filter: SidebarItem
-    let searchText: String
-    @Binding var selection: Document?
-    @ViewBuilder var importMenu: () -> ImportMenu
-    var onDropFiles: ([ImportedFile]) -> Void
-
-    @AppStorage("documentSort") private var sort: DocumentSort = .added
-    @State private var isDropTargeted = false
-    @State private var documentToDelete: Document?
-    @State private var confirmRemoveDuplicates = false
-
-    private var documents: [Document] {
+extension SidebarItem {
+    /// The documents the list shows for this sidebar entry, search text and sort order.
+    /// `ContentView` resolves the selection against exactly this list (see `DocumentSelection`).
+    @MainActor func visibleDocuments(in allDocuments: [Document], searchText: String, sort: DocumentSort) -> [Document] {
         let allDocuments = allDocuments.filter(\.isAlive)
-        if filter == .duplicates {
+        if self == .duplicates {
             // Show duplicates grouped, each with the original (oldest) first
             return MetadataMaintenance.duplicateDocumentGroups(allDocuments)
                 .flatMap { $0 }
                 .filter { $0.matches(searchText) }
         }
-        let filtered = allDocuments.filter { filter.includes($0) && $0.matches(searchText) }
+        let filtered = allDocuments.filter { includes($0) && $0.matches(searchText) }
         switch sort {
         case .added:
-            return filtered
+            return filtered.sorted { $0.createdAt > $1.createdAt }
         case .documentDate:
             return filtered.sorted { $0.documentDate > $1.documentDate }
         case .title:
@@ -53,54 +41,92 @@ struct DocumentListView<ImportMenu: View>: View {
             }
         }
     }
+}
+
+struct DocumentListView<ImportMenu: View>: View {
+    @Environment(\.modelContext) private var context
+    @Environment(BulkActionCoordinator.self) private var bulkActions: BulkActionCoordinator?
+    #if os(iOS)
+    @Environment(\.editMode) private var editMode
+    #endif
+
+    let filter: SidebarItem
+    let searchText: String
+    /// The visible documents, in list order (`SidebarItem.visibleDocuments`).
+    let documents: [Document]
+    @Binding var selection: Set<Document.ID>
+    /// iOS edit mode: the bulk actions go into a bottom toolbar (iPhone, narrow iPad windows),
+    /// because no detail column with `BulkActionsView` is shown beside the list.
+    var showsBulkToolbar = false
+    @ViewBuilder var importMenu: () -> ImportMenu
+    var onDropFiles: ([ImportedFile]) -> Void
+
+    @AppStorage("documentSort") private var sort: DocumentSort = .added
+    @State private var isDropTargeted = false
+    @State private var documentToDelete: Document?
+    @State private var confirmRemoveDuplicates = false
+
+    private var selectedDocuments: [Document] { DocumentSelection.resolve(selection, in: documents) }
 
     var body: some View {
-        let documents = documents
         List(selection: $selection) {
             ForEach(documents) { document in
-                NavigationLink(value: document) {
-                    DocumentRow(document: document)
-                }
-                .accessibilityIdentifier(AccessibilityID.documentRow(document.title))
-                #if os(macOS)
-                // iOS offers the swipe actions to VoiceOver; macOS has no swipe, so name them.
-                .accessibilityAction(named: document.isInbox ? Text("Mark as Done") : Text("Move to Inbox")) {
-                    document.isInbox.toggle()
-                    document.touch()
-                }
-                .accessibilityAction(named: document.isFavorite ? Text("Remove from Favorites") : Text("Add to Favorites")) {
-                    document.isFavorite.toggle()
-                    document.touch()
-                }
-                .accessibilityAction(named: Text("Delete")) { documentToDelete = document }
-                #endif
-                .swipeActions(edge: .leading) {
-                    Button {
+                DocumentRow(document: document)
+                    .accessibilityIdentifier(AccessibilityID.documentRow(document.title))
+                    #if os(macOS)
+                    // iOS offers the swipe actions to VoiceOver; macOS has no swipe, so name them.
+                    .accessibilityAction(named: document.isInbox ? Text("Mark as Done") : Text("Move to Inbox")) {
                         document.isInbox.toggle()
                         document.touch()
-                    } label: {
-                        Label(document.isInbox ? "Mark Done" : "Inbox",
-                              systemImage: document.isInbox ? "tray.and.arrow.up" : "tray.and.arrow.down")
                     }
-                    .tint(.green)
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { documentToDelete = document } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .accessibilityIdentifier(AccessibilityID.deleteSwipe)
-                    Button {
+                    .accessibilityAction(named: document.isFavorite ? Text("Remove from Favorites") : Text("Add to Favorites")) {
                         document.isFavorite.toggle()
                         document.touch()
-                    } label: {
-                        Label("Favorite", systemImage: document.isFavorite ? "star.slash" : "star")
                     }
-                    .tint(.yellow)
-                }
-                .contextMenu { contextMenu(for: document) }
-                .draggable(document.transfer ?? PDFTransfer(data: Data(), fileName: String(localized: "Document") + ".pdf"))
+                    .accessibilityAction(named: Text("Delete")) { documentToDelete = document }
+                    #endif
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            document.isInbox.toggle()
+                            document.touch()
+                        } label: {
+                            Label(document.isInbox ? "Mark Done" : "Inbox",
+                                  systemImage: document.isInbox ? "tray.and.arrow.up" : "tray.and.arrow.down")
+                        }
+                        .tint(.green)
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) { documentToDelete = document } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .accessibilityIdentifier(AccessibilityID.deleteSwipe)
+                        Button {
+                            document.isFavorite.toggle()
+                            document.touch()
+                        } label: {
+                            Label("Favorite", systemImage: document.isFavorite ? "star.slash" : "star")
+                        }
+                        .tint(.yellow)
+                    }
+                    .draggable(document.transfer ?? PDFTransfer(data: Data(), fileName: String(localized: "Document") + ".pdf"))
             }
         }
+        // One menu for the row under the pointer or the whole selection.
+        .contextMenu(forSelectionType: Document.ID.self) { ids in
+            let documents = DocumentSelection.resolve(ids, in: documents)
+            if documents.count == 1, let document = documents.first {
+                contextMenu(for: document)
+            } else if documents.count > 1 {
+                BulkActionsMenu(documents: documents)
+            }
+        }
+        #if os(macOS)
+        // ⌫ only reaches the list while it has the focus, never a text field of the inspector.
+        .onDeleteCommand {
+            let documents = selectedDocuments
+            if !documents.isEmpty { bulkActions?.requestDelete(documents) }
+        }
+        #endif
         .accessibilityIdentifier(AccessibilityID.documentList)
         .overlay {
             if documents.isEmpty { emptyState }
@@ -114,6 +140,11 @@ struct DocumentListView<ImportMenu: View>: View {
                     .allowsHitTesting(false)
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if let bulkActions, let progress = bulkActions.progress {
+                BulkProgressView(progress: progress) { bulkActions.cancelReanalysis() }
+            }
+        }
         .dropDestination(for: ImportedFile.self) { files, _ in
             onDropFiles(files)
             return !files.isEmpty
@@ -121,32 +152,13 @@ struct DocumentListView<ImportMenu: View>: View {
         .navigationTitle(filter.title)
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 300, ideal: 380)
-        .navigationSubtitle("\(documents.count) documents")
+        .navigationSubtitle(selection.count > 1 ? Text("\(selectedDocuments.count) of \(documents.count) selected")
+                                                : Text("\(documents.count) documents"))
         #endif
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                importMenu()
-                    .accessibilityIdentifier(AccessibilityID.importMenu)
-            }
-            if filter == .duplicates, !documents.isEmpty {
-                ToolbarItem {
-                    Button("Remove Duplicates", systemImage: "trash.slash") { confirmRemoveDuplicates = true }
-                }
-            }
-            ToolbarItem {
-                Menu {
-                    Picker("Sort by", selection: $sort) {
-                        ForEach(DocumentSort.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down")
-                }
-            }
-        }
+        .toolbar { toolbar }
         .confirmationDialog("Remove duplicates?", isPresented: $confirmRemoveDuplicates, titleVisibility: .visible) {
             Button("Delete Duplicates", role: .destructive) {
-                selection = nil
+                selection = []
                 MetadataMaintenance.removeDuplicateDocuments(in: context)
             }
         } message: {
@@ -161,6 +173,93 @@ struct DocumentListView<ImportMenu: View>: View {
             Text("“\(document.isAlive ? document.title : "")” will be deleted on all devices.")
         }
     }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        #if os(iOS)
+        if isEditing {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Done") { setEditing(false) }
+                    .accessibilityIdentifier(AccessibilityID.selectButton)
+            }
+            ToolbarItem(placement: .topBarLeading) {
+                let allSelected = !documents.isEmpty && selectedDocuments.count == documents.count
+                Button(allSelected ? "Deselect All" : "Select All") {
+                    selection = allSelected ? [] : Set(documents.map(\.id))
+                }
+                .accessibilityIdentifier(AccessibilityID.selectAll)
+            }
+            if showsBulkToolbar {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    let documents = selectedDocuments
+                    BulkTagsMenu(documents: documents)
+                    Spacer()
+                    BulkInboxButton(documents: documents)
+                    Spacer()
+                    Menu {
+                        BulkActionsMenu(documents: documents, part: .more)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                    .accessibilityIdentifier(AccessibilityID.bulkMore)
+                    .disabled(documents.isEmpty)
+                }
+            }
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                importMenu()
+                    .accessibilityIdentifier(AccessibilityID.importMenu)
+            }
+        }
+        #else
+        ToolbarItem(placement: .primaryAction) {
+            importMenu()
+                .accessibilityIdentifier(AccessibilityID.importMenu)
+        }
+        #endif
+        if filter == .duplicates, !documents.isEmpty, !isEditing {
+            ToolbarItem {
+                Button("Remove Duplicates", systemImage: "trash.slash") { confirmRemoveDuplicates = true }
+            }
+        }
+        if !isEditing {
+            ToolbarItem {
+                Menu {
+                    Picker("Sort by", selection: $sort) {
+                        ForEach(DocumentSort.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
+                }
+            }
+        }
+        #if os(iOS)
+        if !isEditing, !documents.isEmpty {
+            ToolbarItem {
+                Button("Select") { setEditing(true) }
+                    .accessibilityIdentifier(AccessibilityID.selectButton)
+            }
+        }
+        #endif
+    }
+
+    private var isEditing: Bool {
+        #if os(iOS)
+        editMode?.wrappedValue.isEditing == true
+        #else
+        false
+        #endif
+    }
+
+    #if os(iOS)
+    /// "Select" enters edit mode (checkmarks, bottom toolbar on iPhone); "Done" leaves it and
+    /// ends the selection.
+    private func setEditing(_ editing: Bool) {
+        if !editing { selection = [] }
+        withAnimation { editMode?.wrappedValue = editing ? .active : .inactive }
+    }
+    #endif
 
     @ViewBuilder
     private var emptyState: some View {
@@ -208,7 +307,7 @@ struct DocumentListView<ImportMenu: View>: View {
 
     private func delete(_ document: Document) {
         guard document.isAlive else { return }
-        if selection?.id == document.id { selection = nil }
+        selection.remove(document.id)
         context.delete(document)
         try? context.save()
     }

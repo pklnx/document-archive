@@ -10,6 +10,20 @@ enum AccessibilityID {
     static let importMenu = "documentList.import"
     static let deleteSwipe = "documentList.deleteSwipe"
     static let deleteConfirm = "documentList.deleteConfirm"
+    /// iOS: "Select" / "Done" for the list's edit mode.
+    static let selectButton = "documentList.select"
+    static let selectAll = "documentList.selectAll"
+
+    /// Bulk actions for several selected documents (`BulkActionsView`, `BulkActionsMenu`).
+    static let bulkActions = "bulkActions"
+    static let bulkTags = "bulkActions.tags"
+    static let bulkInbox = "bulkActions.inbox"
+    static let bulkMore = "bulkActions.more"
+    static let bulkReanalyze = "bulkActions.reanalyze"
+    static let bulkReanalyzeConfirm = "bulkActions.reanalyzeConfirm"
+    static let bulkCancel = "bulkActions.cancel"
+    static let bulkDelete = "bulkActions.delete"
+    static let bulkDeleteConfirm = "bulkActions.deleteConfirm"
 
     static let documentDetail = "documentDetail"
     /// iPad: back from the document to the list.

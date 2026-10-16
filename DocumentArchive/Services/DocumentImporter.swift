@@ -129,32 +129,39 @@ enum DocumentImporter {
     }
 
     /// Creates the thumbnail and the full text in the background and saves the result.
+    /// Returns at once; `processAndWait` does the work.
     /// - Parameter classify: Assign correspondent, type, tags and date automatically after text recognition.
     static func process(_ document: Document, context: ModelContext, classify: Bool) {
-        guard let data = document.pdfData else { return }
+        guard document.pdfData != nil else { return }
+        document.isProcessing = true
+        Task { await processAndWait(document, context: context, classify: classify) }
+    }
+
+    /// Like `process`, but returns only when the document is processed and saved, so several
+    /// documents can be processed one after another (bulk "Analyze again").
+    static func processAndWait(_ document: Document, context: ModelContext, classify: Bool) async {
+        guard document.isAlive, let data = document.pdfData else { return }
         document.isProcessing = true
         let mistral = MistralConfig.current()
-        Task {
-            let result = await Task.detached(priority: .utility) {
-                await DocumentProcessor.analyze(data, mistral: mistral)
-            }.value
-            guard !document.isDeleted else { return }
-            document.pageCount = result.pageCount
-            document.thumbnailData = result.thumbnail
-            document.extractedText = result.text
-            document.textSource = result.textSource
-            document.processingNote = result.note
-            document.fileSize = data.count
-            if classify {
-                let outcome = await AutoClassifier.classify(document, context: context)
-                if let error = outcome.aiError {
-                    document.processingNote = [document.processingNote, error].filter { !$0.isEmpty }.joined(separator: "\n")
-                }
+        let result = await Task.detached(priority: .utility) {
+            await DocumentProcessor.analyze(data, mistral: mistral)
+        }.value
+        guard document.isAlive else { return }
+        document.pageCount = result.pageCount
+        document.thumbnailData = result.thumbnail
+        document.extractedText = result.text
+        document.textSource = result.textSource
+        document.processingNote = result.note
+        document.fileSize = data.count
+        if classify {
+            let outcome = await AutoClassifier.classify(document, context: context)
+            if let error = outcome.aiError {
+                document.processingNote = [document.processingNote, error].filter { !$0.isEmpty }.joined(separator: "\n")
             }
-            guard !document.isDeleted else { return }
-            document.isProcessing = false
-            try? context.save()
         }
+        guard document.isAlive else { return }
+        document.isProcessing = false
+        try? context.save()
     }
 
     /// Resumes interrupted processing (e.g. when the app was quit in the middle).

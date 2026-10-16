@@ -61,6 +61,26 @@
         }
       }
     },
+    "%lld documents selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Dokumente ausgewählt"
+          }
+        }
+      }
+    },
+    "%lld documents will be deleted on all devices.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Dokumente werden auf allen Geräten gelöscht."
+          }
+        }
+      }
+    },
     "%lld duplicate(s) merged.": {
       "localizations": {
         "de": {
@@ -87,6 +107,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld importiert, Duplikate übersprungen"
+          }
+        }
+      }
+    },
+    "%lld of %lld selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld von %lld ausgewählt"
           }
         }
       }
@@ -241,6 +271,66 @@
         }
       }
     },
+    "Analysis cancelled": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyse abgebrochen"
+          }
+        }
+      }
+    },
+    "Analysis finished": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyse abgeschlossen"
+          }
+        }
+      }
+    },
+    "Analyze %lld documents again?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Dokumente erneut analysieren?"
+          }
+        }
+      }
+    },
+    "Analyze 1 document again?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Dokument erneut analysieren?"
+          }
+        }
+      }
+    },
+    "Analyze Again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut analysieren"
+          }
+        }
+      }
+    },
+    "Analyze Again…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut analysieren …"
+          }
+        }
+      }
+    },
     "Analyze again (text recognition + assignment)": {
       "localizations": {
         "de": {
@@ -251,12 +341,32 @@
         }
       }
     },
+    "Analyzing %lld of %lld…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analysiere %lld von %lld …"
+          }
+        }
+      }
+    },
     "Any of the words": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Eines der Wörter"
+          }
+        }
+      }
+    },
+    "As set in the settings, the documents are sent to Mistral AI.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie in den Einstellungen festgelegt, werden die Dokumente an Mistral AI gesendet."
           }
         }
       }
@@ -531,6 +641,16 @@
         }
       }
     },
+    "Delete %lld documents?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Dokumente löschen?"
+          }
+        }
+      }
+    },
     "Delete Duplicates": {
       "localizations": {
         "de": {
@@ -577,6 +697,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tag „%@“ löschen?"
+          }
+        }
+      }
+    },
+    "Delete…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen …"
+          }
+        }
+      }
+    },
+    "Deselect All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswahl aufheben"
           }
         }
       }
@@ -1881,6 +2021,26 @@
         }
       }
     },
+    "Select": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswählen"
+          }
+        }
+      }
+    },
+    "Select All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle auswählen"
+          }
+        }
+      }
+    },
     "Select a document on the left or add a new one.": {
       "localizations": {
         "de": {
@@ -2171,6 +2331,16 @@
         }
       }
     },
+    "Text recognition and automatic assignment run again, one document after another. Correspondent, type, tags and date may change.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texterkennung und automatische Zuordnung laufen erneut, ein Dokument nach dem anderen. Korrespondent, Typ, Tags und Datum können sich ändern."
+          }
+        }
+      }
+    },
     "Text recognition finished": {
       "localizations": {
         "de": {
@@ -2447,6 +2617,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "im Posteingang"
+          }
+        }
+      }
+    },
+    "on all documents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bei allen Dokumenten"
+          }
+        }
+      }
+    },
+    "on no document": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bei keinem Dokument"
+          }
+        }
+      }
+    },
+    "on some documents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bei einigen Dokumenten"
           }
         }
       }
