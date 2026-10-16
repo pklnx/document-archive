@@ -1,6 +1,6 @@
 import Foundation
 
-/// Names VoiceOver reads for the tag colors and document type symbols in the editors.
+/// Names VoiceOver reads for the tag colors and symbols and the document type symbols in the editors.
 extension Tag {
     /// One name per color in `palette`, in the same order.
     static var paletteNames: [String] {
@@ -18,6 +18,35 @@ extension Tag {
             return paletteNames[index]
         }
         return String(localized: "Custom color")
+    }
+
+    /// One name per symbol in `symbolChoices`.
+    static var symbolNames: [String: String] {
+        [
+            "tag.fill": String(localized: "Tag"),
+            "folder.fill": String(localized: "Folder"),
+            "star.fill": String(localized: "Star"),
+            "heart.fill": String(localized: "Heart"),
+            "flag.fill": String(localized: "Flag"),
+            "bookmark.fill": String(localized: "Bookmark"),
+            "house.fill": String(localized: "Home"),
+            "car.fill": String(localized: "Car"),
+            "briefcase.fill": String(localized: "Work"),
+            "cross.case.fill": String(localized: "Health"),
+            "eurosign.circle.fill": String(localized: "Money"),
+            "building.columns.fill": String(localized: "Bank"),
+            "graduationcap.fill": String(localized: "Education"),
+            "airplane": String(localized: "Travel"),
+            "cart.fill": String(localized: "Shopping"),
+            "bolt.fill": String(localized: "Energy"),
+            "pawprint.fill": String(localized: "Pets"),
+            "leaf.fill": String(localized: "Garden"),
+        ]
+    }
+
+    /// The name of a tag symbol; symbols not offered here (synced from elsewhere) get a generic name.
+    static func symbolName(for symbol: String) -> String {
+        symbolNames[symbol] ?? String(localized: "Symbol")
     }
 }
 

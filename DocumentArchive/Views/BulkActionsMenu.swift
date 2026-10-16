@@ -134,9 +134,10 @@ struct BulkTagsMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(TagHierarchy.sortedByPath(tags)) { tag in
+            // A tag with nested tags is a submenu (#13).
+            NestedTagMenuItems(nodes: TagHierarchy.tree(of: tags)) { tag in
                 let state = BulkEditor.tagState(tag, in: documents)
-                let title = TagHierarchy.displayPath(of: tag)
+                let title = tag.name
                 Button {
                     if state == .all {
                         BulkEditor.removeTag(tag, from: documents, in: context)
@@ -150,6 +151,7 @@ struct BulkTagsMenu: View {
                     case .none: Text(title)
                     }
                 }
+                .accessibilityLabel(Text(verbatim: TagHierarchy.displayPath(of: tag)))
                 .accessibilityValue(Self.stateDescription(state))
             }
         } label: {

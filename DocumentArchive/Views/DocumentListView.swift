@@ -61,6 +61,11 @@ struct DocumentListView<ImportMenu: View>: View {
     var showsBulkToolbar = false
     @ViewBuilder var importMenu: () -> ImportMenu
     var onDropFiles: ([ImportedFile]) -> Void
+    /// A tag's list (#13): the tags nested directly in it, shown as chips above the documents.
+    var subfolders: [SubfolderChip] = []
+    /// Regular width: a chip selects its tag in the sidebar. `nil` (iPhone): chips are
+    /// `NavigationLink(value: Tag)`, pushed by the content column's `NavigationStack`.
+    var openSubfolder: ((Tag) -> Void)?
 
     @AppStorage("documentSort") private var sort: DocumentSort = .added
     @State private var isDropTargeted = false
@@ -71,6 +76,13 @@ struct DocumentListView<ImportMenu: View>: View {
 
     var body: some View {
         List(selection: $selection) {
+            // A row without a selection tag: never selected, scrolls with the list, so the large
+            // title stays visible above it.
+            if !subfolders.isEmpty, !isEditing {
+                SubfolderBar(subfolders: subfolders, open: openSubfolder)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+            }
             ForEach(documents) { document in
                 DocumentRow(document: document)
                     .accessibilityIdentifier(AccessibilityID.documentRow(document.title))
@@ -375,6 +387,82 @@ struct DocumentRow: View {
     }
 }
 
+/// A tag nested in the tag whose list is shown, with its document count.
+struct SubfolderChip: Identifiable {
+    let tag: Tag
+    let count: Int
+    var id: UUID { tag.id }
+
+    /// The tags nested directly in the filter's tag, alphabetical, each with the documents of its
+    /// subtree (one pass over `documents`). Empty for other filters and tags without nested tags.
+    @MainActor
+    static func chips(of filter: SidebarItem, in documents: [Document]) -> [SubfolderChip] {
+        guard case .tag(let tag) = filter, TagHierarchy.isAlive(tag), !(tag.children ?? []).isEmpty else { return [] }
+        let counts = TagHierarchy.subtreeCounts(documents: documents.filter(\.isAlive))
+        let children = (tag.children ?? []).filter { TagHierarchy.isAlive($0) && $0.id != tag.id }
+        return TagHierarchy.sortedByName(children).map { SubfolderChip(tag: $0, count: counts[$0.id] ?? 0) }
+    }
+}
+
+/// "Subfolders": one chip per tag nested in the list's tag (#13), like folders above the files.
+struct SubfolderBar: View {
+    let subfolders: [SubfolderChip]
+    /// `nil`: the chips push the tag (`NavigationLink(value: Tag)`).
+    let open: ((Tag) -> Void)?
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Text("Subfolders")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                ForEach(subfolders) { chip in
+                    if let open {
+                        Button { open(chip.tag) } label: { label(chip) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier(AccessibilityID.subfolderChip(chip.tag.name))
+                    } else {
+                        NavigationLink(value: chip.tag) { label(chip) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier(AccessibilityID.subfolderChip(chip.tag.name))
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.subfolders)
+    }
+
+    private func label(_ chip: SubfolderChip) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: chip.tag.symbol)
+                .foregroundStyle(chip.tag.color)
+                .accessibilityHidden(true)
+            Text(chip.tag.name)
+                .foregroundStyle(.primary)
+            if chip.count > 0 {
+                Text("\(chip.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.background.secondary, in: Capsule())
+        .overlay(Capsule().strokeBorder(.separator, lineWidth: 1))
+        .contentShape(Capsule())
+        // "Auto › Golf, 3 documents", a button.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(TagHierarchy.displayPath(of: chip.tag))
+        .accessibilityValue(DocumentAccessibility.documentCount(chip.count))
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
 struct ThumbnailView: View {
     let data: Data?
     var isProcessing: Bool = false
@@ -411,7 +499,7 @@ struct TagChipsView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "Tags: \(DocumentAccessibility.tagList(tags.map(\.name)) ?? "")"))
+        .accessibilityLabel(String(localized: "Tags: \(DocumentAccessibility.tagList(tags.map(TagHierarchy.displayPath)) ?? "")"))
     }
 }
 
@@ -438,6 +526,10 @@ struct TagChip: View {
                     Capsule().strokeBorder(Color(ColorContrast.chipBorder(tagHex: tag.colorHex, dark: dark)), lineWidth: 1)
                 }
             }
+            // The chip shows the tag's own name; the whole path ("Auto › Golf") on hover and for
+            // VoiceOver (#13).
+            .help(TagHierarchy.displayPath(of: tag))
+            .accessibilityLabel(Text(verbatim: TagHierarchy.displayPath(of: tag)))
     }
 }
 

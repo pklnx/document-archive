@@ -15,6 +15,8 @@ struct RuleEditorView: View {
     @State private var applyToExisting = false
     /// Tags only: the parent tag's id, `nil` for the top level.
     @State private var parentID: UUID?
+    /// Tags only: the chosen parent cannot be used any more; saving waits for a new choice.
+    @State private var parentProblem: TagHierarchy.ParentProblem?
 
     @Query(sort: \Tag.name) private var allTags: [Tag]
 
@@ -38,6 +40,8 @@ struct RuleEditorView: View {
                     } footer: {
                         Text("Documents with a nested tag also appear under its parent tag.")
                     }
+
+                    tagSymbolSection
 
                     Section("Color") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
@@ -113,6 +117,12 @@ struct RuleEditorView: View {
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .alert(parentProblem.map(Self.title(for:)) ?? "", isPresented: Binding(presenting: $parentProblem),
+                   presenting: parentProblem) { _ in
+                Button("OK") {}
+            } message: { problem in
+                Text(Self.message(for: problem))
+            }
             .onAppear(perform: load)
             .onChange(of: name) { oldValue, newValue in
                 // For correspondents, suggest the name as the match phrase
@@ -126,19 +136,69 @@ struct RuleEditorView: View {
         #endif
     }
 
+    private var tagSymbolSection: some View {
+        Section("Symbol") {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                ForEach(Tag.symbolChoices, id: \.self) { choice in
+                    Image(systemName: choice)
+                        .font(.title3)
+                        .foregroundStyle(Color(hex: colorHex))
+                        .frame(width: 36, height: 36)
+                        .background(choice == symbol ? Color.accentColor.opacity(0.2) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .overlay {
+                            // Not by color alone: the chosen symbol also gets a border.
+                            if choice == symbol {
+                                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 2)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { symbol = choice }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(choice == symbol ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityLabel(Tag.symbolName(for: choice))
+                        .accessibilityAction { symbol = choice }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    /// The edited tag, `nil` for a new one.
+    private var editedTag: Tag? {
+        if case .tag(let tag) = target { tag } else { nil }
+    }
+
     /// Every tag the edited tag may be nested in: not itself and none of its descendants.
     private var parentChoices: [(tag: Tag, depth: Int)] {
-        let edited: Tag? = if case .tag(let tag) = target { tag } else { nil }
+        let edited = editedTag
         return TagHierarchy.flattened(allTags).filter { entry in
             guard let edited else { return true }
             return TagHierarchy.canMove(edited, under: entry.tag)
         }
     }
 
+    static func title(for problem: TagHierarchy.ParentProblem) -> String {
+        switch problem {
+        case .parentDeleted: String(localized: "Parent tag no longer exists")
+        case .wouldCreateCycle: String(localized: "Tag cannot be nested there")
+        }
+    }
+
+    static func message(for problem: TagHierarchy.ParentProblem) -> String {
+        switch problem {
+        case .parentDeleted:
+            String(localized: "The chosen parent tag was deleted in the meantime. Choose another parent tag and save again.")
+        case .wouldCreateCycle:
+            String(localized: "The chosen parent tag is now nested in this tag, so this tag cannot be moved into it. Choose another parent tag and save again.")
+        }
+    }
+
     private var isTag: Bool {
-        if case .newTag = target { return true }
-        if case .tag = target { return true }
-        return false
+        switch target {
+        case .newTag, .newSubtag, .tag: true
+        default: false
+        }
     }
 
     private var isCorrespondent: Bool {
@@ -151,7 +211,7 @@ struct RuleEditorView: View {
 
     private var title: String {
         switch target {
-        case .newTag: String(localized: "New Tag")
+        case .newTag, .newSubtag: String(localized: "New Tag")
         case .newCorrespondent: String(localized: "New Correspondent")
         case .newDocumentType: String(localized: "New Document Type")
         case .tag: String(localized: "Edit Tag")
@@ -172,6 +232,7 @@ struct RuleEditorView: View {
         switch target {
         case .tag(let tag):
             name = tag.name; colorHex = tag.colorHex; matchMode = tag.matchMode; matchText = tag.matchText
+            symbol = tag.symbol
             parentID = tag.parent?.id
         case .correspondent(let correspondent):
             name = correspondent.name; matchMode = correspondent.matchMode; matchText = correspondent.matchText
@@ -179,6 +240,12 @@ struct RuleEditorView: View {
             name = type.name; symbol = type.symbol; matchMode = type.matchMode; matchText = type.matchText
         case .newTag:
             colorHex = Tag.palette.randomElement()!
+            symbol = Tag.symbolChoices[0]
+        case .newSubtag(let parent):
+            // Nested tags start with the parent's look, like a subfolder.
+            colorHex = parent.colorHex
+            symbol = parent.symbol
+            parentID = parent.id
         case .newCorrespondent:
             matchMode = .exact
         case .newDocumentType:
@@ -190,11 +257,22 @@ struct RuleEditorView: View {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let rule: any MatchingRule
         switch target {
-        case .newTag, .tag:
+        case .newTag, .newSubtag, .tag:
+            // Checked before anything changes: a parent deleted or moved meanwhile is reported,
+            // never silently replaced by another one.
+            let parent: Tag?
+            switch TagHierarchy.parent(withID: parentID, for: editedTag, among: allTags) {
+            case .success(let chosen): parent = chosen
+            case .failure(let problem):
+                if problem == .parentDeleted { parentID = editedTag?.parent.flatMap { TagHierarchy.isAlive($0) ? $0.id : nil } }
+                parentProblem = problem
+                return
+            }
             let tag: Tag
-            if case .tag(let existing) = target { tag = existing } else { tag = Tag(name: name); context.insert(tag) }
-            tag.name = name; tag.colorHex = colorHex; tag.matchMode = matchMode; tag.matchText = matchText
-            TagHierarchy.move(tag, under: allTags.first { $0.id == parentID })
+            if let existing = editedTag { tag = existing } else { tag = Tag(name: name); context.insert(tag) }
+            tag.name = name; tag.colorHex = colorHex; tag.symbol = symbol
+            tag.matchMode = matchMode; tag.matchText = matchText
+            TagHierarchy.move(tag, under: parent)
             rule = tag
         case .newCorrespondent, .correspondent:
             let correspondent: Correspondent

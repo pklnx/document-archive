@@ -461,6 +461,16 @@
         }
       }
     },
+    "Bookmark": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lesezeichen"
+          }
+        }
+      }
+    },
     "Camera scan": {
       "localizations": {
         "de": {
@@ -507,6 +517,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ordner wählen …"
+          }
+        }
+      }
+    },
+    "Collapse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuklappen"
+          }
+        }
+      }
+    },
+    "Collapse %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ zuklappen"
           }
         }
       }
@@ -1041,6 +1071,26 @@
         }
       }
     },
+    "Expand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufklappen"
+          }
+        }
+      }
+    },
+    "Expand %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ aufklappen"
+          }
+        }
+      }
+    },
     "Export as PDF…": {
       "localizations": {
         "de": {
@@ -1067,6 +1117,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Favoriten"
+          }
+        }
+      }
+    },
+    "Flag": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fahne"
           }
         }
       }
@@ -1111,6 +1171,16 @@
         }
       }
     },
+    "Garden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garten"
+          }
+        }
+      }
+    },
     "General": {
       "localizations": {
         "de": {
@@ -1137,6 +1207,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gesundheit"
+          }
+        }
+      }
+    },
+    "Heart": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herz"
           }
         }
       }
@@ -1571,12 +1651,42 @@
         }
       }
     },
+    "Move To…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschieben nach …"
+          }
+        }
+      }
+    },
     "Move to Inbox": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "In den Posteingang"
+          }
+        }
+      }
+    },
+    "Move to Top Level": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Ordner lösen"
+          }
+        }
+      }
+    },
+    "Move “%@” To": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ verschieben nach"
           }
         }
       }
@@ -1627,6 +1737,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neuer Dokumenttyp …"
+          }
+        }
+      }
+    },
+    "New Subtag…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Untertag …"
           }
         }
       }
@@ -1941,6 +2061,16 @@
         }
       }
     },
+    "Parent tag no longer exists": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übergeordneter Tag existiert nicht mehr"
+          }
+        }
+      }
+    },
     "Paste the Mistral API key": {
       "localizations": {
         "de": {
@@ -1957,6 +2087,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gehaltsabrechnung"
+          }
+        }
+      }
+    },
+    "Pets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haustiere"
           }
         }
       }
@@ -2391,6 +2531,16 @@
         }
       }
     },
+    "Star": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stern"
+          }
+        }
+      }
+    },
     "Stop using the folder?": {
       "localizations": {
         "de": {
@@ -2437,6 +2587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nur lokal gespeichert – kein iCloud-Sync"
+          }
+        }
+      }
+    },
+    "Subfolders": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unterordner"
           }
         }
       }
@@ -2501,12 +2661,32 @@
         }
       }
     },
+    "Tag": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tag"
+          }
+        }
+      }
+    },
     "Tag (AI): %@": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Tag (KI): %@"
+          }
+        }
+      }
+    },
+    "Tag cannot be nested there": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tag kann dort nicht einsortiert werden"
           }
         }
       }
@@ -2637,6 +2817,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Das Archiv selbst bleibt immer auf diesem Gerät. Mit einem Ordner legt die App dort zusätzlich eine Kopie an: für jedes Dokument ein PDF und eine Datei mit den Angaben. Liegt der Ordner in iCloud Drive, Dropbox, OneDrive oder einem ähnlichen Dienst, erhält dieser Anbieter die PDFs, den erkannten Text und alle Angaben in lesbarer Form; sie werden nicht verschlüsselt."
+          }
+        }
+      }
+    },
+    "The chosen parent tag is now nested in this tag, so this tag cannot be moved into it. Choose another parent tag and save again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der gewählte übergeordnete Tag liegt inzwischen in diesem Tag, daher kann dieser Tag nicht dorthin verschoben werden. Wähle einen anderen übergeordneten Tag und sichere erneut."
+          }
+        }
+      }
+    },
+    "The chosen parent tag was deleted in the meantime. Choose another parent tag and save again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der gewählte übergeordnete Tag wurde inzwischen gelöscht. Wähle einen anderen übergeordneten Tag und sichere erneut."
           }
         }
       }
@@ -2821,6 +3021,16 @@
         }
       }
     },
+    "Top Level": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oberste Ebene"
+          }
+        }
+      }
+    },
     "Travel": {
       "localizations": {
         "de": {
@@ -2881,6 +3091,16 @@
         }
       }
     },
+    "collapsed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zugeklappt"
+          }
+        }
+      }
+    },
     "e.g. Kundennr\\.?\\s*12345": {
       "localizations": {
         "de": {
@@ -2897,6 +3117,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "z. B. Stadtwerke München"
+          }
+        }
+      }
+    },
+    "expanded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aufgeklappt"
           }
         }
       }

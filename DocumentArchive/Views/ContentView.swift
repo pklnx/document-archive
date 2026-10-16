@@ -56,11 +56,14 @@ enum SidebarItem: Hashable {
 /// Which editor for tags, correspondents or document types is open.
 enum RuleEditorTarget: Identifiable {
     case newTag, newCorrespondent, newDocumentType
+    /// A new tag nested in the given one ("New Subtag…" in the sidebar).
+    case newSubtag(of: Tag)
     case tag(Tag), correspondent(Correspondent), documentType(DocumentType)
 
     var id: String {
         switch self {
         case .newTag: "new-tag"
+        case .newSubtag(let parent): "new-tag-in-\(parent.id)"
         case .newCorrespondent: "new-correspondent"
         case .newDocumentType: "new-type"
         case .tag(let t): "tag-\(t.id)"
@@ -97,6 +100,18 @@ enum SplitLayout {
     }
 }
 
+/// iPhone drill-down through nested tags (#13): the content column's `NavigationStack` path.
+enum TagNavigation {
+    /// Whether the pushed tags still belong below the sidebar's selection: the first is nested
+    /// directly in the selected tag and each further one in the one before. Otherwise (another
+    /// sidebar entry, a tag moved elsewhere) the path is dropped. An empty path always fits.
+    static func path(_ path: [Tag], continues selection: SidebarItem?) -> Bool {
+        guard let first = path.first else { return true }
+        guard case .tag(let root) = selection, first.parent?.id == root.id else { return false }
+        return zip(path, path.dropFirst()).allSatisfy { parent, child in child.parent?.id == parent.id }
+    }
+}
+
 struct ImportNotice {
     var title: String
     var message: String
@@ -119,6 +134,9 @@ struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var windowWidth: CGFloat = 0
     @State private var editMode = EditMode.inactive
+    /// iPhone (#13): the nested tags pushed from a tag's list onto the content column's
+    /// `NavigationStack`, deepest last. The native back button returns to the parent tag.
+    @State private var tagPath: [Tag] = []
     #endif
 
     @State private var showFileImporter = false
@@ -130,9 +148,30 @@ struct ContentView: View {
     @State private var importNotice: ImportNotice?
     private let externalImport = ExternalImport.shared
 
-    /// What the list shows; the selection only ever refers to these documents.
+    /// What the list in front shows; the selection only ever refers to these documents.
     private var visibleDocuments: [Document] {
-        (sidebarSelection ?? .all).visibleDocuments(in: allDocuments, searchText: searchText, sort: sort)
+        documents(for: listFilter)
+    }
+
+    private func documents(for filter: SidebarItem) -> [Document] {
+        filter.visibleDocuments(in: allDocuments, searchText: searchText, sort: sort)
+    }
+
+    /// The filter of the list in front: on iPhone the deepest pushed tag, otherwise the
+    /// sidebar's choice.
+    private var listFilter: SidebarItem {
+        #if os(iOS)
+        if isCompact, let tag = tagPath.last { return .tag(tag) }
+        #endif
+        return sidebarSelection ?? .all
+    }
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .compact
+        #else
+        false
+        #endif
     }
 
     var body: some View {
@@ -149,21 +188,10 @@ struct ContentView: View {
         let openDocument = DocumentSelection.openDocument(selection, in: allDocuments)
             ?? (selectedDocuments.count == 1 ? selectedDocuments.first : nil)
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $sidebarSelection, editorTarget: $editorTarget, showSettings: $showSettings)
+            SidebarView(selection: $sidebarSelection, editorTarget: $editorTarget, showSettings: $showSettings,
+                        showsTagTree: !isCompact)
         } content: {
-            DocumentListView(
-                filter: sidebarSelection ?? .all,
-                searchText: searchText,
-                documents: visibleDocuments,
-                selection: listSelection,
-                showsBulkToolbar: showsBulkToolbar,
-                importMenu: { importMenu },
-                onDropFiles: { report(DocumentImporter.importDropped($0, into: context)) }
-            )
-            .searchable(text: $searchText, prompt: "Search full text")
-            #if os(iOS)
-            .environment(\.editMode, $editMode)
-            #endif
+            contentColumn(visibleDocuments: visibleDocuments)
         } detail: {
             Group {
                 if let document = openDocument {
@@ -196,6 +224,48 @@ struct ContentView: View {
         }
     }
 
+    /// The document list; on iPhone inside its own `NavigationStack`, which pushes the lists of
+    /// nested tags (subfolder chips) with `navigationDestination(for: Tag.self)` (#13).
+    @ViewBuilder
+    private func contentColumn(visibleDocuments: [Document]) -> some View {
+        #if os(iOS)
+        if isCompact {
+            NavigationStack(path: $tagPath) {
+                documentList(sidebarSelection ?? .all, documents: tagPath.isEmpty ? visibleDocuments : nil)
+                    .navigationDestination(for: Tag.self) { tag in
+                        documentList(.tag(tag), documents: tagPath.last?.id == tag.id ? visibleDocuments : nil)
+                            // Like the list it was pushed from (a pushed list defaults to inset grouped).
+                            .listStyle(.plain)
+                    }
+            }
+        } else {
+            documentList(listFilter, documents: visibleDocuments)
+        }
+        #else
+        documentList(listFilter, documents: visibleDocuments)
+        #endif
+    }
+
+    /// One list. `documents`: the visible documents when this is the list in front; lists below
+    /// it on the iPhone's stack compute their own.
+    private func documentList(_ filter: SidebarItem, documents: [Document]?) -> some View {
+        DocumentListView(
+            filter: filter,
+            searchText: searchText,
+            documents: documents ?? self.documents(for: filter),
+            selection: listSelection,
+            showsBulkToolbar: showsBulkToolbar,
+            importMenu: { importMenu },
+            onDropFiles: { report(DocumentImporter.importDropped($0, into: context)) },
+            subfolders: SubfolderChip.chips(of: filter, in: allDocuments),
+            openSubfolder: isCompact ? nil : { sidebarSelection = .tag($0) }
+        )
+        .searchable(text: $searchText, prompt: "Search full text")
+        #if os(iOS)
+        .environment(\.editMode, $editMode)
+        #endif
+    }
+
     /// Keeps the selection and the iPad columns in step with what the list shows.
     private func selectionTracking(_ content: some View) -> some View {
         content
@@ -204,8 +274,27 @@ struct ContentView: View {
             selection = []
             #if os(iOS)
             editMode = .inactive
+            if !TagNavigation.path(tagPath, continues: sidebarSelection) { tagPath = [] }
             #endif
         }
+        #if os(iOS)
+        // Another list in front on iPhone (a nested tag pushed or popped): like a sidebar change.
+        .onChange(of: tagPath) {
+            selection = []
+            editMode = .inactive
+        }
+        // iPhone and iPad windows can change between compact and regular width (Split View,
+        // Plus/Max iPhones in landscape): the tag in front stays in front.
+        .onChange(of: horizontalSizeClass) { _, sizeClass in
+            if sizeClass == .compact, case .tag(let tag) = sidebarSelection, tag.parent != nil {
+                let path = TagHierarchy.path(of: tag)
+                tagPath = Array(path.dropFirst())
+                sidebarSelection = path.first.map(SidebarItem.tag)
+            } else if sizeClass != .compact, let tag = tagPath.last {
+                sidebarSelection = .tag(tag)
+            }
+        }
+        #endif
         // Search text, sync or an action changed what is visible: nothing hidden stays selected.
         .onChange(of: visibleDocuments.map(\.id)) {
             prune(keepingOpen: true)
@@ -478,7 +567,7 @@ struct ContentView: View {
 
     private func showExisting(_ document: Document) {
         prepareToShow(document)
-        if let filter = sidebarSelection, filter.includes(document) {
+        if listFilter.includes(document) {
             selection = [document.id]
         } else {
             sidebarSelection = .all
