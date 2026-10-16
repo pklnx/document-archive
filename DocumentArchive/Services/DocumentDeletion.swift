@@ -46,8 +46,8 @@ enum DocumentDeletion {
     }
 }
 
-/// Deletes tags, correspondents and document types (sidebar, `MetadataMaintenance` merges) and
-/// records the deletion like `DocumentDeletion`, with `mergedInto` for merges.
+/// Deletes tags, correspondents, document types (sidebar, `MetadataMaintenance` merges) and saved
+/// views, and records the deletion like `DocumentDeletion`, with `mergedInto` for merges.
 @MainActor
 enum MetadataDeletion {
     /// Deletes the object without saving; the caller saves (merges save once at the end).
@@ -68,5 +68,11 @@ enum MetadataDeletion {
                        recorder: DeletionRecording?, now: Date = Date()) {
         recorder?.record([DeletionRecord(id: type.id, kind: .documentType, deletedAt: now, mergedInto: keeper?.id)])
         context.delete(type)
+    }
+
+    /// Saved views (#14): the folder copy writes a tombstone for the view's record.
+    static func delete(_ view: SavedView, in context: ModelContext, recorder: DeletionRecording?, now: Date = Date()) {
+        recorder?.record([DeletionRecord(id: view.id, kind: .savedView, deletedAt: now)])
+        context.delete(view)
     }
 }

@@ -129,6 +129,42 @@ import Testing
         #expect(try await device.run().filesWritten == 0)
     }
 
+    /// Saved views (#14) get a record in `SavedViews/`, are rewritten only when they change, keep
+    /// keys of newer versions, and a deleted view becomes a tombstone.
+    @Test func savedViewsAreWrittenAndDeletedViewsBecomeTombstones() async throws {
+        let device = try MirrorFixture()
+        var filter = DocumentFilter()
+        filter.query = "Steuer"
+        let view = SavedView(name: "Taxes", filter: filter)
+        device.context.insert(view)
+        try device.context.save()
+
+        #expect(try await device.run().entitiesWritten == 1)
+        let url = device.layout.record(.savedView, view.id)
+        let record = try ArchiveFolderFormat.decode(SavedViewRecord.self, from: Data(contentsOf: url))
+        #expect(record.name == "Taxes")
+        #expect(record.filterJSON == view.filterJSON)
+        #expect(record.writtenBy == "device-A")
+        #expect(record.changedAt != nil)
+        #expect(try await device.run().filesWritten == 0)
+
+        var object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        object["futureField"] = 1
+        try JSONSerialization.data(withJSONObject: object).write(to: url)
+        view.setSort(.title, ascending: true)
+        #expect(try await device.run().entitiesWritten == 1)
+        let rewritten = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        #expect(rewritten["futureField"] as? Int == 1)
+        #expect(rewritten["filterJSON"] as? String == view.filterJSON)
+
+        MetadataDeletion.delete(view, in: device.context, recorder: device.stateStore)
+        try device.context.save()
+        #expect(try await device.run().tombstonesWritten == 1)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        let tombstone = try ArchiveFolderFormat.decode(Tombstone.self, from: Data(contentsOf: device.layout.tombstone(view.id)))
+        #expect(tombstone.kind == .savedView)
+    }
+
     @Test func unknownFieldsSurviveATitleEdit() async throws {
         let device = try MirrorFixture()
         let document = device.insertDocument("Bill")

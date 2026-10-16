@@ -38,6 +38,45 @@ import Testing
         let tombstone = Tombstone(id: UUID(), kind: .tag, deletedAt: date, deletedBy: "device-A",
                                   mergedInto: UUID(), formatVersion: "1.0")
         #expect(try ArchiveFolderFormat.decode(Tombstone.self, from: ArchiveFolderFormat.encode(tombstone)) == tombstone)
+
+        let view = SavedViewRecord(id: UUID(), name: "Taxes 2026", symbol: "eurosign.circle", sortIndex: 3,
+                                   createdAt: date, filterJSON: #"{"future":true,"query":"Steuer"}"#,
+                                   changedAt: date, writtenBy: "device-A", formatVersion: "1.2")
+        let viewBytes = try ArchiveFolderFormat.encode(view)
+        #expect(try ArchiveFolderFormat.decode(SavedViewRecord.self, from: viewBytes) == view)
+        #expect(try ArchiveFolderFormat.encode(ArchiveFolderFormat.decode(SavedViewRecord.self, from: viewBytes)) == viewBytes)
+        let viewTombstone = Tombstone(id: UUID(), kind: .savedView, deletedAt: date, deletedBy: "device-A",
+                                      formatVersion: "1.2")
+        #expect(try ArchiveFolderFormat.decode(Tombstone.self, from: ArchiveFolderFormat.encode(viewTombstone)) == viewTombstone)
+    }
+
+    /// 1.2 (#14): a saved view's record carries the raw `filterJSON`, unknown keys included.
+    @Test @MainActor func savedViewRecordKeepsTheRawFilter() throws {
+        let container = try TestSupport.makeContainer()
+        let view = SavedView(name: "Open insurance", symbol: "shield", sortIndex: 2)
+        view.filterJSON = #"{"deadline":{"within":30},"inbox":true}"#
+        container.mainContext.insert(view)
+
+        let record = SavedViewRecord(view, writtenBy: "device-A")
+        #expect(record.id == view.id)
+        #expect(record.name == "Open insurance")
+        #expect(record.symbol == "shield")
+        #expect(record.sortIndex == 2)
+        #expect(record.filterJSON == view.filterJSON)
+        #expect(record.createdAt == ArchiveFolderFormat.normalized(view.createdAt))
+        #expect(record.formatVersion == "1.2")
+        #expect(ArchiveObjectKind.savedView.folderName == "SavedViews")
+    }
+
+    /// A tombstone of a kind a newer version added still decodes (its date is needed for the
+    /// purge); only the kind is unknown.
+    @Test func tombstoneOfAnUnknownKindStillDecodes() throws {
+        let id = UUID()
+        let data = Data(#"{"id":"\#(id.uuidString)","kind":"reminder","deletedAt":"2026-09-21T14:13:20.250Z"}"#.utf8)
+        let tombstone = try ArchiveFolderFormat.decode(Tombstone.self, from: data)
+        #expect(tombstone.id == id)
+        #expect(tombstone.kind == nil)
+        #expect(tombstone.deletedAt == date)
     }
 
     @Test @MainActor func recordFromADocumentHasEveryField() throws {
@@ -82,7 +121,7 @@ import Testing
         let record = EntityRecord(golf, writtenBy: "device-A")
         #expect(record.parent == auto.id)
         #expect(record.symbol == "car.fill")
-        #expect(record.formatVersion == "1.1")
+        #expect(record.formatVersion == ArchiveFolderFormat.currentVersion.description)
         #expect(EntityRecord(auto, writtenBy: "device-A").parent == nil)
     }
 
@@ -159,7 +198,7 @@ import Testing
     }
 
     @Test func unknownMinorIsReadUnknownMajorIsRefused() throws {
-        #expect(FormatVersion("1.1") == ArchiveFolderFormat.currentVersion)
+        #expect(FormatVersion("1.2") == ArchiveFolderFormat.currentVersion)
         #expect(FormatVersion.isSupported("1.7"))
         #expect(FormatVersion.isSupported(nil))
         #expect(!FormatVersion.isSupported("2.0"))
