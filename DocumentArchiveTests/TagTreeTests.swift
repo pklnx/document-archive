@@ -214,8 +214,17 @@ import UniformTypeIdentifiers
 
     /// Follow-up from the part 1 review: a change saved to the store (as a CloudKit import or a
     /// folder read does) starts the repair through `StoreChangeObserver`.
+    /// On disk: with the suite's in-memory store, the saves of tests running in parallel (#43)
+    /// restart the observer's debounce and the repair can start too late.
     @Test func storeChangeTriggersCycleRepair() async throws {
-        let (auto, golf, _, _, _) = try tree()
+        let container = try TestSupport.makeContainerOnDisk()
+        let context = container.mainContext
+        let auto = ArchiveTag(name: "Auto")
+        let golf = ArchiveTag(name: "Golf")
+        context.insert(auto)
+        context.insert(golf)
+        golf.parent = auto
+        try context.save()
         let observer = StoreChangeObserver(container: container, debounce: .milliseconds(50))
         let repair = TagCycleRepair()
         repair.start(container: container, changes: observer)
@@ -226,7 +235,9 @@ import UniformTypeIdentifiers
         try context.save()
         #expect(!TagHierarchy.isRooted(auto))
 
-        for _ in 0..<40 where !TagHierarchy.isRooted(auto) {
+        let clock = ContinuousClock()
+        let deadline = clock.now + TestSupport.scaled(.seconds(10))
+        while !TagHierarchy.isRooted(auto), clock.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }
         #expect(TagHierarchy.isRooted(auto))

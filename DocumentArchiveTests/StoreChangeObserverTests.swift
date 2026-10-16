@@ -21,10 +21,10 @@ import Testing
         return (counter, task)
     }
 
-    /// Waits until `counter` reaches `count` or `timeout` passes; slow CI runners need the margin.
+    /// Waits until `counter` reaches `count` or `timeout` (scaled) passes; slow CI runners need the margin.
     private func waitUntil(_ counter: Counter, reaches count: Int, timeout: Duration = .seconds(10)) async throws {
         let clock = ContinuousClock()
-        let deadline = clock.now + timeout
+        let deadline = clock.now + TestSupport.scaled(timeout)
         while counter.count < count, clock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
@@ -33,7 +33,7 @@ import Testing
     @Test func severalSavesGiveOneDebouncedSignal() async throws {
         // On disk: in-memory stores of tests running in parallel all report `/dev/null` as their
         // URL, so their saves would count as changes of this store.
-        let container = try makeStoreOnDisk()
+        let container = try TestSupport.makeContainerOnDisk()
         // A long debounce compared with the time three back-to-back saves take, also on a slow runner.
         let debounce = Duration.milliseconds(800)
         let observer = StoreChangeObserver(container: container, debounce: debounce)
@@ -57,18 +57,10 @@ import Testing
         #expect(counter.count == 2)
     }
 
-    /// An archive on disk, so its store has its own URL (in-memory stores share `/dev/null`).
-    private func makeStoreOnDisk() throws -> ModelContainer {
-        let schema = DocumentArchiveApp.schema
-        let url = try TestSupport.makeTemporaryDirectory().appending(path: "Test.store")
-        return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, url: url,
-                                                                                  cloudKitDatabase: .none))
-    }
-
     /// SwiftData posts `NSPersistentStoreRemoteChange` for every save; the observer relies on it
     /// for changes that do not pass through a `ModelContext` of the app (CloudKit import).
     @Test func theStorePostsRemoteChangeNotifications() async throws {
-        let container = try makeStoreOnDisk()
+        let container = try TestSupport.makeContainerOnDisk()
         let storeURL = try #require(container.configurations.first?.url)
         let center = NotificationCenter.default
         let notified = Counter()
@@ -86,8 +78,8 @@ import Testing
     }
 
     @Test func savesOfAnotherArchiveAreIgnored() async throws {
-        let container = try makeStoreOnDisk()
-        let other = try makeStoreOnDisk()
+        let container = try TestSupport.makeContainerOnDisk()
+        let other = try TestSupport.makeContainerOnDisk()
         let observer = StoreChangeObserver(container: container, debounce: .milliseconds(50))
         let (counter, task) = subscribe(observer)
         defer { task.cancel(); observer.stop() }

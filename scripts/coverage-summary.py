@@ -31,11 +31,16 @@ def display_path(file: dict, root: str) -> str:
 
 
 def summarize(text: str, root: str) -> str:
+    # Anything unexpected in the report (missing keys, null instead of a list, strings instead of
+    # numbers) means "no coverage data", never a failed job: catch broadly.
     try:
-        report = json.loads(text)
-        target = next(t for t in report.get("targets", []) if t.get("name") == APP_TARGET)
-    except (ValueError, AttributeError, StopIteration):
+        return format_report(json.loads(text), root)
+    except Exception:
         return f"### Code coverage\n\n{NO_DATA}\n"
+
+
+def format_report(report, root: str) -> str:
+    target = next(t for t in report["targets"] if t.get("name") == APP_TARGET)
     covered, executable = target.get("coveredLines", 0), target.get("executableLines", 0)
     lines = [
         "### Code coverage",
@@ -91,7 +96,20 @@ def self_test() -> None:
     rows = [line for line in summarize(many, "/w").splitlines() if line.startswith("| `")]
     assert len(rows) == LEAST_COVERED_COUNT and "F00.swift" in rows[0] and "F09.swift" in rows[-1], rows
 
-    for empty in ["", "not json", "[]", json.dumps({"targets": [{"name": "Other.app"}]})]:
+    # Unusable input of every shape, including wrong types (TypeError) anywhere in the report.
+    broken = [
+        {"targets": None},
+        {"targets": [None]},
+        {"targets": [{"name": APP_TARGET, "coveredLines": "300", "executableLines": 400}]},
+        {"targets": [{"name": APP_TARGET, "coveredLines": 1, "executableLines": 2, "files": None}]},
+        {"targets": [{"name": APP_TARGET, "coveredLines": 1, "executableLines": 2,
+                      "files": [{"name": "A.swift", "coveredLines": None, "executableLines": 60}]}]},
+        None,
+        "text",
+        42,
+    ]
+    for empty in ["", "not json", "[]", "{}", json.dumps({"targets": [{"name": "Other.app"}]})] + \
+            [json.dumps(b) for b in broken]:
         assert NO_DATA in summarize(empty, "/w"), empty
     print("self-test passed")
 

@@ -46,6 +46,50 @@ or **⌘U** in Xcode. CI runs the same command as the required check
 `test (macOS)`, and runs the tests on the iPhone simulator as `test (iOS)`
 (see [iPhone and iPad](./ios) for the command).
 
+### Test plans
+
+The `DocumentArchive` scheme has two test plans in `TestPlans/`:
+
+- **`Default.xctestplan`** is the scheme's default: ⌘U, `xcodebuild test`
+  without `-testPlan` and the required CI jobs run it. It has one
+  configuration, "Default", and runs `DocumentArchiveTests` **in parallel**:
+  Swift Testing runs suites and tests concurrently. Until #43 part 2 the
+  scheme had `parallelizable = "NO"`, which also serialized Swift Testing,
+  so the whole suite ran one test at a time. Tests therefore must not share
+  global state (see the rules below); a suite that has to use something
+  global, like `KeychainStoreTests` with the real Keychain, is `.serialized`.
+  In-memory stores all report `/dev/null` as their URL, so a test that
+  follows store change notifications (`StoreChangeObserver`) uses
+  `TestSupport.makeContainerOnDisk()`; otherwise the saves of other tests
+  count as its changes.
+- **`Nightly.xctestplan`** is attached to the scheme but not the default. Its
+  configurations run in the nightly workflow (`nightly-tests.yml`) on macOS:
+  - **"German"**: the app and the tests in German (`de`, region `DE`). A test
+    that compares against an English UI string fails here; compare against
+    `String(localized:)` or an identifier instead.
+  - **"Thread Sanitizer"**: reports data races, every one of a run
+    (`TSAN_OPTIONS=halt_on_error=0`). A race does not fail a test, and
+    `xcodebuild` does not show the reports: the sanitizer writes them to
+    `/tmp/DocumentArchive-TSan.<pid>` (`log_path` in the plan), and the
+    nightly job fails when it finds one, with the reports in its log, summary
+    and artifact. Locally, look there after a run. The configuration sets
+    `DA_TEST_TIMEOUT_SCALE=5`, because the sanitizer slows text recognition
+    down several times; the OCR suites still run, since their detached
+    processing is what it should see.
+
+```sh
+xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+  -testPlan Nightly -only-test-configuration German \
+  -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO
+# the same with -only-test-configuration "Thread Sanitizer"
+```
+
+Every wait for something asynchronous in a test scales its timeout with
+`TestSupport.scaled(_:)` (`DA_TEST_TIMEOUT_SCALE`, default 1);
+`TestSupport.waitUntilProcessed` does this already. A Thread Sanitizer report
+in app code becomes an issue labeled `bug`; a race in test code is fixed in
+the test.
+
 ### CI and the pinned Xcode
 
 - **Pinned Xcode:** every macOS job runs on `macos-26` with the Xcode in
@@ -175,6 +219,7 @@ Who runs what, so every test runs where it is cheapest and nothing twice:
 | Review | reviewer | No second run of the unit tests (CI runs them). The UI tests of the changed screens, with their screenshots, as the test report in the review. |
 | Every pull request that changes the app | CI (`ci.yml`) | Builds for macOS and iOS and all unit tests on macOS and the iPhone simulator with the pinned Xcode and warnings as errors (required checks), gitleaks. The same build and the macOS unit tests with the next Xcode (`build (macOS, next Xcode)`, not required). Doc-only pull requests (`docs/`, Markdown, issue templates, labels, …; see `scripts/app-changes.py`) skip the build and test jobs; skipped jobs count as passed. gitleaks always runs. Pushes to `main` run everything. |
 | Every night | CI (`ui-tests.yml`) | The full UI suite on the hosted runners: iPhone, iPad (older iOS, 26.x) and the Mac. A failure is handled like a bug report. |
+| Every night | CI (`nightly-tests.yml`) | The macOS unit tests in German and with Thread Sanitizer (`TestPlans/Nightly.xctestplan`). Also runs on pull requests that change the workflow or the nightly plan. A failure is handled like a bug report. |
 | Before a release | maintainer | A full local run: all unit tests on macOS and iOS; all UI tests on the smallest and the largest iPhone, iPad mini, iPad Pro and the Mac. A manual run of the nightly workflow (Actions → UI tests → Run workflow) for iOS 26. Then the [manual check list](./ios#manual-check-before-a-release). |
 
 Pull requests do not run the UI tests on GitHub; a pull request is merged on
@@ -196,6 +241,7 @@ implementer checks its latest run and reports a red one.
 | `Config` | Shared build settings (`Project.xcconfig`: version, build flags), entitlements and Info.plist additions |
 | `DocumentArchiveTests` | Unit tests (Swift Testing) and their helpers in `Support/` |
 | `DocumentArchiveUITests` | UI smoke tests (XCUITest, iOS only) |
+| `TestPlans` | Test plans of the `DocumentArchive` scheme: `Default` (⌘U, required checks), `Nightly` (German, Thread Sanitizer) |
 
 One target builds both platforms. Platform-specific code is wrapped in
 `#if os(iOS)` / `#if os(macOS)`; keep it small and in `Platform/` where
