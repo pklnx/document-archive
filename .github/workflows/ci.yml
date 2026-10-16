@@ -200,11 +200,36 @@ jobs:
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | xcbeautify --renderer github-actions
+      # Apple Vision's text recognition does not run on the xcode-27 preview VMs ("Text recognition
+      # failed: e5rtError(e5rt_e5_compiler_compile call failed, 11)"; it works on macos-26 and on
+      # a Mac with macOS 27), so the tests that need recognized text are skipped here. Remove
+      # the list when the image can run Vision.
       - name: Test on macOS
         run: |
           set -o pipefail
+          skip=()
+          for test in \
+            GlobalStateTests/DocumentImporterTests/importedImageGetsATextLayerAndStaysADuplicate \
+            GlobalStateTests/DocumentImporterTests/folderCopyPicksUpTheReplacedPDF \
+            GlobalStateTests/DocumentImporterTests/rewriteThatFailsTheCheckKeepsTheOriginal \
+            GlobalStateTests/DocumentImporterTests/settingOffLeavesThePDFUnchanged \
+            GlobalStateTests/DocumentProcessorTests/readsScannedTextWithVision \
+            GlobalStateTests/DocumentProcessorTests/textLayerComesFromVisionWhenMistralReadsTheText \
+            GlobalStateTests/DocumentProcessorTests/fallsBackToVisionWhenMistralFails \
+            GlobalStateTests/ScanImportTests/threePagesBecomeOneProcessedDocument \
+            TextLayerTests/wordsLandOnTheRightPage \
+            TextLayerTests/selectsASingleWordInTheMiddleOfALine \
+            TextLayerTests/rotatedPageLooksTheSameAndSelectsTheWord \
+            TextLayerTests/croppedPageLooksTheSameAndSelectsTheWord \
+            TextLayerTests/looksTheSameAndStaysSmall \
+            TextLayerTests/tooLargeRewriteIsSkippedWithItsOwnNote \
+            TextLayerTests/densePageStaysSmall \
+            TextLayerTests/secondRunFindsNothingToDo
+          do
+            skip+=("-skip-testing:DocumentArchiveTests/$test()")
+          done
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination 'platform=macOS,arch=arm64' -derivedDataPath build \
+            -destination 'platform=macOS,arch=arm64' -derivedDataPath build "${skip[@]}" \
             -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
       - name: Upload test results
