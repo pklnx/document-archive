@@ -14,6 +14,7 @@ The app is available in English and German.
 ## Features
 
 - **Add documents:** camera scan (iPhone/iPad, with automatic edge detection), PDFs and images from Files, photos from the library, drag and drop (Mac: also ⌘O), "Open with" in Finder or a drop on the Dock icon (Mac), "Open in…" / "Copy to Document Archive" from Files, Mail and other apps (iPhone/iPad)
+- **Photo cleanup** (optional, Settings → General → Import): photographed pages are straightened (page detection and perspective correction) and filtered (color, grayscale, black and white) on the device when they are imported
 - **Text recognition (OCR)** for scans and image-only PDFs (German and English), then **full-text search**
 - **Searchable PDFs:** scans get an invisible text layer, so their text can be selected, copied and found in Finder, Files and other apps
 - **Mistral AI** (optional): Mistral OCR for text recognition, Mistral Medium for title, correspondent, type, tags and date

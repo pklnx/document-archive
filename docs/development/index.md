@@ -383,9 +383,12 @@ default.
 ## Files from other apps (#12)
 
 Every file that arrives from outside goes through `ExternalImport` and then
-`DocumentImporter.importFile(data:name:into:)`, the same pipeline as the file
-dialog and drag and drop (duplicate check on the original bytes, insert,
-processing). `App/OpenURLHandler.swift` is the app's **only** URL entry point:
+`DocumentImporter.importFile(data:name:origin:cleanup:into:)`, the same pipeline as the file
+dialog and drag and drop (duplicate check on the original bytes, photo cleanup,
+insert, processing). Each `ExternalImport.Origin` maps to an `ImportOrigin`:
+"Open with" is `.interactive` (the user's cleanup setting); the watch folder and
+the share queue are to be `.unattended` (automatic cleanup unless the setting is
+Off). Imports are `async`; `ExternalImport` runs them one after another. `App/OpenURLHandler.swift` is the app's **only** URL entry point:
 `ContentView` has the single `.onOpenURL` and `.handlesExternalEvents`, so an
 opened file goes to the existing window. File URLs go to `ExternalImport`;
 other URL kinds (#15) are added as branches there, never as a second
@@ -399,6 +402,51 @@ removed: the build is not sandboxed, so `~/Documents/Inbox` is the user's own
 folder. Files opened before a
 window exists wait in `ExternalImport` until `ContentView` hands over the
 `ModelContext`.
+
+## Photo cleanup (#20)
+
+Photos imported as image files, from Photos or by drag and drop can be straightened
+and cleaned up before they become a PDF (Settings → General → Import, per device in
+`UserDefaults`: "Clean up photos" Off / Automatic, default **Off** for now, and
+"Default filter", default Color). PDFs and VisionKit camera scans are never changed.
+
+- **Pipeline** (`Services/ImageCleanup.swift`, pure Vision + Core Image, no UI):
+  `detectPage` finds the page with `DetectDocumentSegmentationRequest` and falls back
+  to `DetectRectanglesRequest` when that finds nothing **or throws**; it returns `nil`
+  for (almost) the whole image. The iOS simulator uses rectangle detection only: its
+  segmentation model returns arbitrary quads with high confidence. `apply` does the perspective correction
+  (`CIPerspectiveCorrection`), quarter turns and the filter: Original, Color
+  (`CIDocumentEnhancer`, fallback `CIColorControls`), Grayscale, Black & White (Otsu
+  threshold from a `CIAreaHistogram`, shifted by `bwOffset` −0.2 … +0.2, then
+  `CIColorThreshold`).
+- **Coordinates:** `PageQuad` is normalized with the origin **lower-left** (Vision and
+  Core Image). `QuadGeometry` is the only place that converts to upper-left view
+  coordinates.
+- **Core Image context:** one shared context (`ImageCleanup.sharedContext`); tests and
+  devices without Metal render in software, and pixel tests use tolerances.
+- **Unattended crops:** a page nobody looked at (Automatic, and #12's watch folder and
+  share queue) is cropped only when the detection's confidence is at least 0.8 **and**
+  the page covers at least half of the photo (`ImageCleanup.unattendedSettings`);
+  otherwise the whole photo gets only the filter. The original photo is not kept.
+- **Memory:** `PendingImport` keeps the original bytes (for the hash), previews of at
+  most 1200 px (detection runs on them; the quad is normalized) and the detected
+  settings. `DocumentImporter.makeDocumentData` decodes each page at 3000 px from the
+  original bytes, cleans it up and hands it to `PDFBuilder.makePDF(pageCount:page:)`,
+  which draws and releases it before the next one. `importCleaned` inserts the result;
+  #22's vault import builds on `makeDocumentData`.
+- **Import contract:** `importFiles(_:origin:cleanup:into:)`,
+  `importFile(data:name:origin:cleanup:into:)` and `importImageData(_:cleanup:into:)`
+  are `async` and do the heavy work off the main actor. A `nil` mode means
+  `CleanupMode.mode(for: origin, setting:)`. The duplicate check runs on the
+  **original** bytes before any cleanup (and once more before the insert, for a
+  concurrent import of the same file); `contentHash` is the original's hash. The text
+  layer (#9) runs on the cleaned PDF as for any import.
+- Images are loaded through `ImageCoding.orientedImage(from:maxPixelSize:)` (EXIF
+  orientation applied) everywhere: importer, cleanup and `PDFBuilder`.
+- Tests use `TestSupport.photographedPage(lines:corners:)`, a rendered page with a known
+  perspective on a generated desk.
+- **Part 2** adds "Review before saving" with the editor sheet (corners, filters,
+  rotation, "Save all") and makes it the default.
 
 ## External services
 

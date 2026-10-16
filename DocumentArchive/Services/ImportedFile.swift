@@ -39,8 +39,9 @@ struct ImportedFile: Transferable {
 extension DocumentImporter {
     /// Imports dropped files like files picked in the file dialog and removes the temporary copies.
     @discardableResult
-    static func importDropped(_ files: [ImportedFile], into context: ModelContext) -> ImportResult {
-        defer { files.forEach { $0.remove() } }
-        return importFiles(files.map(\.url), into: context)
+    static func importDropped(_ files: [ImportedFile], into context: ModelContext) async -> ImportResult {
+        let result = await importFiles(files.map(\.url), into: context)
+        files.forEach { $0.remove() }
+        return result
     }
 }

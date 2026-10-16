@@ -13,6 +13,14 @@ final class ExternalImport {
     enum Origin {
         /// Opened by the user from another app: imported right away, the result is shown.
         case openWith
+
+        /// Decides the photo cleanup mode (#20): "Open with" uses the setting like the file
+        /// dialog; the watch folder and the share queue (#12 parts 2 and 3) are `.unattended`.
+        var importOrigin: ImportOrigin {
+            switch self {
+            case .openWith: .interactive
+            }
+        }
     }
 
     static let shared = ExternalImport()
@@ -28,6 +36,9 @@ final class ExternalImport {
 
     /// The result of interactive imports that the window has not shown yet; see `takeResult()`.
     private(set) var pendingResult: DocumentImporter.ImportResult?
+
+    /// The running imports, one after another in the order the files arrived.
+    private var importing: Task<Void, Never>?
 
     /// Where iOS puts copies of files handed over by other apps ("Copy to …", Mail attachments).
     /// The app owns these copies and removes them after the import; files opened in place
@@ -45,9 +56,25 @@ final class ExternalImport {
             queued += urls.map { ($0, origin) }
             return
         }
+        let previous = importing
+        importing = Task {
+            await previous?.value
+            await importNow(urls, origin: origin, into: context)
+        }
+    }
+
+    /// Waits until every file received so far is imported (tests).
+    func waitForImports() async {
+        while let task = importing {
+            await task.value
+            if importing == task { importing = nil }
+        }
+    }
+
+    private func importNow(_ urls: [URL], origin: Origin, into context: ModelContext) async {
         switch origin {
         case .openWith:
-            let result = DocumentImporter.importFiles(urls, into: context)
+            let result = await DocumentImporter.importFiles(urls, origin: origin.importOrigin, into: context)
             #if os(iOS)
             removeInboxCopies(urls)
             #endif

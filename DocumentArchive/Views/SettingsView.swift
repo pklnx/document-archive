@@ -133,6 +133,8 @@ struct GeneralSettingsSections: View {
     @Query private var correspondents: [Correspondent]
     @AppStorage(AutoClassifier.autoCreateCorrespondentsKey) private var autoCreateCorrespondents = true
     @AppStorage(TextLayer.enabledKey) private var addTextLayer = true
+    @AppStorage(CleanupMode.settingKey) private var photoCleanup = CleanupMode.defaultSetting
+    @AppStorage(CleanupMode.defaultFilterKey) private var photoFilter = CleanupMode.defaultFilter
 
     @State private var reclassifyProgress: (done: Int, total: Int)?
     @State private var mergeMessage: String?
@@ -144,6 +146,20 @@ struct GeneralSettingsSections: View {
             Text("Text recognition")
         } footer: {
             Text("Writes the recognized text invisibly into scanned PDFs, so the text can be selected, copied and found in other apps. Applies to documents processed on this device. Documents processed on your other devices may still get a text layer there.")
+        }
+
+        Section {
+            Picker("Clean up photos", selection: $photoCleanup) {
+                ForEach(CleanupMode.allCases) { Text($0.label).tag($0) }
+            }
+            Picker("Default filter", selection: $photoFilter) {
+                ForEach(PageFilter.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(photoCleanup == .off)
+        } header: {
+            Text("Import")
+        } footer: {
+            Text("“Automatic” straightens photographed pages and applies the filter when they are imported; the page is only cropped when it was detected reliably. PDFs and camera scans are not changed. Everything runs on this device.")
         }
 
         Section {

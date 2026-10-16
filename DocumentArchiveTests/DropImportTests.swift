@@ -73,7 +73,7 @@ extension GlobalStateTests {
             let png = try writePNG("Foto.png")
             let files = [try ImportedFile(copying: pdf), try ImportedFile(copying: png)]
 
-            let result = DocumentImporter.importDropped(files, into: context)
+            let result = await DocumentImporter.importDropped(files, into: context)
             try await TestSupport.waitUntilProcessed(result.imported)
 
             #expect(result.errors.isEmpty)
@@ -88,11 +88,11 @@ extension GlobalStateTests {
 
         @Test func droppedDuplicateIsReportedAndItsCopyRemoved() async throws {
             let pdf = try writePDF("Rechnung.pdf", lines: ["Rechnung 4711"])
-            let first = DocumentImporter.importFiles([pdf], into: context)
+            let first = await DocumentImporter.importFiles([pdf], into: context)
             try await TestSupport.waitUntilProcessed(first.imported)
 
             let copy = try ImportedFile(copying: pdf)
-            let result = DocumentImporter.importDropped([copy], into: context)
+            let result = await DocumentImporter.importDropped([copy], into: context)
 
             #expect(result.imported.isEmpty)
             #expect(result.duplicates.map(\.fileName) == ["Rechnung.pdf"])

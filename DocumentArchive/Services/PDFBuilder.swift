@@ -13,50 +13,49 @@ enum PDFBuilder {
     private static let jpegQuality: CGFloat = 0.72
 
     static func makePDF(from images: [CGImage]) -> Data? {
-        guard !images.isEmpty else { return nil }
+        makePDF(pageCount: images.count) { images[$0] }
+    }
+
+    /// Builds the PDF one page at a time: `page(i)` is asked for each page just before it is
+    /// drawn, so only one full-size image is in memory at once (photo cleanup decodes and
+    /// processes each page in there). Pages for which `page` returns `nil` are left out.
+    static func makePDF(pageCount: Int, page: (Int) -> CGImage?) -> Data? {
+        guard pageCount > 0 else { return nil }
         let output = NSMutableData()
         guard let consumer = CGDataConsumer(data: output as CFMutableData) else { return nil }
         var mediaBox = CGRect(x: 0, y: 0, width: pageWidth, height: pageWidth * 1.414)
         guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
 
-        for original in images {
-            let image = compressed(original) ?? original
-            let aspect = CGFloat(image.height) / CGFloat(max(image.width, 1))
-            var pageBox = CGRect(x: 0, y: 0, width: pageWidth, height: (pageWidth * aspect).rounded())
-            let boxData = Data(bytes: &pageBox, count: MemoryLayout<CGRect>.size) as CFData
-            context.beginPDFPage([kCGPDFContextMediaBox as String: boxData] as CFDictionary)
-            context.interpolationQuality = .high
-            context.draw(image, in: pageBox)
-            context.endPDFPage()
+        var pagesDrawn = 0
+        for index in 0..<pageCount {
+            autoreleasepool {
+                guard let original = page(index) else { return }
+                let image = compressed(original) ?? original
+                let aspect = CGFloat(image.height) / CGFloat(max(image.width, 1))
+                var pageBox = CGRect(x: 0, y: 0, width: pageWidth, height: (pageWidth * aspect).rounded())
+                let boxData = Data(bytes: &pageBox, count: MemoryLayout<CGRect>.size) as CFData
+                context.beginPDFPage([kCGPDFContextMediaBox as String: boxData] as CFDictionary)
+                context.interpolationQuality = .high
+                context.draw(image, in: pageBox)
+                context.endPDFPage()
+                pagesDrawn += 1
+            }
         }
         context.closePDF()
-        return output as Data
+        return pagesDrawn > 0 ? output as Data : nil
     }
 
     static func makePDF(fromImageFiles urls: [URL]) -> Data? {
         let images = urls.compactMap { url -> CGImage? in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            return orientedImage(from: source)
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return ImageCoding.orientedImage(from: data, maxPixelSize: maxPixelSize)
         }
         return makePDF(from: images)
     }
 
     static func makePDF(fromImageData items: [Data]) -> Data? {
-        let images = items.compactMap { data -> CGImage? in
-            guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-            return orientedImage(from: source)
-        }
+        let images = items.compactMap { ImageCoding.orientedImage(from: $0, maxPixelSize: maxPixelSize) }
         return makePDF(from: images)
-    }
-
-    /// Loads an image with its EXIF orientation applied (important for phone photos).
-    private static func orientedImage(from source: CGImageSource) -> CGImage? {
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-        ]
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     /// Scales an image down and compresses it as JPEG. Quartz copies JPEG data into the PDF
@@ -69,7 +68,27 @@ enum PDFBuilder {
     }
 }
 
+/// Shared image loading and encoding for the importer, the photo cleanup and `PDFBuilder`.
 enum ImageCoding {
+    /// Size of the previews the photo cleanup detects the page on (and #20 part 2 shows).
+    static let previewPixelSize = 1200
+    /// Size a page is decoded at before cleanup; `PDFBuilder` then scales it to 2400 px.
+    static let pagePixelSize = 3000
+
+    /// Decodes the first image in `data` with its EXIF orientation applied (important for phone
+    /// photos), scaled down so its longer side is at most `maxPixelSize`. Smaller images keep
+    /// their size.
+    static func orientedImage(from data: Data, maxPixelSize: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
     static func jpegData(from image: CGImage, maxPixelSize: Int? = nil, quality: CGFloat) -> Data? {
         var image = image
         if let maxPixelSize, max(image.width, image.height) > maxPixelSize {
