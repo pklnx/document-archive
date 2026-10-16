@@ -35,7 +35,7 @@ struct SidebarView: View {
                         .contextMenu {
                             Button("Edit…", systemImage: "pencil") { editorTarget = .documentType(type) }
                             Button("Delete", systemImage: "trash", role: .destructive) {
-                                MenuPresentation.afterMenuCloses { pendingDeletion = .documentType(type) }
+                                pendingDeletion = .documentType(type)
                             }
                         }
                 }
@@ -49,7 +49,7 @@ struct SidebarView: View {
                         .contextMenu {
                             Button("Edit…", systemImage: "pencil") { editorTarget = .correspondent(correspondent) }
                             Button("Delete", systemImage: "trash", role: .destructive) {
-                                MenuPresentation.afterMenuCloses { pendingDeletion = .correspondent(correspondent) }
+                                pendingDeletion = .correspondent(correspondent)
                             }
                         }
                 }
@@ -76,9 +76,7 @@ struct SidebarView: View {
                     .accessibilityIdentifier(AccessibilityID.sidebarRow(.tag(tag)))
                     .contextMenu {
                         Button("Edit…", systemImage: "pencil") { editorTarget = .tag(tag) }
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            MenuPresentation.afterMenuCloses { pendingDeletion = .tag(tag) }
-                        }
+                        Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
                     }
                 }
             } header: {
@@ -156,15 +154,21 @@ struct SidebarView: View {
         }
     }
 
-    private enum PendingDeletion {
+    enum PendingDeletion {
         case tag(Tag), correspondent(Correspondent), documentType(DocumentType)
 
+        /// Without the name once the object is gone (deleted on another device while the dialog
+        /// is open).
         var title: String {
             switch self {
-            case .tag(let t): String(localized: "Delete tag “\(t.name)”?")
-            case .correspondent(let c): String(localized: "Delete correspondent “\(c.name)”?")
-            case .documentType(let d): String(localized: "Delete document type “\(d.name)”?")
+            case .tag(let t): String(localized: "Delete tag “\(Self.name(t, t.name))”?")
+            case .correspondent(let c): String(localized: "Delete correspondent “\(Self.name(c, c.name))”?")
+            case .documentType(let d): String(localized: "Delete document type “\(Self.name(d, d.name))”?")
             }
+        }
+
+        private static func name(_ model: some PersistentModel, _ name: String) -> String {
+            model.isDeleted || model.modelContext == nil ? "" : name
         }
     }
 

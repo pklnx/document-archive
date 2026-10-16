@@ -170,7 +170,7 @@ struct DocumentListView<ImportMenu: View>: View {
                 .accessibilityIdentifier(AccessibilityID.deleteConfirm)
             Button("Cancel", role: .cancel) {}
         } message: { document in
-            Text("“\(document.isAlive ? document.title : "")” will be deleted on all devices.")
+            Text(DocumentDetailView.deleteMessage(for: document))
         }
     }
 
@@ -302,9 +302,7 @@ struct DocumentListView<ImportMenu: View>: View {
             }
         }
         Divider()
-        Button("Delete", systemImage: "trash", role: .destructive) {
-            MenuPresentation.afterMenuCloses { documentToDelete = document }
-        }
+        Button("Delete", systemImage: "trash", role: .destructive) { documentToDelete = document }
     }
 
     private func delete(_ document: Document) {

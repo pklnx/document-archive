@@ -3,6 +3,7 @@ import CoreGraphics
 import CoreText
 import Foundation
 import SwiftData
+import SwiftUI
 
 /// Sample data for UI tests (launch argument `-UITestSeed`, see `StoreChoice`).
 ///
@@ -86,6 +87,26 @@ enum UITestSeed {
             CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
         }
         return context.makeImage()!
+    }
+}
+
+/// An invisible element that tells a UI test something happened in the app that it cannot see
+/// otherwise (an action ran although no dialog appeared). Only in DEBUG builds started with
+/// `-UITestSeed`; nothing for VoiceOver users.
+struct UITestMarker: View {
+    let id: String
+    let isShown: Bool
+
+    private static let isUITestRun = ProcessInfo.processInfo.arguments.contains(StoreChoice.uiTestSeedArgument)
+
+    var body: some View {
+        if isShown, Self.isUITestRun {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityLabel(Text(verbatim: id))
+                .accessibilityIdentifier(id)
+        }
     }
 }
 #endif

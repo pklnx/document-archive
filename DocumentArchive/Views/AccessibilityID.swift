@@ -43,6 +43,8 @@ enum AccessibilityID {
     static let documentMore = "documentDetail.more"
     static let documentDelete = "documentDetail.delete"
     static let documentDeleteConfirm = "documentDetail.deleteConfirm"
+    /// UI tests only: shown once the More menu's Delete action ran (see `UITestMarker`).
+    static let documentDeleteRequested = "documentDetail.deleteRequested"
 
     static let ruleEditorCancel = "ruleEditor.cancel"
 

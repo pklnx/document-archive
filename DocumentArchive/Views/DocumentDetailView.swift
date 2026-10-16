@@ -18,6 +18,8 @@ struct DocumentDetailView: View {
     #endif
     @State private var showExporter = false
     @State private var confirmDelete = false
+    /// Set by the More menu's Delete action; only read by `UITestMarker`.
+    @State private var deleteRequested = false
 
     var body: some View {
         Group {
@@ -71,9 +73,10 @@ struct DocumentDetailView: View {
                     Button("Export as PDF…", systemImage: "arrow.down.doc") { showExporter = true }
                     Divider()
                     Button("Delete", systemImage: "trash", role: .destructive) {
-                        MenuPresentation.afterMenuCloses { confirmDelete = true }
+                        deleteRequested = true
+                        confirmDelete = true
                     }
-                    .accessibilityIdentifier(AccessibilityID.documentDelete)
+                        .accessibilityIdentifier(AccessibilityID.documentDelete)
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }
@@ -104,8 +107,20 @@ struct DocumentDetailView: View {
             }
             .accessibilityIdentifier(AccessibilityID.documentDeleteConfirm)
         } message: {
-            Text("“\(document.title)” will be deleted on all devices.")
+            Text(Self.deleteMessage(for: document))
         }
+        #if DEBUG
+        // Tells a failed UI test whether the Delete tap ran the action or only the dialog is missing.
+        .overlay(alignment: .topLeading) {
+            UITestMarker(id: AccessibilityID.documentDeleteRequested, isShown: deleteRequested)
+        }
+        #endif
+    }
+
+    /// The delete confirmation's message; without the title once the document is gone (deleted
+    /// on another device while the dialog is open).
+    static func deleteMessage(for document: Document) -> String {
+        String(localized: "“\(document.isAlive ? document.title : "")” will be deleted on all devices.")
     }
 
     private var inspectorIsColumn: Bool {

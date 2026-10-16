@@ -110,7 +110,7 @@ struct BulkActionsMenu: View {
 
     private var reanalyze: some View {
         Button("Analyze Again…", systemImage: "text.viewfinder") {
-            MenuPresentation.afterMenuCloses { coordinator?.requestReanalysis(documents) }
+            coordinator?.requestReanalysis(documents)
         }
         .disabled(coordinator?.progress != nil)
         .accessibilityIdentifier(AccessibilityID.bulkReanalyze)
@@ -118,7 +118,7 @@ struct BulkActionsMenu: View {
 
     private var delete: some View {
         Button("Delete…", systemImage: "trash", role: .destructive) {
-            MenuPresentation.afterMenuCloses { coordinator?.requestDelete(documents) }
+            coordinator?.requestDelete(documents)
         }
         .accessibilityIdentifier(AccessibilityID.bulkDelete)
     }
