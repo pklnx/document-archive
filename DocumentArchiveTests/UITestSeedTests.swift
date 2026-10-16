@@ -18,6 +18,11 @@ import Testing
         #expect(documents.filter(\.isInbox).count == UITestSeed.documents.filter(\.isInbox).count)
         #expect(documents.filter(\.isFavorite).map(\.title) == ["Medical invoice"])
         #expect(Set(documents.map(\.contentHash)).count == documents.count, "no sample is a duplicate of another")
+        // Markdown notes (#19) on the first document only, rendered as heading, paragraph and tasks.
+        #expect(documents.filter { !$0.notes.isEmpty }.map(\.title) == ["Electricity bill March"])
+        #expect(MarkdownNotes.blocks(from: documents[0].notes).map(\.kind) == [
+            .heading(level: 2), .paragraph, .task(isChecked: true, level: 0), .task(isChecked: false, level: 0),
+        ])
 
         #expect(try context.fetchCount(FetchDescriptor<Correspondent>()) == UITestSeed.correspondents.count)
         #expect(try context.fetchCount(FetchDescriptor<DocumentType>()) == UITestSeed.documentTypes.count)

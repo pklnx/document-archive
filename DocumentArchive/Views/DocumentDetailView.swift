@@ -236,10 +236,7 @@ struct DocumentInfoForm: View {
                 }
             }
 
-            Section("Notes") {
-                TextField("Notes", text: $document.notes, axis: .vertical)
-                    .lineLimit(3...10)
-            }
+            NotesView(document: document)
 
             Section {
                 Button {
