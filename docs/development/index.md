@@ -79,6 +79,9 @@ never see the real archive and never call Mistral. Rules:
 - Extra sample data goes into `UITestSeed`, not into a new launch argument.
 - Alerts and dialogs use real bindings (`Binding(presenting:)`), never
   `.constant(…)`: the system dismisses them by setting the binding to `false`.
+- A menu or context menu item that asks for a confirmation sets its state through
+  `MenuPresentation.afterMenuCloses`: on iPadOS 26 a dialog presented while the
+  menu was still closing sometimes never appeared.
 - `SmokeTests.launchApp()` launches once more when the first launch fails or
   shows neither the list nor the sidebar (slow CI runners); wait for an
   element before using it instead of adding sleeps.

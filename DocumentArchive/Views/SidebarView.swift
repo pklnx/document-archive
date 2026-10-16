@@ -35,7 +35,7 @@ struct SidebarView: View {
                         .contextMenu {
                             Button("Edit…", systemImage: "pencil") { editorTarget = .documentType(type) }
                             Button("Delete", systemImage: "trash", role: .destructive) {
-                                pendingDeletion = .documentType(type)
+                                MenuPresentation.afterMenuCloses { pendingDeletion = .documentType(type) }
                             }
                         }
                 }
@@ -49,7 +49,7 @@ struct SidebarView: View {
                         .contextMenu {
                             Button("Edit…", systemImage: "pencil") { editorTarget = .correspondent(correspondent) }
                             Button("Delete", systemImage: "trash", role: .destructive) {
-                                pendingDeletion = .correspondent(correspondent)
+                                MenuPresentation.afterMenuCloses { pendingDeletion = .correspondent(correspondent) }
                             }
                         }
                 }
@@ -76,7 +76,9 @@ struct SidebarView: View {
                     .accessibilityIdentifier(AccessibilityID.sidebarRow(.tag(tag)))
                     .contextMenu {
                         Button("Edit…", systemImage: "pencil") { editorTarget = .tag(tag) }
-                        Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
+                        Button("Delete", systemImage: "trash", role: .destructive) {
+                            MenuPresentation.afterMenuCloses { pendingDeletion = .tag(tag) }
+                        }
                     }
                 }
             } header: {

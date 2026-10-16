@@ -285,7 +285,10 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
         delete.tap()
         let confirm = element("documentDetail.deleteConfirm")
+        // Regression (iPadOS 26.5, inspector column open): the confirmation sometimes never
+        // appeared while the menu was still closing.
         XCTAssertTrue(waitUntilHittable(confirm, timeout: 10), "no delete confirmation")
+        attachScreenshot("delete confirmation of the open document")
         confirm.tap()
         // Slow CI runners (iOS 26.5) close the dialog late; wait for it before looking at the list.
         XCTAssertTrue(confirm.waitForNonExistence(timeout: 15), "delete confirmation did not close")

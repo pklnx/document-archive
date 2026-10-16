@@ -302,7 +302,9 @@ struct DocumentListView<ImportMenu: View>: View {
             }
         }
         Divider()
-        Button("Delete", systemImage: "trash", role: .destructive) { documentToDelete = document }
+        Button("Delete", systemImage: "trash", role: .destructive) {
+            MenuPresentation.afterMenuCloses { documentToDelete = document }
+        }
     }
 
     private func delete(_ document: Document) {
