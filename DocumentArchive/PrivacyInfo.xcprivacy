@@ -39,6 +39,8 @@ The App Store Connect privacy label must declare the same collected data.
 		<!--
 		CA92.1: the app's own settings (@AppStorage, the folder copy bookmark, the text layer and
 		Mistral switches). No App Group yet; the share extension (#12) adds 1C8F.1.
+		CA92.1 only: the legacy de.patrickklein.Ablage domain (LegacyMigration) is read only by
+		unsandboxed development builds, which never reach the App Store.
 		-->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>

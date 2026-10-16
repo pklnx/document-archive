@@ -31,6 +31,18 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A10000000000000000000011 /* Exceptions for "DocumentArchive" folder in "DocumentArchive" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			platformFiltersByRelativePath = {
+				"container-migration.plist" = (
+					macos,
+				);
+			};
+			target = A10000000000000000000040 /* DocumentArchive */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C10000000000000000000010 /* DocumentArchiveUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -44,6 +56,9 @@
 		};
 		A10000000000000000000010 /* DocumentArchive */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A10000000000000000000011 /* Exceptions for "DocumentArchive" folder in "DocumentArchive" target */,
+			);
 			path = DocumentArchive;
 			sourceTree = "<group>";
 		};
@@ -272,7 +287,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
@@ -292,7 +306,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
@@ -313,7 +326,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
@@ -334,7 +346,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
@@ -403,7 +414,6 @@
 				CODE_SIGN_ENTITLEMENTS = "Config/DocumentArchive-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Config/DocumentArchive-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -424,7 +434,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.patrickklein.DocumentArchive;
+				PRODUCT_BUNDLE_IDENTIFIER = "de.patrickklein.DocumentArchive$(DA_BUNDLE_ID_SUFFIX)";
 				PRODUCT_MODULE_NAME = DocumentArchive;
 				PRODUCT_NAME = "Document Archive";
 				SDKROOT = auto;
@@ -444,7 +454,6 @@
 				CODE_SIGN_ENTITLEMENTS = "Config/DocumentArchive-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Config/DocumentArchive-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -465,7 +474,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.patrickklein.DocumentArchive;
+				PRODUCT_BUNDLE_IDENTIFIER = "de.patrickklein.DocumentArchive$(DA_BUNDLE_ID_SUFFIX)";
 				PRODUCT_MODULE_NAME = DocumentArchive;
 				PRODUCT_NAME = "Document Archive";
 				SDKROOT = auto;

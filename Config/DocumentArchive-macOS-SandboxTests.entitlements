@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Entitlements of the sandboxed macOS test build only (nightly job "test (macOS, sandboxed)", see
+docs/development/index.md, "Sandbox"). The sandbox and file entitlements of
+DocumentArchive-macOS.entitlements, without iCloud and push, which an ad-hoc signature cannot
+carry. Always used together with DA_BUNDLE_ID_SUFFIX=.SandboxTests, so the test build gets its own
+container and never creates or touches the real app's container.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

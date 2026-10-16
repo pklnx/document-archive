@@ -16,13 +16,13 @@ enum LegacyMigration {
     /// - Parameters:
     ///   - directory: Folder holding the stores; defaults to Application Support.
     ///   - defaults: The app's settings, which also record that the migration ran.
-    ///   - legacyDefaults: The settings of the old app.
+    ///   - legacyDefaults: The settings of the old app; see `legacyDefaults(sandboxed:)`.
     ///   - migrateAPIKey: Copy the Mistral key in the Keychain (off in tests).
     static func run(
         newStoreName: String,
         directory: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
         defaults: UserDefaults = .standard,
-        legacyDefaults: UserDefaults? = UserDefaults(suiteName: legacyBundleID),
+        legacyDefaults: UserDefaults? = legacyDefaults(sandboxed: AppSandbox.isActive),
         migrateAPIKey: Bool = true
     ) {
         guard !defaults.bool(forKey: doneKey) else { return }
@@ -30,6 +30,16 @@ enum LegacyMigration {
         if let legacyDefaults { migrateSettings(from: legacyDefaults, to: defaults) }
         if migrateAPIKey { copyAPIKey() }
         defaults.set(true, forKey: doneKey)
+    }
+
+    /// The old app's settings domain, read only by unsandboxed Mac builds (development builds,
+    /// which never reach the App Store). A sandboxed app may not read another app's domain
+    /// (cfprefsd denies it, and the privacy manifest's CA92.1 covers only the app's own settings),
+    /// and on iPhone and iPad it never held the old app's data. The migration has run long before
+    /// the first sandboxed build (pre-check in docs/development/index.md, "Sandbox"), and its
+    /// result moves into the container with the app's own preferences.
+    static func legacyDefaults(sandboxed: Bool) -> UserDefaults? {
+        sandboxed ? nil : UserDefaults(suiteName: legacyBundleID)
     }
 
     /// Copies `Ablage.store` (with WAL/SHM and the folder holding the PDFs) to the new name.

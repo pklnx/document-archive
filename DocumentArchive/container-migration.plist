@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Container migration manifest (macOS only; the project filters it out of the iOS app). macOS reads
+it once, when it creates the app's sandbox container on the first launch of a sandboxed (signed)
+build, and MOVES these items from the user's Library into the container, to the same relative
+place. Missing items are skipped. If the container already exists, nothing happens. See
+docs/development/index.md, "Sandbox": take a backup and run the pre-check before the first signed
+launch, and never delete the container of de.patrickklein.DocumentArchive.
+
+Only Apple's variables (${ApplicationSupport}, ${Library}, ...); there is no ${Preferences}.
+Not moved: Ablage.* (LegacyMigration's source, left in place as a backup; the migratedFromAblage
+flag travels inside the preferences plist). ContainerMigrationTests check this list.
+-->
+<plist version="1.0">
+<dict>
+	<key>Move</key>
+	<array>
+		<!-- The store (ArchiveStore.storeName) with its external PDF data. -->
+		<string>${ApplicationSupport}/DocumentArchive.store</string>
+		<string>${ApplicationSupport}/DocumentArchive.store-wal</string>
+		<string>${ApplicationSupport}/DocumentArchive.store-shm</string>
+		<string>${ApplicationSupport}/.DocumentArchive_SUPPORT</string>
+		<!-- The fallback store of ArchiveStore.makeContainer, if it was ever created. -->
+		<string>${ApplicationSupport}/DocumentArchive-lokal.store</string>
+		<string>${ApplicationSupport}/DocumentArchive-lokal.store-wal</string>
+		<string>${ApplicationSupport}/DocumentArchive-lokal.store-shm</string>
+		<string>${ApplicationSupport}/.DocumentArchive-lokal_SUPPORT</string>
+		<!-- The folder copy's bookkeeping (ArchiveMirrorStateStore.fileName). -->
+		<string>${ApplicationSupport}/ArchiveMirror.json</string>
+		<!-- The settings, where cfprefsd reads them inside the container. -->
+		<string>${Library}/Preferences/de.patrickklein.DocumentArchive.plist</string>
+	</array>
+</dict>
+</plist>
