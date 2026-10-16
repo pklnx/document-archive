@@ -214,15 +214,16 @@ jobs:
           set -o pipefail
           skip=()
           for test in \
-            GlobalStateTests/DocumentImporterTests/importedImageGetsATextLayerAndStaysADuplicate \
-            GlobalStateTests/DocumentImporterTests/folderCopyPicksUpTheReplacedPDF \
-            GlobalStateTests/DocumentImporterTests/rewriteThatFailsTheCheckKeepsTheOriginal \
-            GlobalStateTests/DocumentImporterTests/settingOffLeavesThePDFUnchanged \
-            GlobalStateTests/DocumentImporterTests/automaticCleanupStraightensThePhotoAndKeepsTheOriginalHash \
-            GlobalStateTests/DocumentProcessorTests/readsScannedTextWithVision \
-            GlobalStateTests/DocumentProcessorTests/textLayerComesFromVisionWhenMistralReadsTheText \
-            GlobalStateTests/DocumentProcessorTests/fallsBackToVisionWhenMistralFails \
-            GlobalStateTests/ScanImportTests/threePagesBecomeOneProcessedDocument \
+            DocumentImporterTests/importedImageGetsATextLayerAndStaysADuplicate \
+            DocumentImporterTests/folderCopyPicksUpTheReplacedPDF \
+            DocumentImporterTests/rewriteThatFailsTheCheckKeepsTheOriginal \
+            DocumentImporterTests/importReachesTheStubThroughTheDetachedAnalysis \
+            DocumentImporterTests/settingOffLeavesThePDFUnchanged \
+            DocumentImporterTests/automaticCleanupStraightensThePhotoAndKeepsTheOriginalHash \
+            DocumentProcessorTests/readsScannedTextWithVision \
+            DocumentProcessorTests/textLayerComesFromVisionWhenMistralReadsTheText \
+            DocumentProcessorTests/fallsBackToVisionWhenMistralFails \
+            ScanImportTests/threePagesBecomeOneProcessedDocument \
             ImageCleanupTests/correctsThePerspective \
             TextLayerTests/wordsLandOnTheRightPage \
             TextLayerTests/selectsASingleWordInTheMiddleOfALine \
