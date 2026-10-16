@@ -83,8 +83,12 @@ never see the real archive and never call Mistral. Rules:
   shows neither the list nor the sidebar (slow CI runners); wait for an
   element before using it instead of adding sleeps.
 
-CI runs them as `test (iOS UI, iphone)` and `test (iOS UI, ipad)`. These checks
-are not required yet; they become required after a week without flaky runs.
+Pull requests do not run them on GitHub. The reviewer runs them locally on the
+smallest iPhone and iPad and posts the results as a test report in the review;
+a pull request is merged on that report plus the required checks. The workflow
+`UI tests` (`.github/workflows/ui-tests.yml`) runs them every night on `main`
+and on demand (Actions → UI tests → Run workflow) on the hosted runners, which
+have an older iOS (26.x); a failure there is handled like a bug report.
 
 ## Project layout
 
