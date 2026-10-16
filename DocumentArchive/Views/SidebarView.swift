@@ -154,15 +154,21 @@ struct SidebarView: View {
         }
     }
 
-    private enum PendingDeletion {
+    enum PendingDeletion {
         case tag(Tag), correspondent(Correspondent), documentType(DocumentType)
 
+        /// Without the name once the object is gone (deleted on another device while the dialog
+        /// is open).
         var title: String {
             switch self {
-            case .tag(let t): String(localized: "Delete tag “\(t.name)”?")
-            case .correspondent(let c): String(localized: "Delete correspondent “\(c.name)”?")
-            case .documentType(let d): String(localized: "Delete document type “\(d.name)”?")
+            case .tag(let t): String(localized: "Delete tag “\(Self.name(t, t.name))”?")
+            case .correspondent(let c): String(localized: "Delete correspondent “\(Self.name(c, c.name))”?")
+            case .documentType(let d): String(localized: "Delete document type “\(Self.name(d, d.name))”?")
             }
+        }
+
+        private static func name(_ model: some PersistentModel, _ name: String) -> String {
+            model.isDeleted || model.modelContext == nil ? "" : name
         }
     }
 
