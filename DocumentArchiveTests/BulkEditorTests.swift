@@ -253,6 +253,37 @@ import Testing
         #expect(try prunedAfterEdit(selection, filter: .inbox, searchText: "") == [documents[1].id])
     }
 
+    /// Review finding (#31): a hidden open document stayed in the selection when the user added
+    /// rows (iOS edit mode, ⌘-click) and joined the bulk selection once the search was cleared.
+    @Test func hiddenOpenDocumentDoesNotJoinABulkSelection() throws {
+        let documents = try makeDocuments(["Electricity bill", "Water bill", "Tax return"])
+        let open = documents[0]
+        var selection: Set<Document.ID> = [open.id]
+        // An edit hides the open document from the search "bill"; it stays open.
+        open.title = "Electricity"
+        selection = try prunedAfterEdit(selection, filter: .all, searchText: "bill")
+        #expect(selection == [open.id])
+        let visible = SidebarItem.all.visibleDocuments(in: try allDocuments(), searchText: "bill", sort: .added)
+
+        // One ID from the list (re-selecting the open one) is kept as it is.
+        #expect(DocumentSelection.fromList([open.id], visible: visible) == [open.id])
+        // The user adds "Water bill": the hidden document is dropped.
+        selection = DocumentSelection.fromList(selection.union([documents[1].id]), visible: visible)
+        #expect(selection == [documents[1].id])
+
+        // Clearing the search does not bring it back into the selection.
+        let all = SidebarItem.all.visibleDocuments(in: try allDocuments(), searchText: "", sort: .added)
+        #expect(DocumentSelection.resolve(selection, in: all).map(\.id) == [documents[1].id])
+    }
+
+    @Test func enteringEditModeDropsAHiddenOpenDocument() throws {
+        let documents = try makeDocuments(["Electricity bill", "Water bill"])
+        documents[0].title = "Electricity"
+        let visible = SidebarItem.all.visibleDocuments(in: try allDocuments(), searchText: "bill", sort: .added)
+        #expect(DocumentSelection.enteringEditMode([documents[0].id], visible: visible).isEmpty)
+        #expect(DocumentSelection.enteringEditMode([documents[1].id], visible: visible) == [documents[1].id])
+    }
+
     /// An action that moves documents out of the current list (done in the inbox) ends their
     /// selection.
     @Test func markingAsDoneInTheInboxEndsTheSelection() throws {

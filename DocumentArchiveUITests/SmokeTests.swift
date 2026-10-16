@@ -16,7 +16,49 @@ final class SmokeTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         app = XCUIApplication()
         app.launchArguments = ["-UITestSeed"]
+        launchApp()
+    }
+
+    /// Generous: slow CI runners need a long time for the first launch of a simulator.
+    private let launchTimeout: TimeInterval = 60
+    /// Set while the first launch attempt runs; its failures are collected instead of recorded.
+    private var firstLaunchIssues: [XCTIssue]?
+
+    /// Launches the app and waits for the list or the sidebar. On slow CI runners a launch
+    /// sometimes fails ("Timed out while launching application via Xcode", "Failed to get
+    /// background assertion") or the app shows nothing for a long time; then it is terminated
+    /// and launched once more. A second failure fails the test as before.
+    private func launchApp() {
+        firstLaunchIssues = []
+        continueAfterFailure = true   // a failed launch must return here instead of ending the test
         app.launch()
+        let issues = firstLaunchIssues ?? []
+        firstLaunchIssues = nil
+        continueAfterFailure = false
+        if issues.isEmpty, appIsReady() { return }
+
+        let reason = issues.map(\.compactDescription).joined(separator: "; ")
+        XCTContext.runActivity(named: "Launch again: \(reason.isEmpty ? "no list or sidebar" : reason)") { _ in
+            app.terminate()
+            app.launch()
+        }
+        XCTAssertTrue(appIsReady(), "neither the list nor the sidebar appeared after launching twice")
+    }
+
+    private func appIsReady() -> Bool {
+        let list = element("documentList")
+        let sidebar = element("sidebar.settings")
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in list.exists || sidebar.exists }, object: nil)
+        return XCTWaiter().wait(for: [ready], timeout: launchTimeout) == .completed
+    }
+
+    override func record(_ issue: XCTIssue) {
+        if firstLaunchIssues != nil {
+            firstLaunchIssues?.append(issue)
+        } else {
+            super.record(issue)
+        }
     }
 
     override func tearDown() {
@@ -185,7 +227,10 @@ final class SmokeTests: XCTestCase {
     /// Regression: the dialog used a constant binding, so dismissing it without a button left it
     /// stuck. Dismissed by tapping outside, it must come back for the next document.
     func testDeleteDialogCanBeDismissedAndShownAgain() {
+        // Once flaky at this step: the list was not there yet when reveal() looked for the row.
+        XCTAssertTrue(element("documentList").waitForExistence(timeout: 15), "no document list")
         let first = row(firstDocument)
+        _ = waitUntilHittable(first, timeout: 10)   // still settling after the launch
         reveal(first, "row \(firstDocument)")
 
         first.swipeLeft()

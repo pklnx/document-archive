@@ -22,42 +22,59 @@ import Testing
         #expect(RGB(hex: "nonsense") == RGB(hex: "#3B82F6"), "falls back to the default tag blue, like Color(hex:)")
     }
 
-    /// Light and dark appearance, each on a normal and on a selected row.
-    static let situations = [(false, false), (false, true), (true, false), (true, true)]
-        .map { Situation(dark: $0.0, selected: $0.1) }
+    static let appearances = [false, true]
 
-    struct Situation: CustomTestStringConvertible {
-        var dark: Bool
-        var selected: Bool
-        var testDescription: String { "\(dark ? "dark" : "light")\(selected ? ", selected" : "")" }
-        var rows: [RGB] { ColorContrast.backgrounds(dark: dark, selected: selected) }
-    }
-
-    @Test func selectedRowsUseTheAccentColor() {
-        #expect(ColorContrast.backgrounds(dark: true, selected: true) == [ColorContrast.selectedRowBackground(dark: true)])
-        #expect(ColorContrast.backgrounds(dark: false, selected: false) == ColorContrast.rowBackgrounds(dark: false))
-    }
-
-    @Test(arguments: colors, situations)
-    func chipTextIsReadable(hex: String, situation: Situation) {
-        let tag = RGB(hex: hex)
-        let text = ColorContrast.chipText(tagHex: hex, dark: situation.dark, selected: situation.selected)
-        for row in situation.rows {
-            let chip = tag.over(row, opacity: ColorContrast.chipBackgroundOpacity)
-            #expect(ColorContrast.ratio(text, chip) >= ColorContrast.minimumTextContrast,
-                    "\(hex): \(ColorContrast.ratio(text, chip))")
+    /// Every row a chip can sit on: normal, grey selected (iPhone edit mode, unfocused macOS list)
+    /// and accent selected (iPad, focused macOS list).
+    @Test func everyRowBackgroundIsCovered() {
+        for dark in Self.appearances {
+            let rows = ColorContrast.allRowBackgrounds(dark: dark)
+            #expect(rows.contains(ColorContrast.selectedRowBackground(dark: dark)))
+            #expect(ColorContrast.greySelectedRowBackgrounds(dark: dark).allSatisfy { rows.contains($0) })
+            #expect(ColorContrast.rowBackgrounds(dark: dark).allSatisfy { rows.contains($0) })
         }
     }
 
-    @Test(arguments: colors, situations)
-    func increasedContrastBorderStandsOut(hex: String, situation: Situation) {
-        let border = ColorContrast.chipBorder(tagHex: hex, dark: situation.dark, selected: situation.selected)
-        for row in situation.rows {
+    @Test(arguments: colors, appearances)
+    func chipTextIsReadable(hex: String, dark: Bool) {
+        let text = ColorContrast.chipText(tagHex: hex, dark: dark)
+        let fill = ColorContrast.chipBackground(tagHex: hex, dark: dark)
+        #expect(ColorContrast.ratio(text, fill) >= ColorContrast.minimumTextContrast,
+                "\(hex): \(ColorContrast.ratio(text, fill))")
+    }
+
+    /// Regression: on iPad, a row that stayed selected while more rows were added kept
+    /// `backgroundProminence == .standard` on its accent background, so the chip used the colors
+    /// for a white row and its translucent fill took on the accent ("Tax" green on Petrol). The
+    /// fill is opaque now: the same color on every row, selected or not.
+    @Test(arguments: colors, appearances)
+    func chipFillDoesNotDependOnTheRow(hex: String, dark: Bool) {
+        let fill = ColorContrast.chipBackground(tagHex: hex, dark: dark)
+        let normalRow = ColorContrast.rowBackgrounds(dark: dark)[0]
+        #expect(fill == RGB(hex: hex).over(normalRow, opacity: ColorContrast.chipBackgroundOpacity))
+        // What a translucent fill gave on the accent row: not the color the text was made for.
+        let translucentOnAccent = RGB(hex: hex).over(ColorContrast.selectedRowBackground(dark: dark),
+                                                     opacity: ColorContrast.chipBackgroundOpacity)
+        #expect(fill != translucentOnAccent)
+    }
+
+    /// With Increase Contrast, the chip's outline stands out (3:1) on every row, normal, grey or
+    /// accent selected: through its border, or (light mode on the accent) through its opaque fill.
+    @Test(arguments: colors, appearances)
+    func increasedContrastChipStandsOut(hex: String, dark: Bool) {
+        let border = ColorContrast.chipBorder(tagHex: hex, dark: dark)
+        let fill = ColorContrast.chipBackground(tagHex: hex, dark: dark)
+        for row in ColorContrast.rowBackgrounds(dark: dark) + ColorContrast.greySelectedRowBackgrounds(dark: dark) {
             #expect(ColorContrast.ratio(border, row) >= ColorContrast.minimumNonTextContrast, "\(hex) against \(row)")
         }
+        let accent = ColorContrast.selectedRowBackground(dark: dark)
+        let outline = max(ColorContrast.ratio(border, accent), ColorContrast.ratio(fill, accent))
+        #expect(outline >= ColorContrast.minimumNonTextContrast, "\(hex) on the accent: \(outline)")
     }
 
-    /// The selected row is drawn in the accent color; the constants must follow the asset.
+    /// The selected row is drawn in the accent color; the constant must follow the asset. The
+    /// asset has one universal Petrol (maintainer decision, PR #32); a dark entry, if one is added
+    /// again, must match the dark constant.
     @Test func selectedRowMatchesTheAccentColorAsset() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appending(path: "DocumentArchive/Assets.xcassets/AccentColor.colorset/Contents.json")
@@ -76,7 +93,7 @@ import Testing
                                 blue: try component(components["blue"]))
         }
         for dark in [false, true] {
-            let asset = try #require(found[dark], "accent color for \(dark ? "dark" : "light") missing")
+            let asset = try #require(found[dark] ?? found[false], "accent color for \(dark ? "dark" : "light") missing")
             let constant = ColorContrast.selectedRowBackground(dark: dark)
             #expect(abs(asset.red - constant.red) < 0.003 && abs(asset.green - constant.green) < 0.003
                     && abs(asset.blue - constant.blue) < 0.003, "\(dark ? "dark" : "light"): \(asset) vs \(constant)")

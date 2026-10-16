@@ -51,10 +51,22 @@ enum ColorContrast {
         dark ? [RGB.black, RGB(hex: "#1C1C1E")] : [RGB.white, RGB(hex: "#F2F2F7")]
     }
 
-    /// Background of a selected row: the app's accent color (AccentColor asset, Petrol).
-    /// `ColorContrastTests` checks that these match the asset.
+    /// Background of a selected row in a focused list on iPad and macOS: the app's accent color
+    /// (AccentColor asset, Petrol, the same in light and dark mode). `ColorContrastTests` checks
+    /// that this matches the asset.
     static func selectedRowBackground(dark: Bool) -> RGB {
-        dark ? RGB(hex: "#3CC3C6") : RGB(hex: "#0B7480")
+        RGB(hex: "#0B7480")
+    }
+
+    /// The grey a selected row gets instead of the accent color: iPhone edit mode and a macOS list
+    /// without focus (approximate system colors).
+    static func greySelectedRowBackgrounds(dark: Bool) -> [RGB] {
+        dark ? [RGB(hex: "#3A3A3C"), RGB(hex: "#464646")] : [RGB(hex: "#D1D1D6"), RGB(hex: "#DCDCDC")]
+    }
+
+    /// Every row background a chip can sit on: normal rows and selected rows (grey or accent).
+    static func allRowBackgrounds(dark: Bool) -> [RGB] {
+        rowBackgrounds(dark: dark) + greySelectedRowBackgrounds(dark: dark) + [selectedRowBackground(dark: dark)]
     }
 
     /// Relative luminance (WCAG 2.x).
@@ -73,8 +85,8 @@ enum ColorContrast {
 
     /// The tag color, changed as little as possible to reach `minimum` against every background,
     /// so the hue stays recognizable. It is darkened first in the light appearance and lightened
-    /// first in the dark one. If both backgrounds are far apart (black and the light dark-mode
-    /// accent), only a narrow mid-tone band works, so the search uses small steps. Without any
+    /// first in the dark one. If the backgrounds are far apart, only a narrow band works, so the
+    /// search uses small steps. Without any
     /// solution, the candidate with the best worst-case contrast wins.
     static func adjusted(_ color: RGB, against backgrounds: [RGB], dark: Bool, minimum: Double) -> RGB {
         func worstRatio(_ candidate: RGB) -> Double {
@@ -96,23 +108,29 @@ enum ColorContrast {
         return best
     }
 
-    /// The backgrounds a chip can sit on: the normal rows, or the accent color of a selected row.
-    /// One color cannot reach 3:1 against both in dark mode (dark grey and the light Petrol), so
-    /// the chip asks which one it is on (`backgroundProminence`).
-    static func backgrounds(dark: Bool, selected: Bool) -> [RGB] {
-        selected ? [selectedRowBackground(dark: dark)] : rowBackgrounds(dark: dark)
+    /// Fill of a tag chip: the tag color at `chipBackgroundOpacity` over the normal row background,
+    /// drawn **opaque**. The chip therefore looks the same on every row, selected or not, and its
+    /// text contrast does not depend on how the platform draws a selected row (accent color on
+    /// iPad and in a focused macOS list, grey in iPhone edit mode and in an unfocused macOS list).
+    /// SwiftUI's `backgroundProminence` is not reliable for this: on iPad a row that stays
+    /// selected while more rows are added keeps `.standard` on its accent background.
+    static func chipBackground(tagHex: String, dark: Bool) -> RGB {
+        RGB(hex: tagHex).over(rowBackgrounds(dark: dark)[0], opacity: chipBackgroundOpacity)
     }
 
-    /// Text color of a tag chip: readable (4.5:1) on the chip's tinted background.
-    static func chipText(tagHex: String, dark: Bool, selected: Bool = false) -> RGB {
-        let tag = RGB(hex: tagHex)
-        let chipBackgrounds = backgrounds(dark: dark, selected: selected).map { tag.over($0, opacity: chipBackgroundOpacity) }
-        return adjusted(tag, against: chipBackgrounds, dark: dark, minimum: minimumTextContrast)
+    /// Text color of a tag chip: readable (4.5:1) on the chip's fill.
+    static func chipText(tagHex: String, dark: Bool) -> RGB {
+        adjusted(RGB(hex: tagHex), against: [chipBackground(tagHex: tagHex, dark: dark)], dark: dark,
+                 minimum: minimumTextContrast)
     }
 
-    /// Border of a tag chip with Increase Contrast: 3:1 against the row it is on.
-    static func chipBorder(tagHex: String, dark: Bool, selected: Bool = false) -> RGB {
-        adjusted(RGB(hex: tagHex), against: backgrounds(dark: dark, selected: selected), dark: dark,
-                 minimum: minimumNonTextContrast)
+    /// Border of a tag chip with Increase Contrast: 3:1 against the normal and the grey selected
+    /// rows, and in dark mode also against the accent color of a selected row (Petrol is dark, so
+    /// one light border reaches all of them). In light mode the opaque, light fill itself stands
+    /// out on the accent color (see tests).
+    static func chipBorder(tagHex: String, dark: Bool) -> RGB {
+        let rows = rowBackgrounds(dark: dark) + greySelectedRowBackgrounds(dark: dark)
+        return adjusted(RGB(hex: tagHex), against: dark ? rows + [selectedRowBackground(dark: dark)] : rows,
+                        dark: dark, minimum: minimumNonTextContrast)
     }
 }

@@ -17,7 +17,10 @@ import Foundation
 /// - One exception: the **open document** (exactly one selected, outside edit mode) stays open
 ///   when an edit in it makes it drop out of the list (a new title, correspondent, type or tag
 ///   while a search or a filter is active). It is closed only when the search text or the
-///   sidebar entry changes, or when it is deleted.
+///   sidebar entry changes, or when it is deleted. As soon as the selection becomes a bulk
+///   selection (the user adds rows, or iOS edit mode starts), the hidden document is dropped
+///   (`fromList(_:visible:)`, `enteringEditMode(_:visible:)`), so it cannot join the bulk
+///   selection unseen when the search is cleared later.
 enum DocumentSelection {
     /// The selected documents among the visible ones, in list order. IDs of documents that are
     /// hidden or deleted are left out.
@@ -42,5 +45,18 @@ enum DocumentSelection {
         guard !selection.isEmpty else { return selection }
         if let open, open.isAlive, selection == [open.id] { return selection }
         return Set(resolve(selection, in: visible).map(\.id))
+    }
+
+    /// A selection the list writes: a tap in iOS edit mode, ⌘-click or ⇧-click on macOS and iPad.
+    /// Two or more IDs are a bulk selection, which only keeps visible documents; one ID is taken
+    /// as it is, so a hidden open document keeps the exception while it is the only one.
+    static func fromList(_ newSelection: Set<Document.ID>, visible: [Document]) -> Set<Document.ID> {
+        newSelection.count > 1 ? pruned(newSelection, to: visible) : newSelection
+    }
+
+    /// iOS edit mode starts: from now on the selection is a bulk selection, so a hidden open
+    /// document is dropped (and closed).
+    static func enteringEditMode(_ selection: Set<Document.ID>, visible: [Document]) -> Set<Document.ID> {
+        pruned(selection, to: visible)
     }
 }
