@@ -94,7 +94,7 @@ label there so it matches `DocumentArchive/PrivacyInfo.xcprivacy` (see
 functionality (Mistral). Check it again whenever the manifest changes.
 
 Before the **first signed Mac build** runs on a Mac that holds a real archive
-(TestFlight, or an Xcode build with a team), take the backup and run the
+(TestFlight, or an Xcode run or test run (⌘U) with a team), take the backup and run the
 pre-check in [Sandbox](./#before-the-first-signed-launch): that launch moves
 the archive into the app's sandbox container, once.
 

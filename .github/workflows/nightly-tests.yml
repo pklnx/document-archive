@@ -16,6 +16,7 @@ on:
       - TestPlans/Nightly.xctestplan
       - Config/DocumentArchive-macOS-SandboxTests.entitlements
       - DocumentArchiveTests/SandboxTests.swift
+      - scripts/check-container-migration.py
 
 permissions:
   contents: read
@@ -96,6 +97,8 @@ jobs:
     # cannot carry) and its own bundle identifier, so the test host gets its own container.
     # DA_EXPECT_SANDBOX makes SandboxTests fail instead of skipping when the host is not
     # sandboxed. No Thread Sanitizer here: its reports go to /tmp, outside the container.
+    # The app is built first and checked before anything launches it: a test build must never
+    # contain container-migration.plist, which would move the real archive into its container.
     # A red run blocks pull requests that touch FolderAccess, the import entry points,
     # ArchiveMirror or the entitlements (docs/development/index.md, "Test strategy").
     runs-on: macos-26
@@ -106,15 +109,23 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/select-xcode
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination 'platform=macOS,arch=arm64' -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS=Config/DocumentArchive-macOS-SandboxTests.entitlements \
+            DA_BUNDLE_ID_SUFFIX=.SandboxTests | xcbeautify --renderer github-actions
+      - name: Check that the test build has no container migration manifest
+        run: python3 scripts/check-container-migration.py --app "build/Build/Products/Debug/Document Archive.app"
       - name: Test
         env:
           TEST_RUNNER_DA_EXPECT_SANDBOX: "1"
         run: |
           set -o pipefail
-          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
-            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS=Config/DocumentArchive-macOS-SandboxTests.entitlements \
-            DA_BUNDLE_ID_SUFFIX=.SandboxTests | xcbeautify --renderer github-actions
+          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination 'platform=macOS,arch=arm64' -derivedDataPath build \
+            -resultBundlePath TestResults.xcresult | xcbeautify --renderer github-actions
       - name: Upload test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

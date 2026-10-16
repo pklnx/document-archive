@@ -21,6 +21,14 @@ import Testing
         #expect(support.contains("/Library/Containers/"), "Application Support is \(support)")
     }
 
+    /// The sandboxed test build must not carry the container migration manifest: on its first
+    /// launch it would move the real archive into the test container (#61 review). CI checks the
+    /// built app before launching it (scripts/check-container-migration.py); this is the last line.
+    @Test func testBuildHasItsOwnIdentifierAndNoMigrationManifest() {
+        #expect(Bundle.main.bundleIdentifier != ContainerMigrationTests.bundleID)
+        #expect(Bundle.main.url(forResource: "container-migration", withExtension: "plist") == nil)
+    }
+
     /// Writing outside the container fails, which proves the sandbox is active. (Reading does not
     /// prove it here: Xcode gives every test host read-only access to the whole disk.)
     @Test func writingOutsideTheContainerFails() throws {

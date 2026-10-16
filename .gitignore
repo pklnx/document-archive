@@ -17,3 +17,6 @@ xcuserdata/
 
 # Local build overrides (team, CloudKit flag)
 Config/Local.xcconfig
+
+# Sandboxed test builds (docs/development/index.md, "Sandbox")
+build-sandboxed/

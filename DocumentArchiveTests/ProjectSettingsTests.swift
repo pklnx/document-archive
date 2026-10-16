@@ -22,10 +22,10 @@ import Testing
     /// The sandboxed test build's own container depends on the suffix (docs: Sandbox).
     @Test func appBundleIdentifierTakesTheSuffix() throws {
         let project = try read("DocumentArchive.xcodeproj/project.pbxproj")
-        let appIdentifiers = project.split(separator: "\n")
-            .filter { $0.contains("PRODUCT_BUNDLE_IDENTIFIER = ") && !$0.contains("Tests") }
-        #expect(appIdentifiers.count == 2)
-        #expect(appIdentifiers.allSatisfy { $0.contains("\"de.patrickklein.DocumentArchive$(DA_BUNDLE_ID_SUFFIX)\";") })
+        let identifiers = project.split(separator: "\n").filter { $0.contains("PRODUCT_BUNDLE_IDENTIFIER = ") }
+        let app = identifiers.filter { $0.hasSuffix("PRODUCT_BUNDLE_IDENTIFIER = \"de.patrickklein.DocumentArchive$(DA_BUNDLE_ID_SUFFIX)\";") }
+        #expect(app.count == 2, "the app target's Debug and Release configurations")
+        #expect(!identifiers.contains { $0.hasSuffix("PRODUCT_BUNDLE_IDENTIFIER = de.patrickklein.DocumentArchive;") })
         let config = try read("Config/Project.xcconfig")
         #expect(config.contains("\nDA_BUNDLE_ID_SUFFIX =\n"), "empty for every real build")
     }

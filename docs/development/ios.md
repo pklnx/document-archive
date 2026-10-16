@@ -74,7 +74,8 @@ the `ScannedPages` protocol, without a camera.
 
 **On a Mac with a real archive:** with a team in `Config/Local.xcconfig`,
 Xcode IDE builds for "My Mac" are signed and therefore sandboxed. The first
-such launch moves the archive into the app's container (container migration
+such launch, a Run **or a test run (⌘U)**, which launches the app as the test
+host, moves the archive into the app's container (container migration
 manifest). Before it, take the backup and run the pre-check in
 [Sandbox](./#before-the-first-signed-launch). Command-line builds with
 `CODE_SIGNING_ALLOWED=NO` stay unsigned and unsandboxed.
@@ -136,7 +137,7 @@ On a signed (sandboxed) build, once the paid account exists:
 
 | Area | Check |
 |---|---|
-| Data move | backup and pre-check done first ([Sandbox](./#before-the-first-signed-launch)); after the first signed launch the archive, the settings and the folder copy state are there; `~/Library/Application Support/DocumentArchive.store` is gone (moved), `Ablage.*` is still there; the Mistral key and the folder copy's folder may have to be entered and chosen again |
+| Data move | backup and pre-check done first ([Sandbox](./#before-the-first-signed-launch)); after the first signed launch the archive, the settings and the folder copy state are there; `~/Library/Application Support/DocumentArchive.store` is gone (moved; check before any unsigned build runs, whose `LegacyMigration` copies the old `Ablage.*` archive back to `DocumentArchive.*` there), `Ablage.*` is still there; `defaults read ~/Library/Containers/de.patrickklein.DocumentArchive/Data/Library/Preferences/de.patrickklein.DocumentArchive.plist migratedFromAblage` prints `1`; the Mistral key and the folder copy's folder may have to be entered and chosen again |
 | Open with | "Open With" from Finder and a drop on the Dock icon, with the app running and not running: the document opens, the file stays where it is |
 | Drag and drop | a drop from Finder, Mail and Safari |
 | Folder copy | choose a folder, quit, relaunch: the copy continues; "Show in Finder" opens it |

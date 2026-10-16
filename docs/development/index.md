@@ -201,13 +201,18 @@ so the tests never see the real archive or the stored Mistral key. Rules:
   always), so a review can look at them; on the Mac, screenshot a window, not
   the app (`app.screenshot()` is the whole screen there).
 
-Run the Mac tests with:
+Run the Mac tests with (build, check, then test; see
+[the sandboxed test build](#the-sandboxed-test-build) for why the check comes
+before anything launches the app):
 
 ```sh
-xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
-  -destination 'platform=macOS' CODE_SIGN_IDENTITY=- \
+xcodebuild build-for-testing -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
+  -destination 'platform=macOS' -derivedDataPath build-sandboxed CODE_SIGN_IDENTITY=- \
   CODE_SIGN_ENTITLEMENTS=Config/DocumentArchive-macOS-SandboxTests.entitlements \
   DA_BUNDLE_ID_SUFFIX=.SandboxTests
+python3 scripts/check-container-migration.py --app "build-sandboxed/Build/Products/Debug/Document Archive.app" \
+  && xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
+  -destination 'platform=macOS' -derivedDataPath build-sandboxed
 ```
 
 `CODE_SIGN_IDENTITY=-` signs ad hoc, which the test runner needs. The app then
@@ -746,11 +751,31 @@ items from `~/Library` to the same place inside the container:
 `DocumentArchive.store` with `-wal`, `-shm` and `.DocumentArchive_SUPPORT`, the
 fallback store `DocumentArchive-lokal.*` if it exists, `ArchiveMirror.json`,
 and `~/Library/Preferences/de.patrickklein.DocumentArchive.plist`. `Ablage.*`
-is not moved. After the move, unsigned builds start with an empty archive.
+is not moved.
 
-**A signed IDE Debug build ships the manifest too.** Once
-`Config/Local.xcconfig` has a team, the first Debug run from Xcode is the
-launch that moves the data, not the first TestFlight build.
+**After the move, an unsigned build does not start empty.** The
+`migratedFromAblage` flag moved into the container with the preferences, so
+the next unsigned launch runs `LegacyMigration` again and copies `Ablage.*`
+back to `DocumentArchive.*` in `~/Library/Application Support/`: the archive
+of the "Ablage" days, not the current one, which is in the container. So "the
+store is gone from `~/Library/Application Support/`" holds only until the
+first unsigned launch after the move. Do not mistake that copy for the real
+archive, and do not copy it into the container.
+
+**A signed IDE build ships the manifest too.** Once `Config/Local.xcconfig`
+has a team, the first Debug run **or test run (⌘U)** from Xcode for "My Mac"
+(the tests launch the signed, sandboxed app as their host) is the launch that
+moves the data, not the first TestFlight build.
+
+**Never in a test build.** The manifest's paths are relative to the home
+folder, not to the bundle identifier: a sandboxed build with another
+identifier that carried it would move the real archive into **its own**
+container on its first launch. `Config/Project.xcconfig` therefore adds it to
+`EXCLUDED_SOURCE_FILE_NAMES` for every build with a non-empty
+`DA_BUNDLE_ID_SUFFIX`. `scripts/check-container-migration.py` checks this in
+CI (`--settings`, and `--app` on the real app and on every sandboxed test
+build before it is launched), and `ContainerMigrationTests` and `SandboxTests`
+check the app that hosts them.
 
 #### Before the first signed launch
 
@@ -772,7 +797,10 @@ on a Mac that holds a real archive:
    `com.apple.security.app-sandbox`.
 5. Check that `LegacyMigration` has already run outside the sandbox:
    `defaults read de.patrickklein.DocumentArchive migratedFromAblage` prints
-   `1`. If not, launch an unsigned build once first.
+   `1`. If not, launch an unsigned build once first. This reads the
+   unsandboxed settings; after the move (or when a container exists) they are
+   empty, so read the container's file instead:
+   `defaults read ~/Library/Containers/de.patrickklein.DocumentArchive/Data/Library/Preferences/de.patrickklein.DocumentArchive.plist migratedFromAblage`.
 
 Then:
 
@@ -780,9 +808,22 @@ Then:
   launch. Nothing else to do.
 - **A container already exists:** the manifest does nothing. Copy by hand
   instead:
-  - with the app quit and after the backup, copy the store files (the
-    `DocumentArchive*` items above and `ArchiveMirror.json`) into
-    `~/Library/Containers/de.patrickklein.DocumentArchive/Data/Library/Application Support/`;
+  - with the app quit and after the backup, copy every store item into the
+    container, including the hidden `.DocumentArchive_SUPPORT` folder, which
+    holds the PDFs and thumbnails (a `DocumentArchive*` wildcard misses it):
+
+    ```sh
+    SRC=~/Library/Application\ Support
+    DST=~/Library/Containers/de.patrickklein.DocumentArchive/Data/Library/Application\ Support
+    cp -p "$SRC/DocumentArchive.store" "$DST/"
+    cp -p "$SRC/DocumentArchive.store-wal" "$DST/"
+    cp -p "$SRC/DocumentArchive.store-shm" "$DST/"
+    cp -Rp "$SRC/.DocumentArchive_SUPPORT" "$DST/"
+    cp -p "$SRC/ArchiveMirror.json" "$DST/"   # if it exists
+    ```
+
+    and the same for `DocumentArchive-lokal.store*` and
+    `.DocumentArchive-lokal_SUPPORT` if they exist;
   - move the settings with `defaults export` / `defaults import` instead of
     copying the plist, because cfprefsd caches preference files;
   - if the container already has its own store with real data, stop and
@@ -805,16 +846,24 @@ ad-hoc signed with `Config/DocumentArchive-macOS-SandboxTests.entitlements`
 cannot carry) and `DA_BUNDLE_ID_SUFFIX=.SandboxTests`:
 
 ```sh
-TEST_RUNNER_DA_EXPECT_SANDBOX=1 xcodebuild test -project DocumentArchive.xcodeproj \
-  -scheme DocumentArchive -destination 'platform=macOS,arch=arm64' CODE_SIGN_IDENTITY=- \
+xcodebuild build-for-testing -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build-sandboxed CODE_SIGN_IDENTITY=- \
   CODE_SIGN_ENTITLEMENTS=Config/DocumentArchive-macOS-SandboxTests.entitlements \
   DA_BUNDLE_ID_SUFFIX=.SandboxTests
+python3 scripts/check-container-migration.py --app "build-sandboxed/Build/Products/Debug/Document Archive.app" \
+  && TEST_RUNNER_DA_EXPECT_SANDBOX=1 xcodebuild test-without-building -project DocumentArchive.xcodeproj \
+  -scheme DocumentArchive -destination 'platform=macOS,arch=arm64' -derivedDataPath build-sandboxed
 ```
 
 - **Always pass the suffix** with these entitlements. It gives the test host
   its own container (`~/Library/Containers/de.patrickklein.DocumentArchive.SandboxTests`),
   so it never creates the real app's container, which would stop the
-  migration above. That test container may be deleted at any time.
+  migration above.
+- **Never launch a test build that contains `container-migration.plist`.**
+  The suffix keeps it out ([above](#moving-the-archive-into-the-container));
+  the check between building and testing proves it for the build at hand.
+  Without the manifest, the test container holds only test data and may be
+  deleted (macOS keeps a small metadata file it does not let you remove).
 - `DA_EXPECT_SANDBOX=1` makes `SandboxTests` fail instead of skipping when the
   host is not sandboxed, so a broken setup cannot pass silently.
 - **Keychain:** `KeychainStore.service` is the fixed string

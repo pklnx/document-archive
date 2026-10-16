@@ -22,6 +22,17 @@ DA_CLOUDKIT_ENABLED = NO
 // See docs/development/index.md → Sandbox.
 DA_BUNDLE_ID_SUFFIX =
 
+// The container migration manifest (DocumentArchive/container-migration.plist) ships only in the
+// real app, never in a build with a suffix. Its paths are relative to the home folder, not to the
+// bundle identifier: in a sandboxed test build it would move the real archive into the TEST
+// container on that build's first launch. Any non-empty suffix excludes it (the lookup of
+// DA_CONTAINER_MIGRATION_KEEP_<suffix> is empty, so the default applies); only the empty suffix
+// finds DA_CONTAINER_MIGRATION_KEEP_, a name that matches no file. ContainerMigrationTests and
+// scripts/check-container-migration.py check both cases.
+DA_CONTAINER_MIGRATION_KEEP_ = no-file-is-excluded
+DA_CONTAINER_MIGRATION_EXCLUDED = $(DA_CONTAINER_MIGRATION_KEEP_$(DA_BUNDLE_ID_SUFFIX:identifier):default=container-migration.plist)
+EXCLUDED_SOURCE_FILE_NAMES = $(inherited) $(DA_CONTAINER_MIGRATION_EXCLUDED)
+
 // Optional local overrides, e.g. DEVELOPMENT_TEAM and DA_CLOUDKIT_ENABLED = YES. Keep this
 // include last, so it overrides everything above.
 #include? "Local.xcconfig"
