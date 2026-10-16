@@ -52,17 +52,21 @@ The `DocumentArchive` scheme has two test plans in `TestPlans/`:
 
 - **`Default.xctestplan`** is the scheme's default: ⌘U, `xcodebuild test`
   without `-testPlan` and the required CI jobs run it. It has one
-  configuration, "Default", and runs `DocumentArchiveTests` **in parallel**
-  (except `test (iOS)` in CI, see below):
-  Swift Testing runs suites and tests concurrently. Until #43 part 2 the
-  scheme had `parallelizable = "NO"`, which also serialized Swift Testing,
-  so the whole suite ran one test at a time. Tests therefore must not share
-  global state (see the rules below); a suite that has to use something
-  global, like `KeychainStoreTests` with the real Keychain, is `.serialized`.
-  In-memory stores all report `/dev/null` as their URL, so a test that
-  follows store change notifications (`StoreChangeObserver`) uses
-  `TestSupport.makeContainerOnDisk()`; otherwise the saves of other tests
-  count as its changes.
+  configuration, "Default". `DocumentArchiveTests` runs **one test at a time**
+  (`parallelizable: false`); this setting also serializes Swift Testing, so
+  `.serialized` on a suite changes nothing today. Parallel execution was
+  tried in #43 part 2: macOS ran about three times faster (8 instead of 24
+  seconds locally), but the test host crashed on the CI runners, in Vision
+  text recognition running several times at once on macOS (#60) and in
+  SwiftData on the iOS simulator (#59). Turn it on again (`parallelizable:
+  true` in both plans) once these are fixed, with three green CI runs in a
+  row. Until then, write tests as if they ran in parallel: no shared global
+  state (see the rules below), `.serialized` for a suite that uses something
+  global like the real Keychain (`KeychainStoreTests`), and
+  `TestSupport.makeContainerOnDisk()` for a test that follows store change
+  notifications (`StoreChangeObserver`). In-memory stores all report
+  `/dev/null` as their URL, so other tests' saves would count as its
+  changes.
 - **`Nightly.xctestplan`** is attached to the scheme but not the default. Its
   configurations run in the nightly workflow (`nightly-tests.yml`) on macOS:
   - **"German"**: the app and the tests in German (`de`, region `DE`). A test
@@ -88,12 +92,7 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 Every wait for something asynchronous in a test scales its timeout with
 `TestSupport.scaled(_:)` (`DA_TEST_TIMEOUT_SCALE`, default 1);
 `TestSupport.waitUntilProcessed` does this already. On the command line,
-`xcodebuild` passes it on as `TEST_RUNNER_DA_TEST_TIMEOUT_SCALE=3`.
-
-`test (iOS)` in CI runs the tests one at a time (`-parallel-testing-enabled NO`):
-in parallel on the hosted runner's simulator the test host crashed in
-SwiftData (#59) and the OCR tests exceeded their timeouts. Remove the flag
-once #59 is fixed. A Thread Sanitizer report
+`xcodebuild` passes it on as `TEST_RUNNER_DA_TEST_TIMEOUT_SCALE=3`. A Thread Sanitizer report
 in app code becomes an issue labeled `bug`; a race in test code is fixed in
 the test.
 
