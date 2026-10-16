@@ -34,8 +34,9 @@ struct RuleEditorView: View {
                                         }
                                     }
                                     .onTapGesture { colorHex = hex }
-                                    .accessibilityAddTraits(.isButton)
-                                    .accessibilityLabel("Color \(hex)")
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityAddTraits(hex == colorHex ? [.isButton, .isSelected] : .isButton)
+                                    .accessibilityLabel(Tag.colorName(for: hex))
                             }
                         }
                         .padding(.vertical, 4)
@@ -52,8 +53,8 @@ struct RuleEditorView: View {
                                     .background(choice == symbol ? Color.accentColor.opacity(0.2) : .clear,
                                                 in: RoundedRectangle(cornerRadius: 8))
                                     .onTapGesture { symbol = choice }
-                                    .accessibilityAddTraits(.isButton)
-                                    .accessibilityLabel(choice)
+                                    .accessibilityAddTraits(choice == symbol ? [.isButton, .isSelected] : .isButton)
+                                    .accessibilityLabel(DocumentType.symbolName(for: choice))
                             }
                         }
                         .padding(.vertical, 4)

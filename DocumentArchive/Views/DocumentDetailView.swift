@@ -84,6 +84,12 @@ struct DocumentDetailView: View {
             }
         }
         .onAppear { showInspector = inspectorIsColumn && remembersInspector }
+        .onChange(of: document.isProcessing) { wasProcessing, isProcessing in
+            // The document stays on screen while it is processed; tell VoiceOver when it is ready.
+            if wasProcessing, !isProcessing, document.isAlive {
+                AccessibilityNotification.Announcement(String(localized: "Text recognition finished")).post()
+            }
+        }
         .onChange(of: showInspector) { if inspectorIsColumn { remembersInspector = showInspector } }
         .fileExporter(isPresented: $showExporter, document: document.pdfData.map(PDFFile.init(data:)),
                       contentType: .pdf, defaultFilename: document.exportFileName) { _ in }
@@ -233,9 +239,13 @@ struct DocumentInfoForm: View {
                 }
                 .disabled(document.isProcessing || isClassifying)
                 if !document.processingNote.isEmpty, !document.isProcessing {
-                    Label(document.processingNote, systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                    // Readable text; the color only marks the icon.
+                    Label {
+                        Text(document.processingNote).foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    }
+                    .font(.caption)
                 }
             }
 
