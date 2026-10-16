@@ -12,7 +12,7 @@ import Testing
 
     /// Runs the production path (recognition, rewrite, verification) and returns the new PDF.
     private func layered(_ data: Data, source: DocumentSource = .scan) async throws -> Data {
-        let result = await DocumentProcessor.analyze(data, mistral: nil, textLayerSource: source)
+        let result = await DocumentProcessor.analyze(data, mistral: nil, textLayerSource: source, environment: .live)
         return try #require(result.searchablePDF, "no text layer: \(result.note)")
     }
 
@@ -194,8 +194,9 @@ import Testing
     @Test func tooLargeRewriteIsSkippedWithItsOwnNote() async throws {
         let scan = TestSupport.scanPDF(pages: [Self.letter])
         let padding = Data(repeating: 0x20, count: TextLayer.maxRewrittenSize(for: scan.count))
-        let result = await DocumentProcessor.analyze(scan, mistral: nil, textLayerSource: .scan,
-                                                     rewriteHook: { _, rewritten in rewritten + padding })
+        var environment = ProcessingEnvironment.live
+        environment.rewriteHook = { _, rewritten in rewritten + padding }
+        let result = await DocumentProcessor.analyze(scan, mistral: nil, textLayerSource: .scan, environment: environment)
         #expect(result.searchablePDF == nil)
         #expect(result.note == String(localized: "Text layer skipped: the result would be too large."))
     }
@@ -251,7 +252,7 @@ import Testing
             if let pdf {
                 #expect(!TextLayer.qualifies(pdf, source: .file), "\(name) must not qualify")
             }
-            let result = await DocumentProcessor.analyze(data, mistral: nil, textLayerSource: .file)
+            let result = await DocumentProcessor.analyze(data, mistral: nil, textLayerSource: .file, environment: .live)
             #expect(result.searchablePDF == nil, "\(name) must stay unchanged")
         }
 
@@ -279,7 +280,7 @@ import Testing
         let once = try await layered(scan)
         let pdf = try #require(PDFDocument(data: once))
         #expect(TextLayer.pagesNeedingLayer(in: pdf).isEmpty)
-        let again = await DocumentProcessor.analyze(once, mistral: nil, textLayerSource: .scan)
+        let again = await DocumentProcessor.analyze(once, mistral: nil, textLayerSource: .scan, environment: .live)
         #expect(again.searchablePDF == nil)
         let text = pdf.page(at: 0)?.string ?? ""
         #expect(text.components(separatedBy: "4711").count == 2, "the text appears once: \(text)")

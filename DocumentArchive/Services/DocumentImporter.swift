@@ -144,7 +144,7 @@ enum DocumentImporter {
             pdfData = data
             source = .file
         } else {
-            let mode = cleanup ?? CleanupMode.mode(for: origin, setting: CleanupMode.settingProvider())
+            let mode = cleanup ?? CleanupMode.mode(for: origin, setting: ProcessingEnvironment.current.cleanupMode())
             guard let converted = await makeImagePDF([data], title: title, originalFileName: name, mode: mode)
             else { throw ImportError.unreadable(title) }
             pdfData = converted
@@ -159,7 +159,8 @@ enum DocumentImporter {
     /// Builds the PDF for photos in the given mode, off the main actor.
     private static func makeImagePDF(_ items: [Data], title: String, originalFileName: String = "",
                                      mode: CleanupMode) async -> Data? {
-        let filter = CleanupMode.defaultFilterProvider()
+        // Read before detaching: `ProcessingEnvironment.current` is `.live` inside `Task.detached`.
+        let filter = ProcessingEnvironment.current.cleanupFilter()
         return await Task.detached(priority: .userInitiated) { () -> Data? in
             switch mode {
             case .off:
@@ -212,7 +213,7 @@ enum DocumentImporter {
         if let existing = existingDocument(for: combined, in: context) { return (existing, true) }
         let hash = sha256(combined)
         let title = defaultTitle(for: .image)
-        let mode = cleanup ?? CleanupMode.mode(for: .interactive, setting: CleanupMode.settingProvider())
+        let mode = cleanup ?? CleanupMode.mode(for: .interactive, setting: ProcessingEnvironment.current.cleanupMode())
         guard let data = await makeImagePDF(items, title: title, mode: mode) else { return (nil, false) }
         if let existing = existingDocument(withHash: hash, in: context) { return (existing, true) }
         return (insert(title: title, pdfData: data, source: .image, hash: hash, context: context), false)
@@ -289,11 +290,13 @@ enum DocumentImporter {
     static func processAndWait(_ document: Document, context: ModelContext, classify: Bool) async {
         guard document.isAlive, let data = document.pdfData else { return }
         document.isProcessing = true
-        let mistral = MistralConfig.current()
-        let layerSource: DocumentSource? = TextLayer.isEnabled ? document.source : nil
-        let rewriteHook = TextLayer.rewriteHookForTesting
+        // Task-locals do not reach into `Task.detached`: capture the environment here, on the
+        // caller's side, and pass it on explicitly.
+        let environment = ProcessingEnvironment.current
+        let mistral = environment.mistralConfig()
+        let layerSource: DocumentSource? = environment.textLayerEnabled() ? document.source : nil
         let result = await Task.detached(priority: .utility) {
-            await DocumentProcessor.analyze(data, mistral: mistral, textLayerSource: layerSource, rewriteHook: rewriteHook)
+            await DocumentProcessor.analyze(data, mistral: mistral, textLayerSource: layerSource, environment: environment)
         }.value
         guard document.isAlive else { return }
         document.pageCount = result.pageCount

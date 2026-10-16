@@ -15,11 +15,9 @@ enum AutoClassifier {
     // nonisolated: also read by `LegacyMigration.settingKeys`, which is not on the main actor.
     nonisolated static let autoCreateCorrespondentsKey = "autoCreateCorrespondents"
 
-    /// Settings source; tests use a throwaway suite.
-    nonisolated(unsafe) static var defaults: UserDefaults = .standard
-
+    /// Read from `ProcessingEnvironment.current.defaults`; tests use a throwaway suite.
     static var autoCreateCorrespondents: Bool {
-        defaults.object(forKey: autoCreateCorrespondentsKey) as? Bool ?? true
+        ProcessingEnvironment.current.defaults.object(forKey: autoCreateCorrespondentsKey) as? Bool ?? true
     }
 
     /// What an assignment run changed, for the feedback in the UI.
@@ -59,9 +57,10 @@ enum AutoClassifier {
         }
 
         // 2. Mistral
-        if let config = MistralConfig.current(), config.useLLM, !document.extractedText.isEmpty {
+        let environment = ProcessingEnvironment.current
+        if let config = environment.mistralConfig(), config.useLLM, !document.extractedText.isEmpty {
             do {
-                let suggestion = try await MistralClient(config: config).classify(
+                let suggestion = try await MistralClient(config: config, environment: environment).classify(
                     text: document.extractedText,
                     fileName: document.originalFileName,
                     correspondents: correspondents.map(\.name),

@@ -110,11 +110,12 @@ struct MistralSettingsSection: View {
     }
 
     private func test() async {
-        guard let config = MistralConfig.current() else { return }
+        let environment = ProcessingEnvironment.current
+        guard let config = environment.mistralConfig() else { return }
         isTesting = true
         defer { isTesting = false }
         do {
-            let result = try await MistralClient(config: config).testConnection()
+            let result = try await MistralClient(config: config, environment: environment).testConnection()
             testResult = (result.isComplete, result.message)
         } catch {
             testResult = (false, error.localizedDescription)

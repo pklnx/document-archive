@@ -80,6 +80,7 @@ final class ArchiveMirrorController {
         guard isAvailable else { return }
         let deviceID = stateStore?.state.deviceID
         let contents = await FolderAccess.withAccess(to: url) {
+            // Detached: reads no `ProcessingEnvironment`; pass it in if that changes.
             await Task.detached(priority: .userInitiated) { ArchiveMirror.inspect(url, deviceID: deviceID) }.value
         }
         switch contents {

@@ -29,10 +29,11 @@ enum DocumentProcessor {
     /// - Parameter textLayerSource: The document's source when a text layer should be added
     ///   (the setting is on); `nil` never rewrites the PDF. The layer always comes from Vision on
     ///   the device, also when the text comes from Mistral.
-    /// - Parameter rewriteHook: Test seam (`TextLayer.rewriteHookForTesting`); `nil` in the app.
+    /// - Parameter environment: The caller's environment (Mistral session, test hooks). No default:
+    ///   `analyze` runs inside `Task.detached`, where `ProcessingEnvironment.current` is `.live`.
     static func analyze(_ pdfData: Data, mistral: MistralConfig? = nil,
                         textLayerSource: DocumentSource? = nil,
-                        rewriteHook: TextLayer.RewriteHook? = nil) async -> Result {
+                        environment: ProcessingEnvironment) async -> Result {
         guard let pdf = PDFDocument(data: pdfData) else {
             return Result(pageCount: 0, thumbnail: nil, text: "", textSource: "", note: String(localized: "The PDF could not be read."))
         }
@@ -47,7 +48,7 @@ enum DocumentProcessor {
         var source = ""
         if let mistral, mistral.useOCR {
             do {
-                let mistralText = try await MistralClient(config: mistral).ocr(pdfData: pdfData)
+                let mistralText = try await MistralClient(config: mistral, environment: environment).ocr(pdfData: pdfData)
                 if !mistralText.isEmpty {
                     text = mistralText
                     source = mistralTextSource
@@ -77,7 +78,7 @@ enum DocumentProcessor {
         var searchablePDF: Data?
         if let textLayerSource {
             let layer = await textLayer(for: pdfData, pdf: pdf, source: textLayerSource,
-                                        recognition: &recognition, rewriteHook: rewriteHook)
+                                        recognition: &recognition, rewriteHook: environment.rewriteHook)
             searchablePDF = layer.data
             if let note = layer.note { notes.append(note) }
         }

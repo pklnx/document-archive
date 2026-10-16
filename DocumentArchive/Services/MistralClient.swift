@@ -33,12 +33,9 @@ struct MistralConfig: Sendable {
         return String(localized: "\(String(key.prefix(4)))…\(String(key.suffix(4))) (\(key.count) characters)")
     }
 
-    /// Source of the current configuration; tests replace it with a stub. Unit and UI test runs
-    /// never use the stored key.
-    nonisolated(unsafe) static var provider: () -> MistralConfig? = { TestEnvironment.isIsolated ? nil : live() }
-
-    /// `nil` when no API key is stored.
-    static func current() -> MistralConfig? { provider() }
+    /// The configuration of `ProcessingEnvironment.current`; `nil` when no API key is stored.
+    /// Unit and UI test runs never use the stored key.
+    static func current() -> MistralConfig? { ProcessingEnvironment.current.mistralConfig() }
 
     /// Reads the key from the Keychain and the switches from the given defaults.
     static func live(defaults: UserDefaults = .standard) -> MistralConfig? {
@@ -79,16 +76,27 @@ enum MistralError: LocalizedError {
 /// Access to the Mistral API: Mistral OCR for text recognition, and a chat model
 /// (default: Mistral Medium) for auto-assignment through a structured JSON answer.
 struct MistralClient: Sendable {
-    /// Session for all requests; tests replace it with one that uses a `URLProtocol` stub.
-    nonisolated(unsafe) static var session: URLSession = .shared
-
     let config: MistralConfig
+    /// Session for all requests; tests use one with a `URLProtocol` stub.
+    private let session: URLSession
+    private let encodeHook: (@Sendable (Data) -> Void)?
     private let baseURL = URL(string: "https://api.mistral.ai/v1/")!
+
+    /// - Parameter environment: Gives the session and the test hooks. There is deliberately no
+    ///   default: a default would be read where the client is created, which inside
+    ///   `Task.detached` is `.live` and not the caller's environment. Pass the environment the
+    ///   caller captured (`ProcessingEnvironment.current` on the caller's side).
+    init(config: MistralConfig, environment: ProcessingEnvironment) {
+        self.config = config
+        session = environment.session
+        encodeHook = environment.encodeHook
+    }
 
     // MARK: OCR
 
     /// Reads the text of a PDF as Markdown (tables stay tables).
     func ocr(pdfData: Data) async throws -> String {
+        encodeHook?(pdfData)
         let body: [String: Any] = [
             "model": config.ocrModel,
             "document": [
@@ -213,7 +221,7 @@ struct MistralClient: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await Self.session.data(for: request)
+            (data, response) = try await session.data(for: request)
         } catch {
             throw MistralError.network(error.localizedDescription)
         }

@@ -21,71 +21,69 @@ import Testing
     }
 }
 
-extension GlobalStateTests {
-    @Suite final class DocumentProcessorTests {
-        deinit { MistralStub.reset() }
+@Suite struct DocumentProcessorTests {
+    static let letter = ["Stadtwerke Beispielstadt GmbH", "Rechnung Nr. 4711", "Rechnungsdatum: 03.09.2026"]
 
-        static let letter = ["Stadtwerke Beispielstadt GmbH", "Rechnung Nr. 4711", "Rechnungsdatum: 03.09.2026"]
+    @Test func readsScannedTextWithVision() async throws {
+        let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: nil, environment: .live)
 
-        @Test func readsScannedTextWithVision() async throws {
-            MistralStub.reset()
-            let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: nil)
+        #expect(result.pageCount == 1)
+        #expect(result.thumbnail != nil)
+        #expect(result.textSource == "Apple Vision")
+        #expect(result.text.contains("Rechnung"))
+        #expect(result.text.contains("03.09.2026"))
+        #expect(result.note.isEmpty)
+    }
 
-            #expect(result.pageCount == 1)
-            #expect(result.thumbnail != nil)
-            #expect(result.textSource == "Apple Vision")
-            #expect(result.text.contains("Rechnung"))
-            #expect(result.text.contains("03.09.2026"))
-            #expect(result.note.isEmpty)
-        }
+    @Test func usesEmbeddedTextWhenThePDFHasEnough() async throws {
+        let pdf = try #require(TestSupport.textPDF("Dies ist ein PDF mit eingebettetem Text, lang genug für die Erkennung."))
+        let result = await DocumentProcessor.analyze(pdf, mistral: nil, environment: .live)
+        #expect(result.textSource == "PDF-Text")
+        #expect(result.text.contains("eingebettetem Text"))
+    }
 
-        @Test func usesEmbeddedTextWhenThePDFHasEnough() async throws {
-            let pdf = try #require(TestSupport.textPDF("Dies ist ein PDF mit eingebettetem Text, lang genug für die Erkennung."))
-            let result = await DocumentProcessor.analyze(pdf, mistral: nil)
-            #expect(result.textSource == "PDF-Text")
-            #expect(result.text.contains("eingebettetem Text"))
-        }
+    @Test func usesMistralOCRWhenConfigured() async throws {
+        let stub = MistralStub.install { _, _ in .json(["pages": [["index": 0, "markdown": "Von Mistral"]]]) }
+        let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: stub.config,
+                                                     environment: stub.environment)
+        #expect(result.textSource == "Mistral OCR")
+        #expect(result.text == "Von Mistral")
+        #expect(result.thumbnail != nil)
+    }
 
-        @Test func usesMistralOCRWhenConfigured() async throws {
-            MistralStub.install(config: MistralStub.config()) { _, _ in .json(["pages": [["index": 0, "markdown": "Von Mistral"]]]) }
-            let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: MistralStub.config())
-            #expect(result.textSource == "Mistral OCR")
-            #expect(result.text == "Von Mistral")
-            #expect(result.thumbnail != nil)
-        }
+    /// The text comes from Mistral, the text layer from Vision on the device; Mistral receives
+    /// exactly the one OCR request it received before.
+    @Test func textLayerComesFromVisionWhenMistralReadsTheText() async throws {
+        let stub = MistralStub.install { _, _ in .json(["pages": [["index": 0, "markdown": "Von Mistral"]]]) }
+        let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: stub.config,
+                                                     textLayerSource: .scan, environment: stub.environment)
+        #expect(result.textSource == "Mistral OCR")
+        #expect(result.text == "Von Mistral")
+        let layered = try #require(result.searchablePDF.flatMap(PDFDocument.init(data:)))
+        #expect(layered.page(at: 0)?.string?.contains("Rechnung") == true)
+        #expect(stub.requests.count == 1)
+    }
 
-        /// The text comes from Mistral, the text layer from Vision on the device; Mistral receives
-        /// exactly the one OCR request it received before.
-        @Test func textLayerComesFromVisionWhenMistralReadsTheText() async throws {
-            MistralStub.install(config: MistralStub.config()) { _, _ in .json(["pages": [["index": 0, "markdown": "Von Mistral"]]]) }
-            let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: MistralStub.config(),
-                                                         textLayerSource: .scan)
-            #expect(result.textSource == "Mistral OCR")
-            #expect(result.text == "Von Mistral")
-            let layered = try #require(result.searchablePDF.flatMap(PDFDocument.init(data:)))
-            #expect(layered.page(at: 0)?.string?.contains("Rechnung") == true)
-            #expect(MistralStub.requests.count == 1)
-        }
+    @Test func fallsBackToVisionWhenMistralFails() async throws {
+        let stub = MistralStub.install { _, _ in .json(["message": "Unauthorized"], status: 401) }
+        let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: stub.config,
+                                                     environment: stub.environment)
+        #expect(result.textSource == "Apple Vision")
+        #expect(result.text.contains("Rechnung"))
+        #expect(result.note.contains("401"))
+    }
 
-        @Test func fallsBackToVisionWhenMistralFails() async throws {
-            MistralStub.install(config: MistralStub.config()) { _, _ in .json(["message": "Unauthorized"], status: 401) }
-            let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: MistralStub.config())
-            #expect(result.textSource == "Apple Vision")
-            #expect(result.text.contains("Rechnung"))
-            #expect(result.note.contains("401"))
-        }
+    @Test func skipsMistralOCRWhenTurnedOff() async throws {
+        let stub = MistralStub.install(config: MistralStub.config(useOCR: false)) { _, _ in .json([:]) }
+        _ = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: stub.config,
+                                            environment: stub.environment)
+        #expect(stub.requests.isEmpty)
+    }
 
-        @Test func skipsMistralOCRWhenTurnedOff() async throws {
-            MistralStub.install(config: MistralStub.config(useOCR: false)) { _, _ in .json([:]) }
-            _ = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: MistralStub.config(useOCR: false))
-            #expect(MistralStub.requests.isEmpty)
-        }
-
-        @Test func unreadableDataGivesAnEmptyResult() async {
-            let result = await DocumentProcessor.analyze(Data("not a pdf".utf8), mistral: nil)
-            #expect(result.pageCount == 0)
-            #expect(result.text.isEmpty)
-            #expect(!result.note.isEmpty)
-        }
+    @Test func unreadableDataGivesAnEmptyResult() async {
+        let result = await DocumentProcessor.analyze(Data("not a pdf".utf8), mistral: nil, environment: .live)
+        #expect(result.pageCount == 0)
+        #expect(result.text.isEmpty)
+        #expect(!result.note.isEmpty)
     }
 }

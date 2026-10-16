@@ -33,15 +33,6 @@ enum CleanupMode: String, CaseIterable, Sendable, Identifiable {
         defaults.string(forKey: defaultFilterKey).flatMap(PageFilter.init(rawValue:)) ?? defaultFilter
     }
 
-    /// Source of the settings; tests replace them (inside `GlobalStateTests`). Tests never read
-    /// the real settings: Off and Color unless a test says otherwise.
-    nonisolated(unsafe) static var settingProvider: () -> CleanupMode = {
-        TestEnvironment.isRunningTests ? defaultSetting : setting(in: .standard)
-    }
-    nonisolated(unsafe) static var defaultFilterProvider: () -> PageFilter = {
-        TestEnvironment.isRunningTests ? defaultFilter : defaultFilter(in: .standard)
-    }
-
     /// The mode for an import from `origin` with the user's `setting`. Interactive imports use
     /// the setting; unattended ones (#12's watch folder and share queue) never wait for the user,
     /// so they clean up automatically unless the setting is Off.
