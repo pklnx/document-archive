@@ -91,6 +91,65 @@ extension GlobalStateTests {
             #expect(DocumentImporter.existingDocument(withHash: doc.contentHash, in: context)?.id == doc.id)
         }
 
+        /// `importFile(data:name:into:)` is the one pipeline behind `importFiles` and `ExternalImport`:
+        /// the duplicate check runs on the original bytes before anything is inserted.
+        @Test func importFileFromDataChecksDuplicatesOnTheOriginalBytes() async throws {
+            let pngData = try Data(contentsOf: try writePNG("Foto.png"))
+
+            let first = try DocumentImporter.importFile(data: pngData, name: "Foto.png", into: context)
+            guard case .imported(let document) = first else { Issue.record("not imported: \(first)"); return }
+            try await TestSupport.waitUntilProcessed([document])
+            #expect(document.title == "Foto")
+            #expect(document.source == .image)
+            #expect(document.originalFileName == "Foto.png")
+            #expect(document.contentHash == DocumentImporter.sha256(pngData), "the hash is the original's, not the PDF's")
+
+            let again = try DocumentImporter.importFile(data: pngData, name: "Anderer Name.png", into: context)
+            guard case .duplicate(let existing) = again else { Issue.record("not a duplicate: \(again)"); return }
+            #expect(existing.id == document.id)
+
+            // The file picker path ends in the same pipeline and sees the same duplicate.
+            let picked = DocumentImporter.importFiles([directory.appending(path: "Foto.png")], into: context)
+            #expect(picked.duplicates.first?.existing.id == document.id)
+            #expect(try context.fetch(FetchDescriptor<Document>()).count == 1)
+        }
+
+        @Test func importFileRejectsUnsupportedAndUndecodableData() throws {
+            #expect(throws: DocumentImporter.ImportError.self) {
+                try DocumentImporter.importFile(data: Data("hello".utf8), name: "notes.txt", into: context)
+            }
+            #expect(throws: DocumentImporter.ImportError.self) {
+                try DocumentImporter.importFile(data: Data("not an image".utf8), name: "Foto.png", into: context)
+            }
+            #expect(try context.fetch(FetchDescriptor<Document>()).isEmpty)
+        }
+
+        /// The wording and the document to open are shared by every import path.
+        @Test func resultNoticeAndDocumentToOpen() async throws {
+            let pdf = try writePDF("Rechnung.pdf", lines: ["Rechnung 4711"])
+            let single = DocumentImporter.importFiles([pdf], into: context)
+            try await TestSupport.waitUntilProcessed(single.imported)
+            #expect(single.notice == nil)
+            #expect(single.documentToOpen?.isNew == true)
+            #expect(single.documentToOpen?.document.id == single.imported.first?.id)
+
+            let duplicate = DocumentImporter.importFiles([pdf], into: context)
+            #expect(duplicate.documentToOpen?.isNew == false)
+            #expect(duplicate.documentToOpen?.document.id == single.imported.first?.id)
+            let notice = try #require(duplicate.notice)
+            #expect(notice.message.contains("Rechnung.pdf"))
+            #expect(notice.message.contains(single.imported[0].title))
+
+            let text = directory.appending(path: "notes.txt")
+            try Data("hello".utf8).write(to: text)
+            var mixed = DocumentImporter.importFiles([text], into: context)
+            mixed.merge(duplicate)
+            #expect(mixed.documentToOpen?.document.id == single.imported.first?.id)
+            #expect(try #require(mixed.notice).message.contains("notes.txt"))
+            #expect(DocumentImporter.ImportResult().notice == nil)
+            #expect(DocumentImporter.ImportResult().documentToOpen == nil)
+        }
+
         @Test func sha256IsHexOfTheContent() {
             #expect(DocumentImporter.sha256(Data("abc".utf8))
                 == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")

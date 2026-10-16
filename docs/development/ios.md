@@ -104,7 +104,7 @@ and landscape:
 | Selection | "Select", Select All, checkmarks without opening a document; bottom toolbar on iPhone and narrow iPad windows, bulk actions column on wide iPads; select 3, narrow the search to 1 and check that only 1 is changed; Done ends the selection; in a narrow iPad window ⌘-click with a pointer selects several documents without edit mode, the list then covers `BulkActionsView` and there is no bottom toolbar, so the context menu (secondary click) is the way to act on them |
 | Document | PDF view, inspector (sheet on iPhone, column on iPad), share, export |
 | Sheets and dialogs | settings, rule editor, alerts and delete confirmations can be dismissed |
-| Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad |
+| Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad; "Open in…" from Files (file stays where it is) and "Copy to Document Archive" from Mail (the copy in `Documents/Inbox` is removed), with the app running and not running: the document opens, a second time it is reported as a duplicate |
 | iPad | keyboard shortcuts (⌘O, ⌘,) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list, also after rotating with it open; after deleting the open document the list is back |
 | Sidebar footer | sync status matches the build (local only on unsigned builds) |
 | Storage Location | "Choose Folder…" opens the folder picker (iCloud Drive, On My iPhone); the copy appears in `Document Archive/`; "Show in Files" opens it or shows the path with a share button; "Back to Default" keeps the files |

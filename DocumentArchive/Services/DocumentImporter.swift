@@ -27,6 +27,49 @@ enum DocumentImporter {
         /// Files already in the archive (identical content), with the existing document.
         var duplicates: [(fileName: String, existing: Document)] = []
         var errors: [Error] = []
+
+        var isEmpty: Bool { imported.isEmpty && duplicates.isEmpty && errors.isEmpty }
+
+        mutating func add(_ outcome: FileOutcome, fileName: String) {
+            switch outcome {
+            case .imported(let document): imported.append(document)
+            case .duplicate(let existing): duplicates.append((fileName, existing))
+            }
+        }
+
+        /// Appends another batch, e.g. several files opened one after another.
+        mutating func merge(_ other: ImportResult) {
+            imported += other.imported
+            duplicates += other.duplicates
+            errors += other.errors
+        }
+
+        /// Tells about skipped duplicates and errors; `nil` when everything was imported.
+        /// Every way of importing files uses this wording.
+        var notice: ImportNotice? {
+            var lines: [String] = []
+            if !duplicates.isEmpty {
+                lines.append(duplicates.count == 1
+                    ? String(localized: "This file is already in the archive and was skipped:")
+                    : String(localized: "\(duplicates.count) files are already in the archive and were skipped:"))
+                lines += duplicates.map { String(localized: "• \($0.fileName) → “\($0.existing.title)”") }
+            }
+            lines += errors.map(\.localizedDescription)
+            guard !lines.isEmpty else { return nil }
+            let title = errors.isEmpty
+                ? (imported.isEmpty ? String(localized: "Already in the archive")
+                                    : String(localized: "\(imported.count) imported, duplicates skipped"))
+                : String(localized: "Import partly failed")
+            return ImportNotice(title: title, message: lines.joined(separator: "\n"))
+        }
+
+        /// The document to open afterwards: the one new document, or the one existing document
+        /// when the only file was a duplicate. `nil` for several documents.
+        var documentToOpen: (document: Document, isNew: Bool)? {
+            if imported.count == 1, let document = imported.first { return (document, true) }
+            if imported.isEmpty, duplicates.count == 1, let existing = duplicates.first?.existing { return (existing, false) }
+            return nil
+        }
     }
 
     /// Imports files (PDFs and images). Every file becomes its own document.
@@ -37,39 +80,64 @@ enum DocumentImporter {
         for url in urls {
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-
-            let name = url.deletingPathExtension().lastPathComponent
-            let type = UTType(filenameExtension: url.pathExtension) ?? .data
             do {
-                guard type.conforms(to: .pdf) || type.conforms(to: .image) else {
+                guard isImportable(fileName: url.lastPathComponent) else {
                     throw ImportError.unsupported(url.lastPathComponent)
                 }
-                let fileData = try Data(contentsOf: url)
-                let hash = sha256(fileData)
-                if let existing = existingDocument(withHash: hash, in: context) {
-                    result.duplicates.append((url.lastPathComponent, existing))
-                    continue
+                let data: Data
+                do {
+                    data = try Data(contentsOf: url)
+                } catch {
+                    throw ImportError.unreadable(url.deletingPathExtension().lastPathComponent)
                 }
-                let pdfData: Data
-                let source: DocumentSource
-                if type.conforms(to: .pdf) {
-                    pdfData = fileData
-                    source = .file
-                } else {
-                    guard let data = PDFBuilder.makePDF(fromImageData: [fileData]) else { throw ImportError.unreadable(name) }
-                    pdfData = data
-                    source = .image
-                }
-                let document = insert(title: name, pdfData: pdfData, source: source, hash: hash,
-                                      originalFileName: url.lastPathComponent, context: context)
-                result.imported.append(document)
-            } catch let error as ImportError {
-                result.errors.append(error)
+                result.add(try importFile(data: data, name: url.lastPathComponent, into: context),
+                           fileName: url.lastPathComponent)
             } catch {
-                result.errors.append(ImportError.unreadable(name))
+                result.errors.append(error)
             }
         }
         return result
+    }
+
+    /// What `importFile` did with one file.
+    enum FileOutcome {
+        case imported(Document)
+        /// The archive already has a document with exactly these bytes.
+        case duplicate(of: Document)
+    }
+
+    static func isImportable(fileName: String) -> Bool {
+        let type = UTType(filenameExtension: (fileName as NSString).pathExtension) ?? .data
+        return type.conforms(to: .pdf) || type.conforms(to: .image)
+    }
+
+    /// The one import pipeline for a file whose bytes were already read (possibly off the main
+    /// actor): duplicate check on the original bytes, then the insert and the normal processing.
+    /// `importFiles` and `ExternalImport` both end here, so the paths cannot drift apart.
+    /// #20 adds its cleanup step (and a `cleanup:` mode chosen by the caller) between the
+    /// duplicate check and the insert.
+    /// - Parameter name: The file name with its extension; it decides PDF or image and becomes the title.
+    /// - Throws: `ImportError` for an unsupported type or an image that cannot be decoded.
+    static func importFile(data: Data, name: String, into context: ModelContext) throws -> FileOutcome {
+        let title = (name as NSString).deletingPathExtension
+        let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
+        guard type.conforms(to: .pdf) || type.conforms(to: .image) else { throw ImportError.unsupported(name) }
+        let hash = sha256(data)
+        if let existing = existingDocument(withHash: hash, in: context) {
+            return .duplicate(of: existing)
+        }
+        let pdfData: Data
+        let source: DocumentSource
+        if type.conforms(to: .pdf) {
+            pdfData = data
+            source = .file
+        } else {
+            guard let converted = PDFBuilder.makePDF(fromImageData: [data]) else { throw ImportError.unreadable(title) }
+            pdfData = converted
+            source = .image
+        }
+        return .imported(insert(title: title, pdfData: pdfData, source: source, hash: hash,
+                                originalFileName: name, context: context))
     }
 
     /// Several images (e.g. a camera scan) become one multi-page document.

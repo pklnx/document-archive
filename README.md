@@ -13,7 +13,7 @@ The app is available in English and German.
 
 ## Features
 
-- **Add documents:** camera scan (iPhone/iPad, with automatic edge detection), PDFs and images from Files, photos from the library, drag and drop (Mac: also ⌘O)
+- **Add documents:** camera scan (iPhone/iPad, with automatic edge detection), PDFs and images from Files, photos from the library, drag and drop (Mac: also ⌘O), "Open with" in Finder or a drop on the Dock icon (Mac), "Open in…" / "Copy to Document Archive" from Files, Mail and other apps (iPhone/iPad)
 - **Text recognition (OCR)** for scans and image-only PDFs (German and English), then **full-text search**
 - **Mistral AI** (optional): Mistral OCR for text recognition, Mistral Medium for title, correspondent, type, tags and date
 - **Correspondents, document types, tags** and **ASN** (archive serial number), as in paperless
