@@ -232,13 +232,17 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
         delete.tap()
         let confirm = element("documentDetail.deleteConfirm")
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitUntilHittable(confirm, timeout: 10), "no delete confirmation")
         confirm.tap()
-
-        XCTAssertTrue(row(firstDocument).waitForNonExistence(timeout: 5), "document was not deleted")
+        // Slow CI runners (iOS 26.5) close the dialog late; wait for it before looking at the list.
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 15), "delete confirmation did not close")
         attachScreenshot("after deleting the open document")
-        // No reveal(): the list must be there without searching for a button.
-        XCTAssertTrue(waitUntilHittable(row(secondDocument)), "list not shown after deleting the open document")
+
+        // No reveal(): the list must be there without searching for a button, on iPhone too
+        // (the empty document column must not stay pushed).
+        XCTAssertTrue(waitUntilHittable(row(secondDocument), timeout: 10),
+                      "list not shown after deleting the open document")
+        XCTAssertFalse(row(firstDocument).exists, "document was not deleted")
         openDocument(secondDocument)
     }
 }
