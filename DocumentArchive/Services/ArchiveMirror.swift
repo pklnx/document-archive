@@ -9,8 +9,8 @@ import SwiftData
 ///    only what is not in the folder yet, never write tombstones from the old state).
 /// 2. `archive.json`: created, or checked – a newer major format stops the pass before anything
 ///    is written.
-/// 3. Tags, correspondents, document types and documents whose record hash changed are written;
-///    a PDF only when its size or SHA-256 changed. A sidecar written by another device that is
+/// 3. Tags, correspondents, document types, saved views and documents whose record hash changed
+///    are written; a PDF only when its size or SHA-256 changed. A sidecar written by another device that is
 ///    newer is never overwritten, and files of objects this state has never written are only
 ///    touched when they were written by this device.
 /// 4. Explicit deletions (`DocumentDeletion`, `MetadataDeletion`) become tombstones; deleted
@@ -211,12 +211,12 @@ final class ArchiveMirror {
 
     // MARK: Entities
 
-    private struct EntityWork: Sendable {
+    private struct EntityWork<Record: MirroredRecord>: Sendable {
         var kind: ArchiveObjectKind
         var id: UUID
         /// Hash without `changedAt`.
         var recordHash: String
-        var record: EntityRecord
+        var record: Record
         var isKnown: Bool
     }
 
@@ -230,14 +230,23 @@ final class ArchiveMirror {
         case waitingForDownload
     }
 
+    /// Tags, correspondents, document types and saved views.
     private func writeEntities(deviceID: String, now: Date, result: inout PassResult) async throws {
         var records: [(ArchiveObjectKind, EntityRecord)] = []
         records += try context.fetch(FetchDescriptor<Tag>()).map { (.tag, EntityRecord($0, writtenBy: deviceID)) }
         records += try context.fetch(FetchDescriptor<Correspondent>()).map { (.correspondent, EntityRecord($0, writtenBy: deviceID)) }
         records += try context.fetch(FetchDescriptor<DocumentType>()).map { (.documentType, EntityRecord($0, writtenBy: deviceID)) }
+        try await writeRecords(records, deviceID: deviceID, now: now, result: &result)
 
+        let views = try context.fetch(FetchDescriptor<SavedView>())
+            .map { (ArchiveObjectKind.savedView, SavedViewRecord($0, writtenBy: deviceID)) }
+        try await writeRecords(views, deviceID: deviceID, now: now, result: &result)
+    }
+
+    private func writeRecords<Record: MirroredRecord>(_ records: [(ArchiveObjectKind, Record)], deviceID: String,
+                                                      now: Date, result: inout PassResult) async throws {
         let entries = stateStore.state.entities
-        var changed: [EntityWork] = []
+        var changed: [EntityWork<Record>] = []
         for (kind, record) in records {
             guard let id = record.id else { continue }
             let hash = try Self.hash(record)
@@ -272,8 +281,9 @@ final class ArchiveMirror {
         }
     }
 
-    nonisolated private static func write(_ item: EntityWork, deviceID: String, layout: ArchiveFolderLayout,
-                                          io: ArchiveFileIO, ubiquity: UbiquityStatusProviding) throws -> Outcome {
+    nonisolated private static func write<Record: MirroredRecord>(
+        _ item: EntityWork<Record>, deviceID: String, layout: ArchiveFolderLayout,
+        io: ArchiveFileIO, ubiquity: UbiquityStatusProviding) throws -> Outcome {
         let url = layout.record(item.kind, item.id)
         let state = ubiquity.state(of: url)
         if state.needsDownload {
@@ -283,7 +293,7 @@ final class ArchiveMirror {
         var existingData: Data?
         if state == .available {
             existingData = try io.read(url)
-            if let existing = try? ArchiveFolderFormat.decode(EntityRecord.self, from: existingData!),
+            if let existing = try? ArchiveFolderFormat.decode(Record.self, from: existingData!),
                let writer = existing.writtenBy, writer != deviceID {
                 if !item.isKnown {
                     var same = existing

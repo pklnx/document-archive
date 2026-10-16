@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 /// The archive as plain files in a folder the user chose (issue #8): one PDF and one JSON sidecar
-/// per document, one JSON file per tag, correspondent and document type, and tombstones for
+/// per document, one JSON file per tag, correspondent, document type and saved view, and tombstones for
 /// deletions. The live database never moves there; the folder is a copy (and, from #8 part 2, the
 /// way devices exchange changes before CloudKit).
 ///
@@ -11,6 +11,7 @@ import Foundation
 ///   archive.json                  formatVersion, created by
 ///   Documents/<uuid>.pdf, <uuid>.json
 ///   Tags/<uuid>.json, Correspondents/<uuid>.json, DocumentTypes/<uuid>.json
+///   SavedViews/<uuid>.json        from 1.2
 ///   Tombstones/<uuid>.json
 ///   Deleted/<uuid>.pdf, <uuid>.json   deleted documents, purged after 30 days
 /// ```
@@ -26,7 +27,8 @@ import Foundation
 enum ArchiveFolderFormat {
     /// 1.0: documents, tags, correspondents, document types, tombstones (#8 part 1).
     /// 1.1: tags have `parent` and `symbol` (#13).
-    static let currentVersion = FormatVersion(major: 1, minor: 1)
+    /// 1.2: saved views (`SavedViews/`, tombstones of kind `savedView`) (#14).
+    static let currentVersion = FormatVersion(major: 1, minor: 2)
 
     /// The subfolder the app creates inside the folder the user chose.
     static let rootFolderName = "Document Archive"
@@ -147,11 +149,15 @@ struct FormatVersion: Equatable, Comparable, CustomStringConvertible, Sendable {
 }
 
 /// What kind of object a file or tombstone belongs to; also the folder it lives in.
+/// Readers must tolerate kinds they do not know (a tombstone of a newer kind is skipped, see
+/// `Tombstone`).
 enum ArchiveObjectKind: String, Codable, CaseIterable, Sendable {
     case document
     case tag
     case correspondent
     case documentType
+    /// From 1.2 (#14).
+    case savedView
 
     var folderName: String {
         switch self {
@@ -159,6 +165,7 @@ enum ArchiveObjectKind: String, Codable, CaseIterable, Sendable {
         case .tag: "Tags"
         case .correspondent: "Correspondents"
         case .documentType: "DocumentTypes"
+        case .savedView: "SavedViews"
         }
     }
 }
@@ -306,7 +313,63 @@ struct Tombstone: Codable, Equatable {
     /// For merged tags, correspondents and types: the object that took over the documents.
     var mergedInto: UUID?
     var formatVersion: String?
+
+    init(id: UUID? = nil, kind: ArchiveObjectKind? = nil, deletedAt: Date? = nil, deletedBy: String? = nil,
+         mergedInto: UUID? = nil, formatVersion: String? = nil) {
+        self.id = id
+        self.kind = kind
+        self.deletedAt = deletedAt
+        self.deletedBy = deletedBy
+        self.mergedInto = mergedInto
+        self.formatVersion = formatVersion
+    }
+
+    /// A kind this version does not know (written by a newer one) decodes as `nil` instead of
+    /// failing the whole tombstone, so its date can still be read for the purge.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id)
+        kind = try? container.decodeIfPresent(ArchiveObjectKind.self, forKey: .kind)
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+        deletedBy = try container.decodeIfPresent(String.self, forKey: .deletedBy)
+        mergedInto = try container.decodeIfPresent(UUID.self, forKey: .mergedInto)
+        formatVersion = try container.decodeIfPresent(String.self, forKey: .formatVersion)
+    }
 }
+
+/// `SavedViews/<uuid>.json` (from 1.2, #14). The filter is stored as the raw `filterJSON` string,
+/// unchanged, so filter fields of other app versions survive the round trip.
+struct SavedViewRecord: Codable, Equatable {
+    var id: UUID?
+    var name: String?
+    var symbol: String?
+    var sortIndex: Int?
+    var createdAt: Date?
+    var filterJSON: String?
+    /// Local change time, like `EntityRecord.changedAt` (the model has no `modifiedAt`).
+    var changedAt: Date?
+    var writtenBy: String?
+    var formatVersion: String?
+
+    func isNewer(than other: SavedViewRecord) -> Bool {
+        let mine = changedAt ?? .distantPast
+        let theirs = other.changedAt ?? .distantPast
+        if mine != theirs { return mine > theirs }
+        return (writtenBy ?? "") > (other.writtenBy ?? "")
+    }
+}
+
+/// What the folder copy writes for tags, correspondents, document types and saved views: one file
+/// per object with a local change time and the writing device.
+protocol MirroredRecord: Codable, Sendable {
+    var id: UUID? { get }
+    var changedAt: Date? { get set }
+    var writtenBy: String? { get set }
+    func isNewer(than other: Self) -> Bool
+}
+
+extension EntityRecord: MirroredRecord {}
+extension SavedViewRecord: MirroredRecord {}
 
 // MARK: - Building records from the model
 
@@ -366,6 +429,16 @@ extension EntityRecord {
     init(_ type: DocumentType, writtenBy: String) {
         self.init(id: type.id, name: type.name, matchText: type.matchText, matchMode: type.matchMode.rawValue,
                   createdAt: ArchiveFolderFormat.normalized(type.createdAt), symbol: type.symbol,
+                  writtenBy: writtenBy, formatVersion: ArchiveFolderFormat.currentVersion.description)
+    }
+}
+
+extension SavedViewRecord {
+    /// `changedAt` stays `nil`; the mirror sets it when the content changed.
+    @MainActor
+    init(_ view: SavedView, writtenBy: String) {
+        self.init(id: view.id, name: view.name, symbol: view.symbol, sortIndex: view.sortIndex,
+                  createdAt: ArchiveFolderFormat.normalized(view.createdAt), filterJSON: view.filterJSON,
                   writtenBy: writtenBy, formatVersion: ArchiveFolderFormat.currentVersion.description)
     }
 }

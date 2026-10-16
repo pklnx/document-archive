@@ -1,21 +1,6 @@
 import SwiftData
 import SwiftUI
 
-enum DocumentSort: String, CaseIterable, Identifiable {
-    case added, documentDate, title, correspondent
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .added: String(localized: "Added")
-        case .documentDate: String(localized: "Issue date")
-        case .title: String(localized: "Title")
-        case .correspondent: String(localized: "Correspondent")
-        }
-    }
-}
-
 extension SidebarItem {
     /// The documents the list shows for this sidebar entry, search text and sort order.
     /// `ContentView` resolves the selection against exactly this list (see `DocumentSelection`).
@@ -29,18 +14,7 @@ extension SidebarItem {
         }
         let includes = documentFilter()
         let filtered = allDocuments.filter { includes($0) && $0.matches(searchText) }
-        switch sort {
-        case .added:
-            return filtered.sorted { $0.createdAt > $1.createdAt }
-        case .documentDate:
-            return filtered.sorted { $0.documentDate > $1.documentDate }
-        case .title:
-            return filtered.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-        case .correspondent:
-            return filtered.sorted {
-                ($0.correspondent?.name ?? "~").localizedStandardCompare($1.correspondent?.name ?? "~") == .orderedAscending
-            }
-        }
+        return sort.sort(filtered, ascending: sort.defaultAscending)
     }
 }
 

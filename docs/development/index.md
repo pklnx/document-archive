@@ -193,7 +193,8 @@ restricts what a change may do:
   at all raises the major version, which makes them stop using the folder.
 - **Deleting documents** only goes through `DocumentDeletion.delete(_:in:)`,
   deleting tags through `TagHierarchy.delete` (it moves the children up one
-  level), correspondents and document types through `MetadataDeletion`, and
+  level), correspondents, document types and saved views through
+  `MetadataDeletion`, and
   merges through `MetadataMaintenance.merge(_:into:)` (tombstones with
   `mergedInto`; features that refer to these objects by id hook into its
   `didMerge`). They record the deletion for
@@ -225,6 +226,38 @@ A tag can be nested in another (`Tag.parent`, `Tag.children`), shown as
 - Mistral receives the tags' display paths with the rule to pick the most
   specific tag; a returned path is mapped back with the oldest tag winning
   when two share a path.
+
+### Saved views (#14)
+
+A saved view (`Model/SavedView.swift`) is a name, a symbol, a `sortIndex` and a
+`DocumentFilter` (`Services/DocumentFilter.swift`) stored as JSON in
+`filterJSON` (maintainer decision), so new filter criteria need no schema
+change. Older app versions ignore the model.
+
+- **Tolerant decoding:** every filter field is decoded on its own. A value
+  this version does not know (a newer sort or date range) falls back to the
+  default and is listed in `fallbackKeys`. Writing through `SavedView.filter`
+  keeps keys this version does not know, keeps a fallen-back raw value unless
+  that field was changed, removes the keys of cleared fields, and writes only
+  when the JSON string changes (also for the sort menu: a sort change is saved
+  into the view).
+- **References** are stored as `{id, name, key}`; `key` is the normalized
+  merge key (core name for correspondents, parent path and name for tags). A
+  missing id is resolved by key, which also covers merges by older versions.
+  A reference that still cannot be resolved makes its criterion match nothing
+  (an excluded tag is skipped) and sets `FilterContext.hasUnresolvedReferences`
+  for the banner; it is never dropped silently.
+- `SavedViewMaintenance.replace` runs in the merge hook
+  (`MetadataMaintenance.didMerge`) and rewrites references to the keeper.
+- A tag criterion includes the tag's subtree when `includeSubTags` is on; the
+  same switch makes excluding a parent exclude its children.
+- Absolute date ranges are calendar days (`"2026-01-01"`), compared by day in
+  the device's calendar, both bounds inclusive.
+- `FilterContext` (references resolved, subtrees, `now`) is built once per
+  view; `DocumentFilter.apply` filters the list it is given (after any central
+  exclusion) and sorts with `DocumentSort.sort(_:ascending:)`, the same sort
+  the sidebar lists use. Decoded filters are cached by their JSON string.
+- Order: `sortIndex`, then `createdAt`, then `id`; reordering renumbers 0…n.
 
 ### Copy in a folder (#8)
 

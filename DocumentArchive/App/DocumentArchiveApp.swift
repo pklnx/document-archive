@@ -5,7 +5,7 @@ import SwiftUI
 struct DocumentArchiveApp: App {
     /// Every synced model: the store, the tests and the UI test data all use this one schema.
     nonisolated static var schema: Schema {
-        Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
+        Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self, SavedView.self])
     }
 
     let container: ModelContainer

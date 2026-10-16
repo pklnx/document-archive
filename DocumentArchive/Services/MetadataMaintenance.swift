@@ -70,7 +70,7 @@ enum MetadataMaintenance {
                       recorder: DeletionRecording?) {
         for duplicate in duplicates where duplicate.id != keeper.id {
             for document in duplicate.documents ?? [] { document.correspondent = keeper }
-            didMerge(.correspondent, duplicate.id, into: keeper.id, in: context)
+            didMerge(.correspondent, duplicate.id, into: DocumentFilter.Ref(keeper), in: context)
             MetadataDeletion.delete(duplicate, mergedInto: keeper, in: context, recorder: recorder)
         }
     }
@@ -79,7 +79,7 @@ enum MetadataMaintenance {
                       recorder: DeletionRecording?) {
         for duplicate in duplicates where duplicate.id != keeper.id {
             for document in duplicate.documents ?? [] { document.documentType = keeper }
-            didMerge(.documentType, duplicate.id, into: keeper.id, in: context)
+            didMerge(.documentType, duplicate.id, into: DocumentFilter.Ref(keeper), in: context)
             MetadataDeletion.delete(duplicate, mergedInto: keeper, in: context, recorder: recorder)
         }
     }
@@ -101,7 +101,7 @@ enum MetadataMaintenance {
                 let parent = duplicate.parent
                 keeper.parent = parent.flatMap { TagHierarchy.canMove(keeper, under: $0) ? $0 : nil }
             }
-            didMerge(.tag, duplicate.id, into: keeper.id, in: context)
+            didMerge(.tag, duplicate.id, into: DocumentFilter.Ref(keeper), in: context)
             MetadataDeletion.delete(duplicate, mergedInto: keeper, in: context, recorder: recorder)
         }
     }
@@ -109,9 +109,12 @@ enum MetadataMaintenance {
     /// The merge hook: every merge of every kind passes here after the documents moved to the
     /// keeper and before the duplicate is deleted (which records the tombstone with `mergedInto`
     /// for the folder copy). Features that refer to tags, correspondents or types by id update
-    /// their references here (#14: `SavedViewMaintenance.replace`).
-    private static func didMerge(_ kind: ArchiveObjectKind, _ duplicate: UUID, into keeper: UUID,
-                                 in context: ModelContext) {}
+    /// their references here. `keeper` carries the keeper's id, name and merge key after the move
+    /// (for tags: under its final parent).
+    private static func didMerge(_ kind: ArchiveObjectKind, _ duplicate: UUID, into keeper: DocumentFilter.Ref,
+                                 in context: ModelContext) {
+        SavedViewMaintenance.replace(kind, oldID: duplicate, with: keeper, in: context)
+    }
 
     /// Oldest `createdAt` first, then the smallest `id` – the same order on every device.
     static func keeperOrder<T>(_ items: [T], createdAt: (T) -> Date, id: (T) -> UUID) -> [T] {
@@ -169,7 +172,8 @@ enum MetadataMaintenance {
         return order.compactMap { groups[$0] }.filter { $0.count > 1 }
     }
 
-    private static func normalized(_ name: String) -> String {
+    /// Case, diacritics and width folded, trimmed: the name part of every merge key.
+    static func normalized(_ name: String) -> String {
         name.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
