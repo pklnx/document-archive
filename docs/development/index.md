@@ -52,7 +52,8 @@ The `DocumentArchive` scheme has two test plans in `TestPlans/`:
 
 - **`Default.xctestplan`** is the scheme's default: ⌘U, `xcodebuild test`
   without `-testPlan` and the required CI jobs run it. It has one
-  configuration, "Default", and runs `DocumentArchiveTests` **in parallel**:
+  configuration, "Default", and runs `DocumentArchiveTests` **in parallel**
+  (except `test (iOS)` in CI, see below):
   Swift Testing runs suites and tests concurrently. Until #43 part 2 the
   scheme had `parallelizable = "NO"`, which also serialized Swift Testing,
   so the whole suite ran one test at a time. Tests therefore must not share
@@ -87,9 +88,12 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 Every wait for something asynchronous in a test scales its timeout with
 `TestSupport.scaled(_:)` (`DA_TEST_TIMEOUT_SCALE`, default 1);
 `TestSupport.waitUntilProcessed` does this already. On the command line,
-`xcodebuild` passes it on as `TEST_RUNNER_DA_TEST_TIMEOUT_SCALE=3`; `test (iOS)`
-in CI does this, because the parallel OCR tests share the hosted runner's few
-slow cores there. A Thread Sanitizer report
+`xcodebuild` passes it on as `TEST_RUNNER_DA_TEST_TIMEOUT_SCALE=3`.
+
+`test (iOS)` in CI runs the tests one at a time (`-parallel-testing-enabled NO`):
+in parallel on the hosted runner's simulator the test host crashed in
+SwiftData (#59) and the OCR tests exceeded their timeouts. Remove the flag
+once #59 is fixed. A Thread Sanitizer report
 in app code becomes an issue labeled `bug`; a race in test code is fixed in
 the test.
 

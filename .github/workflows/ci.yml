@@ -153,18 +153,18 @@ jobs:
       - name: Pick simulator
         id: simulator
         run: echo "udid=$(python3 scripts/pick-simulator.py iphone smallest)" >> "$GITHUB_OUTPUT"
-      # The tests run in parallel (TestPlans/Default.xctestplan). On the simulator of the hosted
-      # runner the OCR tests then share a few slow cores and take minutes each, so the test waits
-      # get three times their timeout here (DA_TEST_TIMEOUT_SCALE; xcodebuild passes TEST_RUNNER_
-      # variables on to the tests).
+      # One test at a time here, unlike the test plan (TestPlans/Default.xctestplan): run in
+      # parallel on the hosted runner's simulator, the test host crashed in SwiftData (#59) and
+      # the OCR tests exceeded their timeouts, while saving little time (about 7 instead of 9
+      # minutes). macOS, locally and in CI, runs them in parallel.
       - name: Test
         env:
           UDID: ${{ steps.simulator.outputs.udid }}
-          TEST_RUNNER_DA_TEST_TIMEOUT_SCALE: 3
         run: |
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
+            -destination "platform=iOS Simulator,id=$UDID" -parallel-testing-enabled NO \
+            -resultBundlePath TestResults.xcresult \
             -enableCodeCoverage YES CODE_SIGN_IDENTITY=- SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             | xcbeautify --renderer github-actions
       # Line coverage of the app and its least covered files in the job summary. No gate: the
