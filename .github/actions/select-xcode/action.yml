@@ -1,0 +1,33 @@
+name: Select Xcode
+description: >
+  Selects the pinned Xcode for the rest of the job: reads .xcode-version (or the xcode-version
+  input), fails when that Xcode is not on the runner image, and exports DEVELOPER_DIR.
+  Needs the repository checked out first.
+inputs:
+  xcode-version:
+    description: >
+      Xcode version to use instead of .xcode-version, for example "26.5". For a job that has to
+      stay on an older Xcode while build and test move to a newer one.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode
+      shell: bash
+      env:
+        VERSION_INPUT: ${{ inputs.xcode-version }}
+      run: |
+        set -euo pipefail
+        version="$VERSION_INPUT"
+        if [ -z "$version" ]; then
+          version=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/.xcode-version")
+        fi
+        developer_dir="/Applications/Xcode_${version}.app/Contents/Developer"
+        if [ ! -d "$developer_dir" ]; then
+          echo "::error file=.xcode-version::Xcode $version is not on this runner image; see .xcode-version"
+          exit 1
+        fi
+        echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+        DEVELOPER_DIR="$developer_dir" xcodebuild -version
+        echo "xcbeautify $(xcbeautify --version)"

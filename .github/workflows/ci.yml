@@ -27,17 +27,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check the filter
-        run: python3 scripts/app-changes.py --self-test
+      - name: Check the scripts
+        run: |
+          python3 scripts/app-changes.py --self-test
+          python3 scripts/coverage-summary.py --self-test
       - name: Filter changed files
         id: filter
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+        # pipefail: a failing diff fails this job (so everything runs) instead of passing an empty
+        # list on. --no-renames: a file moved out of the app lists its old path too.
         run: |
+          set -o pipefail
           if [ "$EVENT" = pull_request ]; then
-            git diff --name-only "$BASE...$HEAD" | tee changed.txt
+            git diff --no-renames --name-only "$BASE...$HEAD" | tee changed.txt
             app=$(python3 scripts/app-changes.py < changed.txt)
           else
             app=true
@@ -48,22 +53,28 @@ jobs:
   # The two builds are separate jobs instead of a matrix: a matrix job skipped by `if` reports
   # its unexpanded name ("build (${{ matrix.platform }})"), which would leave the required checks
   # "build (macOS)" and "build (iOS)" waiting forever.
+  # Every macOS job runs the Xcode pinned in .xcode-version (select-xcode). Warnings are errors
+  # here, not in the project settings: local builds only warn, CI keeps main warning-free with
+  # the pinned Xcode's diagnostics. xcbeautify turns errors, warnings and failed tests into
+  # annotations on the pull request.
   build-macos:
     # macOS and iOS are built from the same target; unsigned, so no secrets are needed.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: macos-latest
+    runs-on: macos-26
+    timeout-minutes: 30
     name: build (macOS)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: xcodebuild -version
+      - uses: ./.github/actions/select-xcode
       - name: Build
         run: |
           set -o pipefail
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 50
+            -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
+            build | xcbeautify --renderer github-actions
       # Every UI string compiled for this platform must have a German translation.
       - name: Check translations
         run: python3 scripts/check-localization.py build
@@ -71,19 +82,21 @@ jobs:
   build-ios:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: macos-latest
+    runs-on: macos-26
+    timeout-minutes: 30
     name: build (iOS)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: xcodebuild -version
+      - uses: ./.github/actions/select-xcode
       - name: Build
         run: |
           set -o pipefail
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 50
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
+            build | xcbeautify --renderer github-actions
       - name: Check translations
         run: python3 scripts/check-localization.py build
 
@@ -92,21 +105,28 @@ jobs:
     # network access, so they need no secrets and never reach Mistral.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: macos-latest
+    runs-on: macos-26
+    timeout-minutes: 45
     name: test (macOS)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: xcodebuild -version
+      - uses: ./.github/actions/select-xcode
       - name: Test
         run: |
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
-            CODE_SIGNING_ALLOWED=NO | grep -E '✔|✘|error:|TEST (SUCCEEDED|FAILED)'
+            -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
+      # Line coverage of the app and its least covered files in the job summary. No gate: the
+      # script prints "no coverage data" and exits 0 when there is nothing to read.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: xcrun xccov view --report --json TestResults.xcresult | python3 scripts/coverage-summary.py >> "$GITHUB_STEP_SUMMARY"
       - name: Upload test results
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: TestResults-macOS
@@ -118,13 +138,14 @@ jobs:
     # signed ("Sign to Run Locally", no team, no secrets): the Keychain tests need a signature.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: macos-latest
+    runs-on: macos-26
+    timeout-minutes: 45
     name: test (iOS)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: xcodebuild -version
+      - uses: ./.github/actions/select-xcode
       - name: Pick simulator
         id: simulator
         run: echo "udid=$(python3 scripts/pick-simulator.py iphone smallest)" >> "$GITHUB_OUTPUT"
@@ -135,12 +156,62 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
-            CODE_SIGN_IDENTITY=- | grep -E '✔|✘|error:|TEST (SUCCEEDED|FAILED)'
+            -enableCodeCoverage YES CODE_SIGN_IDENTITY=- \
+            | xcbeautify --renderer github-actions
+      # Line coverage of the app and its least covered files in the job summary. No gate: the
+      # script prints "no coverage data" and exits 0 when there is nothing to read.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: xcrun xccov view --report --json TestResults.xcresult | python3 scripts/coverage-summary.py >> "$GITHUB_STEP_SUMMARY"
       - name: Upload test results
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: TestResults-iOS
+          path: TestResults.xcresult
+          retention-days: 7
+
+  next-xcode:
+    # Early warning for the next Xcode: the preview image's default Xcode, not pinned on purpose
+    # and without warnings as errors. Not a required check: a red run means "look at it", the
+    # pull request may still be merged.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
+    runs-on: xcode-27
+    timeout-minutes: 60
+    name: build (macOS, next Xcode)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show Xcode
+        run: |
+          xcodebuild -version
+          echo "xcbeautify $(xcbeautify --version)"
+      - name: Build for macOS
+        run: |
+          set -o pipefail
+          xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build \
+            | xcbeautify --renderer github-actions
+      - name: Build for iOS
+        run: |
+          set -o pipefail
+          xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | xcbeautify --renderer github-actions
+      - name: Test on macOS
+        run: |
+          set -o pipefail
+          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination 'platform=macOS,arch=arm64' -derivedDataPath build \
+            -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TestResults-macOS-next-Xcode
           path: TestResults.xcresult
           retention-days: 7
 
