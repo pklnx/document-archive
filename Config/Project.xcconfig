@@ -1,9 +1,19 @@
-// Build settings shared by all configurations of the app target.
+// Build settings shared by all targets (the app, the unit tests and the UI tests) and all
+// configurations. This file is the base configuration of the project, so every target inherits
+// it; a setting in a target's own build settings overrides it, so do not repeat these there.
+// Keep one commented block per topic.
+
+// Version (see docs/development/process.md → Releases). MARKETING_VERSION is the version users
+// see (CFBundleShortVersionString, semantic versioning); CURRENT_PROJECT_VERSION is the build
+// number (CFBundleVersion, a positive integer), raised by one in every release pull request.
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
 
 // CloudKit sync needs a build signed with the paid Apple Developer team. Leave this NO for
 // unsigned, ad-hoc (simulator) and free Personal Team builds; set it to YES in
 // Config/Local.xcconfig (not in git) for the signed build. See docs/development/ios.md.
 DA_CLOUDKIT_ENABLED = NO
 
-// Optional local overrides, e.g. DEVELOPMENT_TEAM and DA_CLOUDKIT_ENABLED = YES.
+// Optional local overrides, e.g. DEVELOPMENT_TEAM and DA_CLOUDKIT_ENABLED = YES. Keep this
+// include last, so it overrides everything above.
 #include? "Local.xcconfig"

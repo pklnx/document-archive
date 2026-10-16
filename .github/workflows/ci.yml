@@ -31,6 +31,7 @@ jobs:
         run: |
           python3 scripts/app-changes.py --self-test
           python3 scripts/coverage-summary.py --self-test
+          python3 scripts/check-privacy-manifest.py --self-test
       - name: Filter changed files
         id: filter
         env:
@@ -78,6 +79,9 @@ jobs:
       # Every UI string compiled for this platform must have a German translation.
       - name: Check translations
         run: python3 scripts/check-localization.py build
+      # The required-reason APIs the code uses must match DocumentArchive/PrivacyInfo.xcprivacy.
+      - name: Check privacy manifest
+        run: python3 scripts/check-privacy-manifest.py
 
   build-ios:
     needs: changes
