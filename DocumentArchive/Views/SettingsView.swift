@@ -132,11 +132,20 @@ struct GeneralSettingsSections: View {
     @Query private var tags: [Tag]
     @Query private var correspondents: [Correspondent]
     @AppStorage(AutoClassifier.autoCreateCorrespondentsKey) private var autoCreateCorrespondents = true
+    @AppStorage(TextLayer.enabledKey) private var addTextLayer = true
 
     @State private var reclassifyProgress: (done: Int, total: Int)?
     @State private var mergeMessage: String?
 
     var body: some View {
+        Section {
+            Toggle("Add a text layer to scans", isOn: $addTextLayer)
+        } header: {
+            Text("Text recognition")
+        } footer: {
+            Text("Writes the recognized text invisibly into scanned PDFs, so the text can be selected, copied and found in other apps. Applies to documents processed on this device. Documents processed on your other devices may still get a text layer there.")
+        }
+
         Section {
             Toggle("Create new senders as correspondents automatically", isOn: $autoCreateCorrespondents)
         } header: {

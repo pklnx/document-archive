@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import PDFKit
 import SwiftData
 import Testing
 import UniformTypeIdentifiers
@@ -148,6 +149,148 @@ extension GlobalStateTests {
             #expect(try #require(mixed.notice).message.contains("notes.txt"))
             #expect(DocumentImporter.ImportResult().notice == nil)
             #expect(DocumentImporter.ImportResult().documentToOpen == nil)
+        }
+
+        // MARK: Text layer (#9)
+
+        private static let letter = ["Stadtwerke Beispielstadt GmbH", "Rechnung Nr. 4711", "Rechnungsdatum: 03.09.2026"]
+
+        private func pngData(lines: [String]) throws -> Data {
+            let data = NSMutableData()
+            let destination = try #require(CGImageDestinationCreateWithData(data as CFMutableData, UTType.png.identifier as CFString, 1, nil))
+            CGImageDestinationAddImage(destination, TestSupport.renderPage(lines: lines), nil)
+            #expect(CGImageDestinationFinalize(destination))
+            return data as Data
+        }
+
+        private func imported(_ outcome: DocumentImporter.FileOutcome) throws -> Document {
+            guard case .imported(let document) = outcome else { throw TestFailure("not imported: \(outcome)") }
+            return document
+        }
+
+        private struct TestFailure: Error, CustomStringConvertible {
+            var description: String
+            init(_ description: String) { self.description = description }
+        }
+
+        // 10 and 12
+        @Test func importedImageGetsATextLayerAndStaysADuplicate() async throws {
+            let png = try pngData(lines: Self.letter)
+            let document = try imported(try DocumentImporter.importFile(data: png, name: "Brief.png", into: context))
+            let modifiedBefore = document.modifiedAt
+            let pdfBefore = try #require(document.pdfData)
+            try await TestSupport.waitUntilProcessed([document])
+
+            let stored = try #require(document.pdfData)
+            #expect(stored != pdfBefore, "the PDF was replaced")
+            #expect(PDFDocument(data: stored)?.page(at: 0)?.string?.contains("Rechnung") == true)
+            #expect(document.fileSize == stored.count)
+            #expect(document.contentHash == DocumentImporter.sha256(png), "the hash stays the original file's")
+            #expect(document.modifiedAt > modifiedBefore, "touched, so the folder copy writes the new PDF")
+
+            // The same image again is a duplicate.
+            let again = try DocumentImporter.importFile(data: png, name: "Brief Kopie.png", into: context)
+            guard case .duplicate(let existing) = again else { Issue.record("not a duplicate: \(again)"); return }
+            #expect(existing.id == document.id)
+
+            // 12: the exported (layered) PDF imported again is found through size + hash.
+            let export = directory.appending(path: document.exportFileName)
+            try stored.write(to: export)
+            let reimport = DocumentImporter.importFiles([export], into: context)
+            #expect(reimport.imported.isEmpty)
+            #expect(reimport.duplicates.first?.existing.id == document.id)
+            #expect(try context.fetch(FetchDescriptor<Document>()).count == 1)
+        }
+
+        /// The folder copy (#8) writes the PDF with the text layer after processing replaced it.
+        @Test func folderCopyPicksUpTheReplacedPDF() async throws {
+            let device = try MirrorFixture()
+            let scan = TestSupport.samplePDF(lines: Self.letter)
+            let document = device.insertDocument("Scan", pdf: scan)
+            document.source = .scan
+            try device.context.save()
+            try await device.run()
+            #expect(try Data(contentsOf: device.layout.pdf(document.id)) == scan)
+
+            await DocumentImporter.processAndWait(document, context: device.context, classify: false)
+            let layered = try #require(document.pdfData)
+            #expect(layered != scan)
+
+            let pass = try await device.run()
+            #expect(pass.pdfsWritten == 1)
+            #expect(try Data(contentsOf: device.layout.pdf(document.id)) == layered)
+        }
+
+        // 8
+        @Test func rewriteThatFailsTheCheckKeepsTheOriginal() async throws {
+            let scan = TestSupport.scanPDF(pages: [Self.letter, ["Seite zwei Kontoauszug"]])
+            TextLayer.rewriteHookForTesting = { analyzed, rewritten in
+                // Only this test's document: drops the last page, so the page count no longer matches.
+                guard analyzed == scan else { return rewritten }
+                let pdf = PDFDocument(data: rewritten)!
+                pdf.removePage(at: pdf.pageCount - 1)
+                return pdf.dataRepresentation()!
+            }
+            defer { TextLayer.rewriteHookForTesting = nil }
+            let document = try imported(try DocumentImporter.importFile(data: scan, name: "Scan.pdf", into: context))
+            try await TestSupport.waitUntilProcessed([document])
+
+            #expect(document.pdfData == scan)
+            #expect(document.processingNote.contains(String(localized: "Text layer skipped: the result did not match the original.")))
+            #expect(document.textSource == "Apple Vision", "the text is still recognized")
+        }
+
+        // 11
+        @Test func pdfChangedDuringTheAnalysisIsKept() async throws {
+            MistralStub.install(config: MistralStub.config(useOCR: true, useLLM: false)) { _, _ in
+                .json(["pages": [["index": 0, "markdown": "Von Mistral"]]])
+            }
+            defer { MistralStub.reset() }
+            MistralStub.delay = 1
+            let document = Document(title: "Scan", pdfData: TestSupport.samplePDF(lines: Self.letter), source: .scan)
+            document.isProcessing = false
+            context.insert(document)
+
+            let processing = Task { await DocumentImporter.processAndWait(document, context: context, classify: false) }
+            let clock = ContinuousClock()
+            let deadline = clock.now + .seconds(30)
+            while MistralStub.requests.isEmpty, clock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+            #expect(!MistralStub.requests.isEmpty, "the analysis is waiting for the stub")
+
+            // Meanwhile another device (or a merge) replaces the PDF.
+            let newer = TestSupport.samplePDF(lines: ["Neuere Fassung"])
+            document.pdfData = newer
+            await processing.value
+
+            #expect(document.pdfData == newer)
+            #expect(document.fileSize == newer.count)
+            #expect(!document.isProcessing)
+        }
+
+        // 13
+        @Test func settingOffLeavesThePDFUnchanged() async throws {
+            TextLayer.isEnabledProvider = { false }
+            defer { TextLayer.isEnabledProvider = { true } }
+            let scan = TestSupport.samplePDF(lines: Self.letter)
+            let document = try imported(try DocumentImporter.importFile(data: scan, name: "Scan.pdf", into: context))
+            try await TestSupport.waitUntilProcessed([document])
+
+            #expect(document.pdfData == scan)
+            #expect(document.extractedText.contains("Rechnung"))
+        }
+
+        @Test func replacePDFNeedsTheAnalyzedBytes() throws {
+            let original = TestSupport.samplePDF(lines: ["Eins"])
+            let document = Document(title: "Scan", pdfData: original, source: .scan)
+            context.insert(document)
+            let layered = Data("layered".utf8)
+
+            #expect(!DocumentImporter.replacePDF(of: document, analyzed: Data("other".utf8), with: layered))
+            #expect(document.pdfData == original)
+
+            #expect(DocumentImporter.replacePDF(of: document, analyzed: original, with: layered))
+            #expect(document.pdfData == layered)
+            #expect(document.fileSize == layered.count)
         }
 
         @Test func sha256IsHexOfTheContent() {

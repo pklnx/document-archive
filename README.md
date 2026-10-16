@@ -15,6 +15,7 @@ The app is available in English and German.
 
 - **Add documents:** camera scan (iPhone/iPad, with automatic edge detection), PDFs and images from Files, photos from the library, drag and drop (Mac: also ⌘O), "Open with" in Finder or a drop on the Dock icon (Mac), "Open in…" / "Copy to Document Archive" from Files, Mail and other apps (iPhone/iPad)
 - **Text recognition (OCR)** for scans and image-only PDFs (German and English), then **full-text search**
+- **Searchable PDFs:** scans get an invisible text layer, so their text can be selected, copied and found in Finder, Files and other apps
 - **Mistral AI** (optional): Mistral OCR for text recognition, Mistral Medium for title, correspondent, type, tags and date
 - **Correspondents, document types, tags** and **ASN** (archive serial number), as in paperless; tags can be nested ("Auto › Golf") by drag and drop or "Move To…", and a tag shows the documents of the tags inside it, with its nested tags as subfolders
 - **Automatic assignment** with matching rules (any/all words, exact phrase, regex), sender detection and **issue date detection**
