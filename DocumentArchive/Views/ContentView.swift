@@ -300,7 +300,7 @@ struct ContentView: View {
             selection: listSelection,
             showsBulkToolbar: showsBulkToolbar,
             importMenu: { importMenu },
-            onDropFiles: { report(DocumentImporter.importDropped($0, into: context)) },
+            onDropFiles: { files in Task { report(await DocumentImporter.importDropped(files, into: context)) } },
             subfolders: SubfolderChip.chips(of: filter, in: allDocuments),
             openSubfolder: isCompact ? nil : { sidebarSelection = .tag($0) },
             // Only the list in front presents the editor.
@@ -619,7 +619,7 @@ struct ContentView: View {
     }
 
     private func importFiles(_ urls: [URL]) {
-        report(DocumentImporter.importFiles(urls, into: context))
+        Task { report(await DocumentImporter.importFiles(urls, into: context)) }
     }
 
     /// Tells about skipped duplicates and errors, and opens what was imported.
@@ -655,7 +655,7 @@ struct ContentView: View {
             if let data = try? await item.loadTransferable(type: Data.self) { images.append(data) }
         }
         photoItems = []
-        let result = DocumentImporter.importImageData(images, into: context)
+        let result = await DocumentImporter.importImageData(images, into: context)
         if let document = result.document {
             if result.isDuplicate {
                 importNotice = ImportNotice(title: String(localized: "Already in the archive"),

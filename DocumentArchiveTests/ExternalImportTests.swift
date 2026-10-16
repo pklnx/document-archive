@@ -49,7 +49,8 @@ extension GlobalStateTests {
             externalImport.context = context
 
             #expect(externalImport.queued.isEmpty)
-            let result = try #require(externalImport.takeResult())
+            await externalImport.waitForImports()
+            let result = try #require(await externalImport.importedResult())
             try await TestSupport.waitUntilProcessed(result.imported)
             #expect(result.imported.map(\.title) == ["Rechnung"])
             #expect(result.imported.first?.originalFileName == "Rechnung.pdf")
@@ -57,6 +58,7 @@ extension GlobalStateTests {
             #expect(try documents().count == 1, "imported once")
 
             externalImport.context = context
+            await externalImport.waitForImports()
             #expect(externalImport.pendingResult == nil, "setting the archive again imports nothing twice")
             #expect(try documents().count == 1)
         }
@@ -65,17 +67,17 @@ extension GlobalStateTests {
             let externalImport = makeImport()
             externalImport.receive([try writePDF("Rechnung.pdf")], origin: .openWith)
 
-            let result = try #require(externalImport.takeResult())
+            let result = try #require(await externalImport.importedResult())
             try await TestSupport.waitUntilProcessed(result.imported)
             #expect(result.notice == nil)
             #expect(result.documentToOpen?.isNew == true)
             #expect(result.documentToOpen?.document.id == result.imported.first?.id)
-            #expect(externalImport.takeResult() == nil, "the result is shown once")
+            #expect(await externalImport.importedResult() == nil, "the result is shown once")
         }
 
         @Test func openingADuplicateShowsTheExistingDocument() async throws {
             let original = try writePDF("Rechnung.pdf", lines: ["Rechnung 4711"])
-            let first = DocumentImporter.importFiles([original], into: context)
+            let first = await DocumentImporter.importFiles([original], into: context)
             try await TestSupport.waitUntilProcessed(first.imported)
             let copy = directory.appending(path: "Kopie.pdf")
             try FileManager.default.copyItem(at: original, to: copy)
@@ -83,7 +85,7 @@ extension GlobalStateTests {
             let externalImport = makeImport()
             externalImport.receive([copy], origin: .openWith)
 
-            let result = try #require(externalImport.takeResult())
+            let result = try #require(await externalImport.importedResult())
             #expect(result.imported.isEmpty)
             #expect(result.documentToOpen?.isNew == false)
             #expect(result.documentToOpen?.document.id == first.imported.first?.id)
@@ -97,20 +99,20 @@ extension GlobalStateTests {
             externalImport.receive([try writePDF("Eins.pdf", lines: ["Eins"])], origin: .openWith)
             externalImport.receive([try writePDF("Zwei.pdf", lines: ["Zwei"])], origin: .openWith)
 
-            let result = try #require(externalImport.takeResult())
+            let result = try #require(await externalImport.importedResult())
             try await TestSupport.waitUntilProcessed(result.imported)
             #expect(Set(result.imported.map(\.title)) == ["Eins", "Zwei"])
             #expect(result.documentToOpen == nil)
             #expect(result.notice == nil)
         }
 
-        @Test func unsupportedFileIsReported() throws {
+        @Test func unsupportedFileIsReported() async throws {
             let text = directory.appending(path: "Notiz.txt")
             try Data("Hallo".utf8).write(to: text)
             let externalImport = makeImport()
             externalImport.receive([text], origin: .openWith)
 
-            let result = try #require(externalImport.takeResult())
+            let result = try #require(await externalImport.importedResult())
             #expect(result.imported.isEmpty)
             #expect(result.errors.count == 1)
             #expect(try #require(result.notice).message.contains("Notiz.txt"))
@@ -129,7 +131,7 @@ extension GlobalStateTests {
 
             externalImport.receive([inPlace], origin: .openWith)
             externalImport.receive([inboxCopy], origin: .openWith)
-            let result = try #require(externalImport.takeResult())
+            let result = try #require(await externalImport.importedResult())
             try await TestSupport.waitUntilProcessed(result.imported)
 
             #expect(result.imported.count == 2)
@@ -139,7 +141,7 @@ extension GlobalStateTests {
             let duplicateCopy = inbox.appending(path: "Rechnung 2.pdf")
             try inboxData.write(to: duplicateCopy)
             externalImport.receive([duplicateCopy], origin: .openWith)
-            #expect(externalImport.takeResult()?.duplicates.count == 1)
+            #expect(await externalImport.importedResult()?.duplicates.count == 1)
             #expect(!FileManager.default.fileExists(atPath: duplicateCopy.path(percentEncoded: false)))
             #expect(FileManager.default.fileExists(atPath: inbox.path(percentEncoded: false)), "only the file is removed")
         }
@@ -152,7 +154,7 @@ extension GlobalStateTests {
             let externalImport = makeImport()
 
             externalImport.receive([opened], origin: .openWith)
-            let result = try #require(externalImport.takeResult())
+            let result = try #require(await externalImport.importedResult())
             try await TestSupport.waitUntilProcessed(result.imported)
             #expect(result.imported.count == 1)
             #expect(FileManager.default.fileExists(atPath: opened.path(percentEncoded: false)))
@@ -160,9 +162,17 @@ extension GlobalStateTests {
             let duplicate = inbox.appending(path: "Rechnung 2.pdf")
             try data.write(to: duplicate)
             externalImport.receive([duplicate], origin: .openWith)
-            #expect(externalImport.takeResult()?.duplicates.count == 1)
+            #expect(await externalImport.importedResult()?.duplicates.count == 1)
             #expect(FileManager.default.fileExists(atPath: duplicate.path(percentEncoded: false)))
         }
         #endif
+    }
+}
+
+extension ExternalImport {
+    /// The result once every received file is imported (the window gets it through observation).
+    func importedResult() async -> DocumentImporter.ImportResult? {
+        await waitForImports()
+        return takeResult()
     }
 }

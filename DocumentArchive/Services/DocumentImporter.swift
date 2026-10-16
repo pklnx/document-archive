@@ -74,29 +74,38 @@ enum DocumentImporter {
 
     /// Imports files (PDFs and images). Every file becomes its own document.
     /// Files with the same content as an existing document are skipped.
+    /// Each file is read inside its security-scoped access; the duplicate check, the photo
+    /// cleanup and the insert follow in `importFile(data:name:origin:cleanup:into:)`.
+    /// - Parameter cleanup: How photos are cleaned up; `nil` uses the setting for `origin`.
     @discardableResult
-    static func importFiles(_ urls: [URL], into context: ModelContext) -> ImportResult {
+    static func importFiles(_ urls: [URL], origin: ImportOrigin = .interactive, cleanup: CleanupMode? = nil,
+                            into context: ModelContext) async -> ImportResult {
         var result = ImportResult()
         for url in urls {
-            let accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             do {
-                guard isImportable(fileName: url.lastPathComponent) else {
-                    throw ImportError.unsupported(url.lastPathComponent)
-                }
-                let data: Data
-                do {
-                    data = try Data(contentsOf: url)
-                } catch {
-                    throw ImportError.unreadable(url.deletingPathExtension().lastPathComponent)
-                }
-                result.add(try importFile(data: data, name: url.lastPathComponent, into: context),
+                let data = try readFile(url)
+                result.add(try await importFile(data: data, name: url.lastPathComponent, origin: origin,
+                                                cleanup: cleanup, into: context),
                            fileName: url.lastPathComponent)
             } catch {
                 result.errors.append(error)
             }
         }
         return result
+    }
+
+    /// The file's bytes, read inside its security-scoped access.
+    private static func readFile(_ url: URL) throws -> Data {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard isImportable(fileName: url.lastPathComponent) else {
+            throw ImportError.unsupported(url.lastPathComponent)
+        }
+        do {
+            return try Data(contentsOf: url)
+        } catch {
+            throw ImportError.unreadable(url.deletingPathExtension().lastPathComponent)
+        }
     }
 
     /// What `importFile` did with one file.
@@ -112,13 +121,16 @@ enum DocumentImporter {
     }
 
     /// The one import pipeline for a file whose bytes were already read (possibly off the main
-    /// actor): duplicate check on the original bytes, then the insert and the normal processing.
-    /// `importFiles` and `ExternalImport` both end here, so the paths cannot drift apart.
-    /// #20 adds its cleanup step (and a `cleanup:` mode chosen by the caller) between the
-    /// duplicate check and the insert.
-    /// - Parameter name: The file name with its extension; it decides PDF or image and becomes the title.
+    /// actor): duplicate check on the original bytes, the photo cleanup (#20), then the insert
+    /// and the normal processing. `importFiles` and `ExternalImport` both end here, so the paths
+    /// cannot drift apart. PDFs are never cleaned up.
+    /// - Parameters:
+    ///   - name: The file name with its extension; it decides PDF or image and becomes the title.
+    ///   - origin: Where the file comes from; decides the cleanup mode when `cleanup` is `nil`.
+    ///   - cleanup: How a photo is cleaned up; `nil` uses `CleanupMode.mode(for:setting:)`.
     /// - Throws: `ImportError` for an unsupported type or an image that cannot be decoded.
-    static func importFile(data: Data, name: String, into context: ModelContext) throws -> FileOutcome {
+    static func importFile(data: Data, name: String, origin: ImportOrigin = .interactive,
+                           cleanup: CleanupMode? = nil, into context: ModelContext) async throws -> FileOutcome {
         let title = (name as NSString).deletingPathExtension
         let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
         guard type.conforms(to: .pdf) || type.conforms(to: .image) else { throw ImportError.unsupported(name) }
@@ -132,12 +144,56 @@ enum DocumentImporter {
             pdfData = data
             source = .file
         } else {
-            guard let converted = PDFBuilder.makePDF(fromImageData: [data]) else { throw ImportError.unreadable(title) }
+            let mode = cleanup ?? CleanupMode.mode(for: origin, setting: CleanupMode.settingProvider())
+            guard let converted = await makeImagePDF([data], title: title, originalFileName: name, mode: mode)
+            else { throw ImportError.unreadable(title) }
             pdfData = converted
             source = .image
+            // Another import may have added the same file while this one was being built.
+            if let existing = existingDocument(withHash: hash, in: context) { return .duplicate(of: existing) }
         }
         return .imported(insert(title: title, pdfData: pdfData, source: source, hash: hash,
                                 originalFileName: name, context: context))
+    }
+
+    /// Builds the PDF for photos in the given mode, off the main actor.
+    private static func makeImagePDF(_ items: [Data], title: String, originalFileName: String = "",
+                                     mode: CleanupMode) async -> Data? {
+        let filter = CleanupMode.defaultFilterProvider()
+        return await Task.detached(priority: .userInitiated) { () -> Data? in
+            switch mode {
+            case .off:
+                return PDFBuilder.makePDF(fromImageData: items)
+            case .automatic:
+                guard let pending = await PendingImport.make(originalData: items, title: title,
+                                                             originalFileName: originalFileName, filter: filter)
+                else { return nil }
+                return makeDocumentData(pending.unattended)
+            }
+        }.value
+    }
+
+    /// The cleaned PDF of a pending import: every page is decoded at full resolution from the
+    /// original bytes, cleaned up with its settings, added to the PDF and released before the
+    /// next one. Inserting is separate (`importCleaned`), so #22's vault import can seal the
+    /// data first.
+    nonisolated static func makeDocumentData(_ pending: PendingImport) -> Data? {
+        PDFBuilder.makePDF(pageCount: pending.originalData.count) { index in
+            guard let page = ImageCoding.orientedImage(from: pending.originalData[index],
+                                                       maxPixelSize: ImageCoding.pagePixelSize)
+            else { return nil }
+            let settings = pending.settings.indices.contains(index) ? pending.settings[index] : CleanupSettings(filter: .original)
+            return ImageCleanup.apply(settings, to: page) ?? page
+        }
+    }
+
+    /// Builds the cleaned PDF and inserts it with the **original** hash, so the same photo is
+    /// still found as a duplicate. `nil` when the photos cannot be decoded.
+    static func importCleaned(_ pending: PendingImport, into context: ModelContext) async -> Document? {
+        let data = await Task.detached(priority: .userInitiated) { makeDocumentData(pending) }.value
+        guard let data else { return nil }
+        return insert(title: pending.title, pdfData: data, source: pending.source, hash: pending.hash,
+                      originalFileName: pending.originalFileName, context: context)
     }
 
     /// Several images (e.g. a camera scan) become one multi-page document.
@@ -148,16 +204,21 @@ enum DocumentImporter {
     }
 
     /// Several photos from the library become one multi-page document.
+    /// - Parameter cleanup: How the photos are cleaned up; `nil` uses the setting.
     /// - Returns: The new document, or the existing one if exactly these photos were imported before.
-    static func importImageData(_ items: [Data], into context: ModelContext) -> (document: Document?, isDuplicate: Bool) {
+    static func importImageData(_ items: [Data], cleanup: CleanupMode? = nil,
+                                into context: ModelContext) async -> (document: Document?, isDuplicate: Bool) {
         let combined = items.reduce(Data(), +)
         if let existing = existingDocument(for: combined, in: context) { return (existing, true) }
         let hash = sha256(combined)
-        guard let data = PDFBuilder.makePDF(fromImageData: items) else { return (nil, false) }
-        return (insert(title: defaultTitle(for: .image), pdfData: data, source: .image, hash: hash, context: context), false)
+        let title = defaultTitle(for: .image)
+        let mode = cleanup ?? CleanupMode.mode(for: .interactive, setting: CleanupMode.settingProvider())
+        guard let data = await makeImagePDF(items, title: title, mode: mode) else { return (nil, false) }
+        if let existing = existingDocument(withHash: hash, in: context) { return (existing, true) }
+        return (insert(title: title, pdfData: data, source: .image, hash: hash, context: context), false)
     }
 
-    static func sha256(_ data: Data) -> String {
+    nonisolated static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 

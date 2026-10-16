@@ -1,9 +1,12 @@
 import CoreGraphics
+import CoreImage
 import CoreText
 import Foundation
+import ImageIO
 import PDFKit
 import SwiftData
 import Testing
+import UniformTypeIdentifiers
 @testable import DocumentArchive
 
 /// Suites that change global state (Mistral stub, settings source) are nested here,
@@ -179,6 +182,73 @@ enum TestSupport {
         return pdf
     }
 
+    /// Where `photographedPage` puts the page by default: a mild perspective, as when a letter on
+    /// a desk is photographed from slightly off-center (normalized, origin lower-left).
+    static let photoCorners = PageQuad(topLeft: CGPoint(x: 0.12, y: 0.90), topRight: CGPoint(x: 0.86, y: 0.93),
+                                       bottomRight: CGPoint(x: 0.90, y: 0.07), bottomLeft: CGPoint(x: 0.08, y: 0.10))
+
+    /// A photo of a rendered page (`renderPage`) lying with the given corners on a dark, textured
+    /// desk. The corners are known exactly, so detection and correction can be checked.
+    static func photographedPage(lines: [String], corners: PageQuad = photoCorners,
+                                 width: Int = 1500, height: Int = 2000) -> CGImage {
+        let size = CGSize(width: width, height: height)
+        let page = CIImage(cgImage: renderPage(lines: lines))
+        let transform = CIFilter(name: "CIPerspectiveTransform")!
+        transform.setValue(page, forKey: kCIInputImageKey)
+        func vector(_ point: CGPoint) -> CIVector { CIVector(x: point.x * size.width, y: point.y * size.height) }
+        transform.setValue(vector(corners.topLeft), forKey: "inputTopLeft")
+        transform.setValue(vector(corners.topRight), forKey: "inputTopRight")
+        transform.setValue(vector(corners.bottomRight), forKey: "inputBottomRight")
+        transform.setValue(vector(corners.bottomLeft), forKey: "inputBottomLeft")
+        let photo = transform.outputImage!.composited(over: CIImage(cgImage: desk(width: width, height: height)))
+        return ImageCleanup.sharedContext.createCGImage(photo, from: CGRect(origin: .zero, size: size))!
+    }
+
+    /// A dark wooden-looking surface with a fixed random pattern.
+    static func desk(width: Int, height: Int) -> CGImage {
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        )!
+        context.setFillColor(CGColor(red: 0.22, green: 0.16, blue: 0.12, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        var generator = SeededGenerator(seed: 20)
+        for _ in 0..<400 {
+            let shade = Double.random(in: 0.1...0.3, using: &generator)
+            context.setFillColor(CGColor(red: shade + 0.05, green: shade, blue: shade - 0.04, alpha: 1))
+            context.fill(CGRect(x: Double.random(in: 0...Double(width), using: &generator),
+                                y: Double.random(in: 0...Double(height), using: &generator),
+                                width: Double.random(in: 20...200, using: &generator),
+                                height: Double.random(in: 2...8, using: &generator)))
+        }
+        return context.makeImage()!
+    }
+
+    /// An image encoded as PNG, or as JPEG with an EXIF orientation.
+    static func encoded(_ image: CGImage, type: UTType = .png, orientation: Int? = nil) -> Data {
+        let data = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(data as CFMutableData, type.identifier as CFString, 1, nil)!
+        var properties: [CFString: Any] = [:]
+        if let orientation { properties[kCGImagePropertyOrientation] = orientation }
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+        precondition(CGImageDestinationFinalize(destination))
+        return data as Data
+    }
+
+    /// The image's pixels as RGBA bytes (sRGB), row 0 at the top.
+    static func pixels(of image: CGImage) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(
+                data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8,
+                bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            )!
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return bytes
+    }
+
     /// Waits until background processing (thumbnail, OCR, auto-assignment) has finished.
     @MainActor
     /// The timeout is generous because text recognition on the hosted CI runners is slow; it
@@ -193,6 +263,20 @@ enum TestSupport {
             }
             try await Task.sleep(for: .milliseconds(50))
         }
+    }
+}
+
+/// A deterministic random number generator (SplitMix64), so generated images are the same in every run.
+struct SeededGenerator: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed }
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
     }
 }
 

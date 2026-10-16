@@ -34,7 +34,8 @@ extension GlobalStateTests {
         }
 
         @Test func importsPDFAndImage() async throws {
-            let result = DocumentImporter.importFiles([try writePDF("Rechnung.pdf"), try writePNG("Foto.png")], into: context)
+            let files = [try writePDF("Rechnung.pdf"), try writePNG("Foto.png")]
+            let result = await DocumentImporter.importFiles(files, into: context)
             try await TestSupport.waitUntilProcessed(result.imported)
 
             #expect(result.errors.isEmpty)
@@ -43,10 +44,10 @@ extension GlobalStateTests {
             #expect(result.imported.allSatisfy { $0.pageCount == 1 && $0.thumbnailData != nil && $0.inInboxWithHash })
         }
 
-        @Test func rejectsUnsupportedFiles() throws {
+        @Test func rejectsUnsupportedFiles() async throws {
             let url = directory.appending(path: "notes.txt")
             try Data("hello".utf8).write(to: url)
-            let result = DocumentImporter.importFiles([url], into: context)
+            let result = await DocumentImporter.importFiles([url], into: context)
             #expect(result.imported.isEmpty)
             #expect(result.errors.count == 1)
         }
@@ -57,13 +58,13 @@ extension GlobalStateTests {
             let copy = directory.appending(path: "Kopie mit anderem Namen.pdf")
             try FileManager.default.copyItem(at: original, to: copy)
 
-            let first = DocumentImporter.importFiles([original, copy], into: context)
+            let first = await DocumentImporter.importFiles([original, copy], into: context)
             try await TestSupport.waitUntilProcessed(first.imported)
             #expect(first.imported.count == 1)
             #expect(first.duplicates.map(\.fileName) == ["Kopie mit anderem Namen.pdf"])
             #expect(first.duplicates.first?.existing.id == first.imported.first?.id)
 
-            let later = DocumentImporter.importFiles([original], into: context)
+            let later = await DocumentImporter.importFiles([original], into: context)
             #expect(later.imported.isEmpty)
             #expect(later.duplicates.count == 1)
             #expect(try context.fetch(FetchDescriptor<Document>()).count == 1)
@@ -71,8 +72,8 @@ extension GlobalStateTests {
 
         @Test func skipsPhotosThatWereAlreadyImported() async throws {
             let data = try Data(contentsOf: try writePNG("Foto.png"))
-            let first = DocumentImporter.importImageData([data], into: context)
-            let second = DocumentImporter.importImageData([data], into: context)
+            let first = await DocumentImporter.importImageData([data], into: context)
+            let second = await DocumentImporter.importImageData([data], into: context)
             try await TestSupport.waitUntilProcessed([first.document].compactMap { $0 })
             #expect(first.isDuplicate == false)
             #expect(second.isDuplicate)
@@ -97,7 +98,7 @@ extension GlobalStateTests {
         @Test func importFileFromDataChecksDuplicatesOnTheOriginalBytes() async throws {
             let pngData = try Data(contentsOf: try writePNG("Foto.png"))
 
-            let first = try DocumentImporter.importFile(data: pngData, name: "Foto.png", into: context)
+            let first = try await DocumentImporter.importFile(data: pngData, name: "Foto.png", into: context)
             guard case .imported(let document) = first else { Issue.record("not imported: \(first)"); return }
             try await TestSupport.waitUntilProcessed([document])
             #expect(document.title == "Foto")
@@ -105,22 +106,22 @@ extension GlobalStateTests {
             #expect(document.originalFileName == "Foto.png")
             #expect(document.contentHash == DocumentImporter.sha256(pngData), "the hash is the original's, not the PDF's")
 
-            let again = try DocumentImporter.importFile(data: pngData, name: "Anderer Name.png", into: context)
+            let again = try await DocumentImporter.importFile(data: pngData, name: "Anderer Name.png", into: context)
             guard case .duplicate(let existing) = again else { Issue.record("not a duplicate: \(again)"); return }
             #expect(existing.id == document.id)
 
             // The file picker path ends in the same pipeline and sees the same duplicate.
-            let picked = DocumentImporter.importFiles([directory.appending(path: "Foto.png")], into: context)
+            let picked = await DocumentImporter.importFiles([directory.appending(path: "Foto.png")], into: context)
             #expect(picked.duplicates.first?.existing.id == document.id)
             #expect(try context.fetch(FetchDescriptor<Document>()).count == 1)
         }
 
-        @Test func importFileRejectsUnsupportedAndUndecodableData() throws {
-            #expect(throws: DocumentImporter.ImportError.self) {
-                try DocumentImporter.importFile(data: Data("hello".utf8), name: "notes.txt", into: context)
+        @Test func importFileRejectsUnsupportedAndUndecodableData() async throws {
+            await #expect(throws: DocumentImporter.ImportError.self) {
+                try await DocumentImporter.importFile(data: Data("hello".utf8), name: "notes.txt", into: context)
             }
-            #expect(throws: DocumentImporter.ImportError.self) {
-                try DocumentImporter.importFile(data: Data("not an image".utf8), name: "Foto.png", into: context)
+            await #expect(throws: DocumentImporter.ImportError.self) {
+                try await DocumentImporter.importFile(data: Data("not an image".utf8), name: "Foto.png", into: context)
             }
             #expect(try context.fetch(FetchDescriptor<Document>()).isEmpty)
         }
@@ -128,13 +129,13 @@ extension GlobalStateTests {
         /// The wording and the document to open are shared by every import path.
         @Test func resultNoticeAndDocumentToOpen() async throws {
             let pdf = try writePDF("Rechnung.pdf", lines: ["Rechnung 4711"])
-            let single = DocumentImporter.importFiles([pdf], into: context)
+            let single = await DocumentImporter.importFiles([pdf], into: context)
             try await TestSupport.waitUntilProcessed(single.imported)
             #expect(single.notice == nil)
             #expect(single.documentToOpen?.isNew == true)
             #expect(single.documentToOpen?.document.id == single.imported.first?.id)
 
-            let duplicate = DocumentImporter.importFiles([pdf], into: context)
+            let duplicate = await DocumentImporter.importFiles([pdf], into: context)
             #expect(duplicate.documentToOpen?.isNew == false)
             #expect(duplicate.documentToOpen?.document.id == single.imported.first?.id)
             let notice = try #require(duplicate.notice)
@@ -143,7 +144,7 @@ extension GlobalStateTests {
 
             let text = directory.appending(path: "notes.txt")
             try Data("hello".utf8).write(to: text)
-            var mixed = DocumentImporter.importFiles([text], into: context)
+            var mixed = await DocumentImporter.importFiles([text], into: context)
             mixed.merge(duplicate)
             #expect(mixed.documentToOpen?.document.id == single.imported.first?.id)
             #expect(try #require(mixed.notice).message.contains("notes.txt"))
@@ -176,7 +177,7 @@ extension GlobalStateTests {
         // 10 and 12
         @Test func importedImageGetsATextLayerAndStaysADuplicate() async throws {
             let png = try pngData(lines: Self.letter)
-            let document = try imported(try DocumentImporter.importFile(data: png, name: "Brief.png", into: context))
+            let document = try imported(try await DocumentImporter.importFile(data: png, name: "Brief.png", into: context))
             let modifiedBefore = document.modifiedAt
             let pdfBefore = try #require(document.pdfData)
             try await TestSupport.waitUntilProcessed([document])
@@ -189,14 +190,14 @@ extension GlobalStateTests {
             #expect(document.modifiedAt > modifiedBefore, "touched, so the folder copy writes the new PDF")
 
             // The same image again is a duplicate.
-            let again = try DocumentImporter.importFile(data: png, name: "Brief Kopie.png", into: context)
+            let again = try await DocumentImporter.importFile(data: png, name: "Brief Kopie.png", into: context)
             guard case .duplicate(let existing) = again else { Issue.record("not a duplicate: \(again)"); return }
             #expect(existing.id == document.id)
 
             // 12: the exported (layered) PDF imported again is found through size + hash.
             let export = directory.appending(path: document.exportFileName)
             try stored.write(to: export)
-            let reimport = DocumentImporter.importFiles([export], into: context)
+            let reimport = await DocumentImporter.importFiles([export], into: context)
             #expect(reimport.imported.isEmpty)
             #expect(reimport.duplicates.first?.existing.id == document.id)
             #expect(try context.fetch(FetchDescriptor<Document>()).count == 1)
@@ -232,7 +233,7 @@ extension GlobalStateTests {
                 return pdf.dataRepresentation()!
             }
             defer { TextLayer.rewriteHookForTesting = nil }
-            let document = try imported(try DocumentImporter.importFile(data: scan, name: "Scan.pdf", into: context))
+            let document = try imported(try await DocumentImporter.importFile(data: scan, name: "Scan.pdf", into: context))
             try await TestSupport.waitUntilProcessed([document])
 
             #expect(document.pdfData == scan)
@@ -272,7 +273,7 @@ extension GlobalStateTests {
             TextLayer.isEnabledProvider = { false }
             defer { TextLayer.isEnabledProvider = { true } }
             let scan = TestSupport.samplePDF(lines: Self.letter)
-            let document = try imported(try DocumentImporter.importFile(data: scan, name: "Scan.pdf", into: context))
+            let document = try imported(try await DocumentImporter.importFile(data: scan, name: "Scan.pdf", into: context))
             try await TestSupport.waitUntilProcessed([document])
 
             #expect(document.pdfData == scan)
@@ -291,6 +292,88 @@ extension GlobalStateTests {
             #expect(DocumentImporter.replacePDF(of: document, analyzed: original, with: layered))
             #expect(document.pdfData == layered)
             #expect(document.fileSize == layered.count)
+        }
+
+        // MARK: Photo cleanup (#20)
+
+        private static let photoLetter = ["Stadtwerke Beispielstadt GmbH", "Rechnung Nr. 4711"]
+
+        private func pageAspect(of document: Document) throws -> Double {
+            let data = try #require(document.pdfData)
+            let page = try #require(PDFDocument(data: data)?.page(at: 0))
+            let bounds = page.bounds(for: .mediaBox)
+            return bounds.width / bounds.height
+        }
+
+        // 9
+        @Test func automaticCleanupStraightensThePhotoAndKeepsTheOriginalHash() async throws {
+            let photo = TestSupport.photographedPage(lines: Self.photoLetter)
+            let png = TestSupport.encoded(photo)
+            let document = try imported(try await DocumentImporter.importFile(data: png, name: "Brief.png",
+                                                                              cleanup: .automatic, into: context))
+            try await TestSupport.waitUntilProcessed([document])
+
+            #expect(document.pageCount == 1)
+            #expect(document.source == .image)
+            #expect(document.contentHash == DocumentImporter.sha256(png), "the hash is the original photo's")
+            let expected = ImageCleanupTests.expectedAspect(of: TestSupport.photoCorners,
+                                                            size: CGSize(width: photo.width, height: photo.height))
+            let aspect = try pageAspect(of: document)
+            #expect(abs(aspect / expected - 1) < 0.03, "aspect \(aspect), expected \(expected)")
+            #expect(document.extractedText.contains("Rechnung"), "the text layer and OCR run on the cleaned PDF")
+
+            // 10: the same photo again is a duplicate before any cleanup; nothing new is inserted.
+            let again = try await DocumentImporter.importFile(data: png, name: "Brief Kopie.png", cleanup: .automatic, into: context)
+            guard case .duplicate(let existing) = again else { Issue.record("not a duplicate: \(again)"); return }
+            #expect(existing.id == document.id)
+            let picked = await DocumentImporter.importImageData([png], cleanup: .automatic, into: context)
+            #expect(picked.isDuplicate && picked.document?.id == document.id)
+            #expect(try context.fetch(FetchDescriptor<Document>()).count == 1)
+        }
+
+        // 11
+        @Test func cleanupOffBuildsThePDFAsBefore() async throws {
+            let photo = TestSupport.photographedPage(lines: Self.photoLetter, width: 900, height: 1200)
+            let png = TestSupport.encoded(photo)
+            let document = try imported(try await DocumentImporter.importFile(data: png, name: "Brief.png",
+                                                                              cleanup: .off, into: context))
+            let stored = try #require(document.pdfData)
+            let reference = try #require(PDFBuilder.makePDF(fromImageData: [png]))
+            let storedPage = try #require(PDFDocument(data: stored)?.page(at: 0))
+            let referencePage = try #require(PDFDocument(data: reference)?.page(at: 0))
+            #expect(storedPage.bounds(for: .mediaBox) == referencePage.bounds(for: .mediaBox))
+            #expect(abs(try pageAspect(of: document) - 900.0 / 1200) < 0.005, "the whole photo, not cropped")
+            #expect(document.contentHash == DocumentImporter.sha256(png))
+            try await TestSupport.waitUntilProcessed([document])
+        }
+
+        /// Without a mode, interactive imports use the setting and #12's unattended origins clean
+        /// up automatically unless the setting is Off.
+        @Test func modeFollowsTheSettingAndTheOrigin() async throws {
+            #expect(CleanupMode.mode(for: .interactive, setting: .off) == .off)
+            #expect(CleanupMode.mode(for: .interactive, setting: .automatic) == .automatic)
+            #expect(CleanupMode.mode(for: .unattended, setting: .off) == .off)
+            #expect(CleanupMode.mode(for: .unattended, setting: .automatic) == .automatic)
+            #expect(ExternalImport.Origin.openWith.importOrigin == .interactive)
+
+            let (defaults, name) = TestSupport.makeDefaults()
+            defer { TestSupport.removeDefaults(name) }
+            #expect(CleanupMode.setting(in: defaults) == .off, "Off by default in this version")
+            #expect(CleanupMode.defaultFilter(in: defaults) == .color)
+            defaults.set(CleanupMode.automatic.rawValue, forKey: CleanupMode.settingKey)
+            defaults.set(PageFilter.blackAndWhite.rawValue, forKey: CleanupMode.defaultFilterKey)
+            #expect(CleanupMode.setting(in: defaults) == .automatic)
+            #expect(CleanupMode.defaultFilter(in: defaults) == .blackAndWhite)
+
+            CleanupMode.settingProvider = { .automatic }
+            defer { CleanupMode.settingProvider = { CleanupMode.defaultSetting } }
+            let photo = TestSupport.photographedPage(lines: Self.photoLetter, width: 900, height: 1200)
+            let url = directory.appending(path: "Foto.png")
+            try TestSupport.encoded(photo).write(to: url)
+            let result = await DocumentImporter.importFiles([url], into: context)
+            let document = try #require(result.imported.first)
+            #expect(abs(try pageAspect(of: document) - 900.0 / 1200) > 0.02, "cropped by the setting")
+            try await TestSupport.waitUntilProcessed([document])
         }
 
         @Test func sha256IsHexOfTheContent() {

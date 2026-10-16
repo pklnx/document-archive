@@ -511,6 +511,16 @@
         }
       }
     },
+    "Automatic": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch"
+          }
+        }
+      }
+    },
     "Automatic assignment": {
       "localizations": {
         "de": {
@@ -557,6 +567,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kontoauszug"
+          }
+        }
+      }
+    },
+    "Black & White": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schwarzweiß"
           }
         }
       }
@@ -647,6 +667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ordner wählen …"
+          }
+        }
+      }
+    },
+    "Clean up photos": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fotos aufbereiten"
           }
         }
       }
@@ -907,6 +937,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Datum: %@"
+          }
+        }
+      }
+    },
+    "Default filter": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardfilter"
           }
         }
       }
@@ -1551,6 +1591,16 @@
         }
       }
     },
+    "Grayscale": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graustufen"
+          }
+        }
+      }
+    },
     "Green": {
       "localizations": {
         "de": {
@@ -1607,6 +1657,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bild-Import"
+          }
+        }
+      }
+    },
+    "Import": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
           }
         }
       }
@@ -2551,6 +2611,16 @@
         }
       }
     },
+    "Off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        }
+      }
+    },
     "Only on this device": {
       "localizations": {
         "de": {
@@ -2587,6 +2657,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reihenfolge"
+          }
+        }
+      }
+    },
+    "Original": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
           }
         }
       }
@@ -4167,6 +4247,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "„%@“ wird auf allen Geräten gelöscht."
+          }
+        }
+      }
+    },
+    "“Automatic” straightens photographed pages and applies the filter when they are imported; the page is only cropped when it was detected reliably. PDFs and camera scans are not changed. Everything runs on this device.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Automatisch“ richtet fotografierte Seiten beim Import gerade aus und wendet den Filter an; zugeschnitten wird nur, wenn die Seite sicher erkannt wurde. PDFs und Kamerascans bleiben unverändert. Alles läuft auf diesem Gerät."
           }
         }
       }
