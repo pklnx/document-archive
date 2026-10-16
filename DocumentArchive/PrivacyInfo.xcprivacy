@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Privacy manifest of Document Archive (macOS, iPhone, iPad). See docs/development/index.md,
+"Privacy manifest and export compliance". scripts/check-privacy-manifest.py compares the
+required-reason categories below with the APIs the app's code uses; CI fails when they differ.
+The App Store Connect privacy label must declare the same collected data.
+-->
+<plist version="1.0">
+<dict>
+	<!-- No tracking, no ads, no analytics. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<!--
+	Mistral (opt-in, the user's own API key and account): the document's PDF is sent for OCR, its
+	text and file name for classification, and Mistral may keep API data for a while. iCloud
+	(private database) and the folder copy go to the user's own storage, so they are not
+	collected.
+	-->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!--
+		CA92.1: the app's own settings (@AppStorage, the folder copy bookmark, the text layer and
+		Mistral switches). No App Group yet; the share extension (#12) adds 1C8F.1.
+		-->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<!--
+		3B52.1: ArchiveMirror.purge reads the modification dates of files in the folder the user
+		chose for the folder copy. No timestamps of files inside the app container are read, so
+		C617.1 is not declared.
+		-->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>3B52.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
