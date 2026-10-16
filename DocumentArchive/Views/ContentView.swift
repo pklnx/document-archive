@@ -121,6 +121,13 @@ struct ContentView: View {
     }
 
     var body: some View {
+        // Split into parts: one long modifier chain is too much for the type checker of older
+        // Xcode versions (CI).
+        dialogs(presentations(selectionTracking(splitView)))
+    }
+
+    @ViewBuilder
+    private var splitView: some View {
         let visibleDocuments = visibleDocuments
         let selectedDocuments = DocumentSelection.resolve(selection, in: visibleDocuments)
         // The open document stays open while an edit hides it from the list (see DocumentSelection).
@@ -172,6 +179,11 @@ struct ContentView: View {
             .toolbar(removing: showsListButton ? .sidebarToggle : nil)
             #endif
         }
+    }
+
+    /// Keeps the selection and the iPad columns in step with what the list shows.
+    private func selectionTracking(_ content: some View) -> some View {
+        content
         .environment(bulkActions)
         .onChange(of: sidebarSelection) {
             selection = []
@@ -208,6 +220,11 @@ struct ContentView: View {
             columnVisibility = columns
         }
         #endif
+    }
+
+    /// Import pickers, the scanner and the sheets.
+    private func presentations(_ content: some View) -> some View {
+        content
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: DocumentImporter.importableTypes,
                       allowsMultipleSelection: true) { result in
             switch result {
@@ -253,6 +270,11 @@ struct ContentView: View {
         .sheet(item: $editorTarget) { target in
             RuleEditorView(target: target)
         }
+    }
+
+    /// Confirmations, notices, menu actions and launch work.
+    private func dialogs(_ content: some View) -> some View {
+        content
         .confirmationDialog(Text(deleteTitle), isPresented: Binding(presenting: $bulkActions.pendingDelete),
                             titleVisibility: .visible, presenting: bulkActions.pendingDelete) { request in
             Button("Delete", role: .destructive) { deleteConfirmed(request) }
@@ -300,9 +322,7 @@ struct ContentView: View {
     /// so `onChange(of: openDocumentID)` does not fire; on iPad it must still bring the
     /// document back to the front when the list was laid over it (Show List in a narrow window).
     private var listSelection: Binding<Set<Document.ID>> {
-        Binding {
-            selection
-        } set: { newSelection in
+        Binding<Set<Document.ID>>(get: { selection }, set: { (newSelection: Set<Document.ID>) in
             #if os(iOS)
             if newSelection.count == 1, newSelection == selection, horizontalSizeClass == .regular, !editMode.isEditing {
                 bringOpenDocumentToFront()
@@ -310,7 +330,7 @@ struct ContentView: View {
             #endif
             // Adding rows to a hidden open document must not keep it in the bulk selection.
             selection = DocumentSelection.fromList(newSelection, visible: visibleDocuments)
-        }
+        })
     }
 
     /// Removes hidden documents from the selection. `keepingOpen`: the open document stays,
