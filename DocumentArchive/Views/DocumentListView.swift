@@ -308,8 +308,7 @@ struct DocumentListView<ImportMenu: View>: View {
     private func delete(_ document: Document) {
         guard document.isAlive else { return }
         selection.remove(document.id)
-        context.delete(document)
-        try? context.save()
+        DocumentDeletion.delete([document], in: context)
     }
 }
 

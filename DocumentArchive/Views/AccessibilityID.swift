@@ -6,6 +6,16 @@ enum AccessibilityID {
     static let settings = "settings"
     static let settingsDone = "settings.done"
 
+    /// Settings → Storage Location (folder copy, `StorageSettingsSection`).
+    static let storageLocation = "settings.storage.location"
+    static let storageChooseFolder = "settings.storage.chooseFolder"
+    static let storageSyncNow = "settings.storage.syncNow"
+    static let storageUseDefault = "settings.storage.useDefault"
+    static let deletionsConfirm = "folderCopy.deletionsConfirm"
+    static let deletionsDiscard = "folderCopy.deletionsDiscard"
+    /// Sidebar footer line of the folder copy.
+    static let folderCopyStatus = "sidebar.folderCopyStatus"
+
     static let documentList = "documentList"
     static let importMenu = "documentList.import"
     static let deleteSwipe = "documentList.deleteSwipe"

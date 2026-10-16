@@ -144,7 +144,7 @@ import Testing
         documents.forEach { $0.tags = [tag]; $0.correspondent = bank }
         try context.save()
 
-        BulkEditor.delete([documents[0], documents[2]], in: context)
+        DocumentDeletion.delete([documents[0], documents[2]], in: context)
 
         #expect(try allDocuments().map(\.title) == ["B"])
         #expect(try context.fetch(FetchDescriptor<ArchiveTag>()).count == 1)
@@ -164,7 +164,7 @@ import Testing
         #expect(resolved.map(\.title) == ["Electricity bill", "Water bill"])
         #expect(DocumentSelection.pruned(selection, to: visible) == Set(resolved.map(\.id)))
 
-        BulkEditor.delete(resolved, in: context)
+        DocumentDeletion.delete(resolved, in: context)
         #expect(try allDocuments().map(\.title) == ["Account statement"])
     }
 
@@ -240,7 +240,7 @@ import Testing
     @Test func deletedOpenDocumentIsDropped() throws {
         let documents = try makeDocuments(["A", "B"])
         let selection: Set<Document.ID> = [documents[0].id]
-        BulkEditor.delete([documents[0]], in: context)
+        DocumentDeletion.delete([documents[0]], in: context)
         #expect(DocumentSelection.openDocument(selection, in: try allDocuments()) == nil)
         #expect(try prunedAfterEdit(selection, filter: .all, searchText: "").isEmpty)
     }

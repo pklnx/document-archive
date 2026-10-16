@@ -1,3 +1,4 @@
+import CoreData
 import Foundation
 import SwiftData
 
@@ -16,6 +17,12 @@ enum StoreChoice: Equatable {
 
     /// Decided before anything touches the disk: test runs never open the real archive,
     /// never run migrations and never contact iCloud.
+    /// Only stores on disk get a folder copy; test and sample-data runs never touch a folder.
+    var isOnDisk: Bool {
+        if case .inMemory = self { return false }
+        return true
+    }
+
     static func decide(isRunningTests: Bool, arguments: [String], cloudKitAvailable: Bool) -> StoreChoice {
         if isRunningTests { return .inMemory(seed: false) }
         #if DEBUG
@@ -30,6 +37,16 @@ enum StoreChoice: Equatable {
 enum ArchiveStore {
     static let storeName = "DocumentArchive"
     static let schema = Schema([Document.self, Tag.self, Correspondent.self, DocumentType.self])
+
+    /// The persistent store's `NSStoreUUIDKey`. It identifies this store file: a lost, reset or
+    /// fallback store has another one, which the folder copy uses to notice that its bookkeeping
+    /// belongs to a different store. `nil` for in-memory stores.
+    nonisolated static func storeIdentifier(at url: URL) -> String? {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let metadata = try? NSPersistentStoreCoordinator.metadataForPersistentStore(type: .sqlite, at: url)
+        else { return nil }
+        return metadata[NSStoreUUIDKey] as? String
+    }
 
     static func currentChoice() -> StoreChoice {
         StoreChoice.decide(isRunningTests: TestEnvironment.isRunningTests,

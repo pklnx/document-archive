@@ -209,6 +209,14 @@ final class SmokeTests: XCTestCase {
         let settings = element("settings")
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         attachScreenshot("settings")
+        // The folder copy's section is there; with sample data it stays off (#8).
+        let storage = element("settings.storage.location")
+        for _ in 0..<6 where !storage.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(storage.isHittable, "storage location section missing")
+        XCTAssertFalse(element("settings.storage.chooseFolder").exists, "folder copy offered with sample data")
+        attachScreenshot("settings storage location")
         element("settings.done").tap()
         XCTAssertTrue(settings.waitForNonExistence(timeout: 5))
     }
