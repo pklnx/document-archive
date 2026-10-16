@@ -73,4 +73,21 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
         #expect(defaults.bool(forKey: LegacyMigration.doneKey))
     }
+
+    /// A sandboxed app may not read another app's settings domain (#42): the legacy domain is
+    /// only read by unsandboxed Mac builds.
+    @Test func legacySettingsAreNotReadInTheSandbox() {
+        let sandboxed = AppSandbox.isActive(environment: ["APP_SANDBOX_CONTAINER_ID": "de.patrickklein.DocumentArchive"])
+        #expect(sandboxed)
+        #expect(LegacyMigration.legacyDefaults(sandboxed: sandboxed) == nil)
+        #expect(LegacyMigration.legacyDefaults(sandboxed: false) != nil)
+    }
+
+    @Test func onlyUnsignedMacBuildsAreUnsandboxed() {
+        #if os(macOS)
+        #expect(!AppSandbox.isActive(environment: [:]))
+        #else
+        #expect(AppSandbox.isActive(environment: [:]), "iPhone and iPad apps are always sandboxed")
+        #endif
+    }
 }

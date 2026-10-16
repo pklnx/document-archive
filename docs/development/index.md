@@ -20,6 +20,11 @@ xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 If `xcodebuild` reports a command line tools instance, point it at Xcode
 for the command with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
 
+Unsigned builds are not sandboxed and keep their data in
+`~/Library/Application Support/`; signed Mac builds are sandboxed and keep it
+in their container. Read [Sandbox](#sandbox-macos) before the first signed
+launch on a Mac that holds a real archive.
+
 The app only uses iCloud sync when the build setting `DA_CLOUDKIT_ENABLED`
 is `YES` (default `NO` in `Config/Project.xcconfig`; override it in the
 git-ignored `Config/Local.xcconfig` for a build signed with the paid Apple
@@ -200,12 +205,16 @@ Run the Mac tests with:
 
 ```sh
 xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
-  -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS=
+  -destination 'platform=macOS' CODE_SIGN_IDENTITY=- \
+  CODE_SIGN_ENTITLEMENTS=Config/DocumentArchive-macOS-SandboxTests.entitlements \
+  DA_BUNDLE_ID_SUFFIX=.SandboxTests
 ```
 
-`CODE_SIGN_IDENTITY=-` signs ad hoc, which the test runner needs;
-`CODE_SIGN_ENTITLEMENTS=` leaves out the app's iCloud and sandbox entitlements,
-which an ad-hoc signature cannot carry (the sample data run needs neither). The
+`CODE_SIGN_IDENTITY=-` signs ad hoc, which the test runner needs. The app then
+runs sandboxed like a release build, with the
+[sandboxed test build's](#the-sandboxed-test-build) entitlements (an ad-hoc
+signature cannot carry iCloud) and its own bundle identifier, so it never
+creates the real app's container. The
 tests need automation mode (`automationmodetool` shows its state; Xcode enables
 it, asking for a password unless it was set up with
 `sudo automationmodetool enable-automationmode-without-authentication`).
@@ -225,7 +234,7 @@ Who runs what, so every test runs where it is cheapest and nothing twice:
 | Review | reviewer | No second run of the unit tests (CI runs them). The UI tests of the changed screens, with their screenshots, as the test report in the review. |
 | Every pull request that changes the app | CI (`ci.yml`) | Builds for macOS and iOS and all unit tests on macOS and the iPhone simulator with the pinned Xcode and warnings as errors (required checks), gitleaks. The same build and the macOS unit tests with the next Xcode (`build (macOS, next Xcode)`, not required). Doc-only pull requests (`docs/`, Markdown, issue templates, labels, …; see `scripts/app-changes.py`) skip the build and test jobs; skipped jobs count as passed. gitleaks always runs. Pushes to `main` run everything. |
 | Every night | CI (`ui-tests.yml`) | The full UI suite on the hosted runners: iPhone, iPad (older iOS, 26.x) and the Mac. A failure is handled like a bug report. |
-| Every night | CI (`nightly-tests.yml`) | The macOS unit tests in German and with Thread Sanitizer (`TestPlans/Nightly.xctestplan`). Also runs on pull requests that change the workflow or the nightly plan. A failure is handled like a bug report. |
+| Every night | CI (`nightly-tests.yml`) | The macOS unit tests in German and with Thread Sanitizer (`TestPlans/Nightly.xctestplan`), and all macOS unit tests in the App Sandbox (`test (macOS, sandboxed)`, see [Sandbox](#sandbox-macos)). Also runs on pull requests that change the workflow, the nightly plan, the sandbox test entitlements or `SandboxTests`. A failure is handled like a bug report. |
 | Before a release | maintainer | A full local run: all unit tests on macOS and iOS; all UI tests on the smallest and the largest iPhone, iPad mini, iPad Pro and the Mac. A manual run of the nightly workflow (Actions → UI tests → Run workflow) for iOS 26. Then the [manual check list](./ios#manual-check-before-a-release). |
 
 Pull requests do not run the UI tests on GitHub; a pull request is merged on
@@ -234,6 +243,13 @@ the reviewer's test report plus the required checks.
 The maintainer watches the nightly runs (GitHub mails failed scheduled runs).
 Before starting or merging a pull request that depends on a nightly run, the
 implementer checks its latest run and reports a red one.
+
+A red `test (macOS, sandboxed)` **blocks merging** every pull request that
+touches `FolderAccess`, the import entry points (`ExternalImport`,
+`OpenURLHandler`, `ImportedFile`, `DocumentImporter`, the watch folder),
+`ArchiveMirror` or the entitlements, starting with #12 part 2 (watch folder),
+the same way a red UI test nightly does. It stays blocked until the nightly is
+green again or an issue explains the failure.
 
 ## Project layout
 
@@ -244,7 +260,7 @@ implementer checks its latest run and reports a red one.
 | `DocumentArchive/Services` | Import, PDF building, OCR, Mistral client, auto-assignment, maintenance |
 | `DocumentArchive/Views` | SwiftUI views shared by macOS and iOS |
 | `DocumentArchive/Platform` | Platform wrappers: PDFKit view, VisionKit scanner, sharing |
-| `Config` | Shared build settings (`Project.xcconfig`: version, build flags), entitlements and Info.plist additions |
+| `Config` | Shared build settings (`Project.xcconfig`: version, build flags, bundle identifier suffix), entitlements (app, and the sandboxed test build) and Info.plist additions |
 | `DocumentArchiveTests` | Unit tests (Swift Testing) and their helpers in `Support/` |
 | `DocumentArchiveUITests` | UI smoke tests (XCUITest, iOS only) |
 | `TestPlans` | Test plans of the `DocumentArchive` scheme: `Default` (⌘U, required checks), `Nightly` (German, Thread Sanitizer) |
@@ -544,8 +560,9 @@ other URL kinds (#15) are added as branches there, never as a second
 the default viewer). On iOS, `LSSupportsOpeningDocumentsInPlace` makes Files
 hand over the file itself; copies the system puts into `Documents/Inbox`
 (Mail, "Copy to …") are removed after the import. On the Mac nothing is
-removed: the build is not sandboxed, so `~/Documents/Inbox` is the user's own
-folder. Files opened before a
+removed: Finder and the Dock hand over the original file, and macOS never puts
+copies into an Inbox folder. In a sandboxed build, `URL.documentsDirectory` is
+the container's own folder. Files opened before a
 window exists wait in `ExternalImport` until `ContentView` hands over the
 `ModelContext`.
 
@@ -678,6 +695,136 @@ the bundled file.
 `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption`): the app only uses HTTPS and
 CryptoKit hashing, which are exempt. A feature that adds encryption (#22's
 vault) checks this again.
+
+## Sandbox (macOS)
+
+Release builds for the Mac are **sandboxed** (maintainer decision on #42):
+TestFlight and the Mac App Store accept only sandboxed Mac apps. iPhone and
+iPad apps always are. Which Mac builds run in the sandbox:
+
+| Build | Sandboxed | Data in |
+|---|---|---|
+| Release, TestFlight (signed with the team) | yes | the container |
+| Xcode IDE build with `DEVELOPMENT_TEAM` in `Config/Local.xcconfig` | yes (signed with `Config/DocumentArchive-macOS.entitlements`) | the container |
+| Unsigned development and CI builds (`CODE_SIGNING_ALLOWED=NO`) | no: an unsigned binary carries no entitlements | `~/Library/Application Support/` |
+| The sandboxed test build (nightly, Mac UI tests) | yes | its own container (`….SandboxTests`) |
+
+The container is
+`~/Library/Containers/de.patrickklein.DocumentArchive/Data/Library/Application Support/`.
+`AppSandbox.isActive` tells the code which case applies
+(`APP_SANDBOX_CONTAINER_ID`).
+
+Every entry point works in the sandbox: the folder copy keeps a
+security-scoped bookmark (`FolderAccess`, `files.bookmarks.app-scope`) and
+starts its scope for every use; "Open with", the Dock and `open -a` get access
+from Launch Services for the declared document types; drag and drop grants
+access, and `ImportedFile` copies into the container's temporary folder; the
+file importer and the PDF export use `files.user-selected.read-write`; Mistral
+uses `network.client`. The Mac has no camera scan, so the app asks for no
+camera entitlement. The watch folder (#12 part 2) uses the same bookmark
+pattern and adds its test to `SandboxTests`.
+
+What does not come along into the container:
+
+- **The legacy "Ablage" data:** `LegacyMigration` reads the old app's settings
+  domain only in unsandboxed builds (a sandboxed app may not read another
+  app's domain). Its result, the `migratedFromAblage` flag and the settings,
+  moves with the app's preferences; the old `Ablage.*` files stay where they
+  are as a backup.
+- **The Mistral key** stored by an unsigned build may not be readable by the
+  signed build; enter it again.
+- **The folder copy's folder** has to be chosen again (the unsigned build's
+  bookmark is not valid in the sandbox). That is safe: the folder accepts a
+  store whose UUID wrote all its documents.
+
+### Moving the archive into the container
+
+`DocumentArchive/container-migration.plist` (Mac only) is Apple's container
+migration manifest. macOS reads it **once, when it creates the container**, on
+the first launch of a sandboxed build, and **moves** (never copies) these
+items from `~/Library` to the same place inside the container:
+`DocumentArchive.store` with `-wal`, `-shm` and `.DocumentArchive_SUPPORT`, the
+fallback store `DocumentArchive-lokal.*` if it exists, `ArchiveMirror.json`,
+and `~/Library/Preferences/de.patrickklein.DocumentArchive.plist`. `Ablage.*`
+is not moved. After the move, unsigned builds start with an empty archive.
+
+**A signed IDE Debug build ships the manifest too.** Once
+`Config/Local.xcconfig` has a team, the first Debug run from Xcode is the
+launch that moves the data, not the first TestFlight build.
+
+#### Before the first signed launch
+
+Run this with the app quit, right before the first signed (sandboxed) launch
+on a Mac that holds a real archive:
+
+1. **Backup first:** copy `~/Library/Application Support/DocumentArchive*`,
+   `~/Library/Application Support/.DocumentArchive*_SUPPORT`,
+   `~/Library/Application Support/ArchiveMirror.json` and
+   `~/Library/Preferences/de.patrickklein.DocumentArchive.plist` to a dated
+   folder outside `~/Library` (or check that a current Time Machine backup
+   exists).
+2. Check whether a container exists:
+   `ls ~/Library/Containers/de.patrickklein.DocumentArchive/Data/Library/Application\ Support/`.
+3. Check where the store is:
+   `ls -la ~/Library/Application\ Support/DocumentArchive.* ~/Library/Application\ Support/.DocumentArchive_SUPPORT`.
+4. Check whether the build about to run is sandboxed:
+   `codesign -d --entitlements - "<built app>"` and look for
+   `com.apple.security.app-sandbox`.
+5. Check that `LegacyMigration` has already run outside the sandbox:
+   `defaults read de.patrickklein.DocumentArchive migratedFromAblage` prints
+   `1`. If not, launch an unsigned build once first.
+
+Then:
+
+- **No container exists:** the manifest moves the data on the first sandboxed
+  launch. Nothing else to do.
+- **A container already exists:** the manifest does nothing. Copy by hand
+  instead:
+  - with the app quit and after the backup, copy the store files (the
+    `DocumentArchive*` items above and `ArchiveMirror.json`) into
+    `~/Library/Containers/de.patrickklein.DocumentArchive/Data/Library/Application Support/`;
+  - move the settings with `defaults export` / `defaults import` instead of
+    copying the plist, because cfprefsd caches preference files;
+  - if the container already has its own store with real data, stop and
+    decide by hand which archive wins. Nothing is merged automatically.
+- **Never delete the container of `de.patrickklein.DocumentArchive`.**
+  Apple's "delete the container to test the migration again" applies only to
+  a test bundle identifier (`.SandboxTests`), never to the real app.
+
+The move can only be checked on a signed build; it is on the
+[manual check list](./ios#manual-check-before-a-release).
+`ContainerMigrationTests` check the manifest's list.
+
+### The sandboxed test build
+
+The nightly job `test (macOS, sandboxed)` runs all unit tests in the sandbox,
+plus `SandboxTests` (bookmarks, the folder copy, drop and "Open with" imports,
+the Keychain), which skip in the unsandboxed required runs. The build is
+ad-hoc signed with `Config/DocumentArchive-macOS-SandboxTests.entitlements`
+(sandbox and file access, without iCloud and push, which an ad-hoc signature
+cannot carry) and `DA_BUNDLE_ID_SUFFIX=.SandboxTests`:
+
+```sh
+TEST_RUNNER_DA_EXPECT_SANDBOX=1 xcodebuild test -project DocumentArchive.xcodeproj \
+  -scheme DocumentArchive -destination 'platform=macOS,arch=arm64' CODE_SIGN_IDENTITY=- \
+  CODE_SIGN_ENTITLEMENTS=Config/DocumentArchive-macOS-SandboxTests.entitlements \
+  DA_BUNDLE_ID_SUFFIX=.SandboxTests
+```
+
+- **Always pass the suffix** with these entitlements. It gives the test host
+  its own container (`~/Library/Containers/de.patrickklein.DocumentArchive.SandboxTests`),
+  so it never creates the real app's container, which would stop the
+  migration above. That test container may be deleted at any time.
+- `DA_EXPECT_SANDBOX=1` makes `SandboxTests` fail instead of skipping when the
+  host is not sandboxed, so a broken setup cannot pass silently.
+- **Keychain:** `KeychainStore.service` is the fixed string
+  `de.patrickklein.DocumentArchive` and ignores the suffix, so the sandboxed
+  test host and the real app would share Keychain items under that service.
+  `KeychainStoreTests` and `SandboxTests` use their own test service name, and
+  UI test runs use their own service, so no real key is touched.
+- Xcode gives every test host read-only access to the whole disk, so only a
+  write outside the container proves that the sandbox is active.
+- No Thread Sanitizer in this job: its reports go to `/tmp`.
 
 ## Secrets
 

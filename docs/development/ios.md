@@ -67,8 +67,17 @@ the `ScannedPages` protocol, without a camera.
    DA_CLOUDKIT_ENABLED = NO
    ```
 
-   The team ID is shown in Xcode → Settings → Accounts.
+   The team ID is shown in Xcode → Settings → Accounts. The file is included
+   by `Config/Project.xcconfig`, the project's base configuration; the targets
+   set no team of their own, so it applies to every target.
 3. Connect the device, select it as the run destination and run.
+
+**On a Mac with a real archive:** with a team in `Config/Local.xcconfig`,
+Xcode IDE builds for "My Mac" are signed and therefore sandboxed. The first
+such launch moves the archive into the app's container (container migration
+manifest). Before it, take the backup and run the pre-check in
+[Sandbox](./#before-the-first-signed-launch). Command-line builds with
+`CODE_SIGNING_ALLOWED=NO` stay unsigned and unsandboxed.
 
 Limits of a Personal Team build: it expires after **7 days** and must be
 installed again; no iCloud/CloudKit and no App Groups (so no sync and no share
@@ -99,6 +108,12 @@ Need the paid account:
 
 ## Manual check before a release
 
+For every platform. **Backup first:** before the first signed Mac build on a
+Mac that holds a real archive, take the backup and run the pre-check in
+[Sandbox](./#before-the-first-signed-launch).
+
+### iPhone and iPad
+
 On the smallest and largest iPhone and on iPad mini and iPad Pro, in portrait
 and landscape:
 
@@ -114,3 +129,15 @@ and landscape:
 | Sidebar footer | sync status matches the build (local only on unsigned builds) |
 | Saved views | "+" in the Views header opens the editor (popover on iPad, sheet on iPhone) and the pickers push inside it; "Save as View…" from a tag list and from a search; the view's sort menu; "Manage Views…": rename, drag to reorder, delete; a view whose tag was deleted shows the banner and "(deleted)" in the editor |
 | Storage Location | "Choose Folder…" opens the folder picker (iCloud Drive, On My iPhone); the copy appears in `Document Archive/`; "Show in Files" opens it or shows the path with a share button; "Back to Default" keeps the files |
+
+### Mac
+
+On a signed (sandboxed) build, once the paid account exists:
+
+| Area | Check |
+|---|---|
+| Data move | backup and pre-check done first ([Sandbox](./#before-the-first-signed-launch)); after the first signed launch the archive, the settings and the folder copy state are there; `~/Library/Application Support/DocumentArchive.store` is gone (moved), `Ablage.*` is still there; the Mistral key and the folder copy's folder may have to be entered and chosen again |
+| Open with | "Open With" from Finder and a drop on the Dock icon, with the app running and not running: the document opens, the file stays where it is |
+| Drag and drop | a drop from Finder, Mail and Safari |
+| Folder copy | choose a folder, quit, relaunch: the copy continues; "Show in Finder" opens it |
+| Export | export a PDF and "Share as…" to Finder |

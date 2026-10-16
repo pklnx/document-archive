@@ -42,8 +42,9 @@ final class ExternalImport {
 
     /// Where iOS puts copies of files handed over by other apps ("Copy to …", Mail attachments).
     /// The app owns these copies and removes them after the import; files opened in place
-    /// (Files) stay where they are. Only used on iOS and iPadOS: the Mac build is not sandboxed,
-    /// so there `Documents/Inbox` is a folder of the user's that is never touched.
+    /// (Files) stay where they are. Only used on iOS and iPadOS. On the Mac nothing is removed:
+    /// Finder and the Dock hand over the original file, and macOS never puts copies into an Inbox
+    /// folder. In a sandboxed Mac build, `URL.documentsDirectory` is the container's own folder.
     let inboxFolder: URL
 
     init(inboxFolder: URL = URL.documentsDirectory.appending(path: "Inbox", directoryHint: .isDirectory)) {
