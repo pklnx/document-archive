@@ -78,7 +78,9 @@ enum TestSupport {
 
     /// Waits until background processing (thumbnail, OCR, auto-assignment) has finished.
     @MainActor
-    static func waitUntilProcessed(_ documents: [Document], timeout: Duration = .seconds(60)) async throws {
+    /// The timeout is generous because text recognition on the hosted CI runners is slow; it
+    /// only matters when processing really hangs.
+    static func waitUntilProcessed(_ documents: [Document], timeout: Duration = .seconds(180)) async throws {
         let clock = ContinuousClock()
         let deadline = clock.now + timeout
         while documents.contains(where: { $0.isAlive && $0.isProcessing }) {
