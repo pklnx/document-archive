@@ -2,9 +2,9 @@
 
 ## Setup
 
-You need a Mac with Xcode (the version CI uses is in
-`.github/workflows/ci.yml`; the project needs at least Xcode 16 for its
-folder-synchronized groups). There are no third-party Swift packages.
+You need a Mac with Xcode (the version CI uses is in `.xcode-version`, which
+`xcodes` and similar tools read too; the project needs at least Xcode 16 for
+its folder-synchronized groups). There are no third-party Swift packages.
 
 ```sh
 # macOS app (unsigned, data stays local)
@@ -45,6 +45,47 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 or **⌘U** in Xcode. CI runs the same command as the required check
 `test (macOS)`, and runs the tests on the iPhone simulator as `test (iOS)`
 (see [iPhone and iPad](./ios) for the command).
+
+### CI and the pinned Xcode
+
+- **Pinned Xcode:** every macOS job runs on `macos-26` with the Xcode in
+  `.xcode-version` (the local action `.github/actions/select-xcode` selects it
+  and fails when the runner image does not have it).
+- **Warnings are errors in CI only.** The build and test jobs pass
+  `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES`; the project settings are unchanged, so
+  local builds only warn. CI checks the pinned Xcode's diagnostics, which can
+  differ from a newer local Xcode (the maintainer and the reviewer use 27.1).
+  To reproduce a CI warning locally, build with the pinned Xcode, if
+  installed:
+
+  ```sh
+  DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer \
+    xcodebuild build -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+    -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
+  ```
+
+  A newer Xcode with the same flag finds most of them too. If a warning
+  cannot be fixed (it comes from the SDK or a macro), keep just that
+  diagnostic group a warning with `-Wwarning <group>` in `OTHER_SWIFT_FLAGS`
+  in the project (SE-0443), with a comment and a linked issue, or wait for
+  the fix. Turning the flag off for one target from the command line is not
+  possible.
+- **Output:** `xcodebuild` output goes through `xcbeautify --renderer
+  github-actions`, which shows compiler errors, warnings and failed tests as
+  annotations on the pull request's diff.
+- **Coverage:** `test (macOS)` and `test (iOS)` collect code coverage; the
+  job summary shows the app's line coverage and its ten least covered files
+  with at least 50 executable lines (`scripts/coverage-summary.py`). There is
+  no coverage gate.
+- **Result bundles** (`TestResults-*`, the `.xcresult` of every test job) are
+  uploaded for every run that is not cancelled and kept for 7 days.
+- **Next Xcode:** `build (macOS, next Xcode)` builds both platforms and runs
+  the macOS unit tests with the default Xcode of the `xcode-27` preview image,
+  without warnings as errors. It is not a required check: a red run means
+  "look at it", the pull request may still be merged.
+- **Moving the pin** (when a newer runner image is generally available) is a
+  small pull request: the version in `.xcode-version` and `runs-on` of the
+  macOS jobs in `ci.yml` and `ui-tests.yml`.
 
 The tests use [Swift Testing](https://developer.apple.com/documentation/testing)
 and live in `DocumentArchiveTests/`, one file per component. They are hosted
@@ -117,12 +158,16 @@ Who runs what, so every test runs where it is cheapest and nothing twice:
 | While working | implementer | Differential: only the suites touched (`-only-testing:DocumentArchiveTests/<Suite>`). |
 | Before opening a pull request | implementer | All macOS unit tests, the localization check (`scripts/check-localization.py`), a build with slow type-check warnings (`OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -warn-long-expression-type-checking=300'`; CI's older Xcode times out on long SwiftUI expressions), and the UI tests of the screens the change touches (iPhone, iPad, Mac) when it changes UI or navigation. |
 | Review | reviewer | No second run of the unit tests (CI runs them). The UI tests of the changed screens, with their screenshots, as the test report in the review. |
-| Every pull request that changes the app | CI (`ci.yml`) | Builds for macOS and iOS and all unit tests on macOS and the iPhone simulator (required checks), gitleaks. Doc-only pull requests (`docs/`, Markdown, issue templates, labels, …; see `scripts/app-changes.py`) skip the build and test jobs; skipped jobs count as passed. gitleaks always runs. Pushes to `main` run everything. |
+| Every pull request that changes the app | CI (`ci.yml`) | Builds for macOS and iOS and all unit tests on macOS and the iPhone simulator with the pinned Xcode and warnings as errors (required checks), gitleaks. The same build and the macOS unit tests with the next Xcode (`build (macOS, next Xcode)`, not required). Doc-only pull requests (`docs/`, Markdown, issue templates, labels, …; see `scripts/app-changes.py`) skip the build and test jobs; skipped jobs count as passed. gitleaks always runs. Pushes to `main` run everything. |
 | Every night | CI (`ui-tests.yml`) | The full UI suite on the hosted runners: iPhone, iPad (older iOS, 26.x) and the Mac. A failure is handled like a bug report. |
 | Before a release | maintainer | A full local run: all unit tests on macOS and iOS; all UI tests on the smallest and the largest iPhone, iPad mini, iPad Pro and the Mac. A manual run of the nightly workflow (Actions → UI tests → Run workflow) for iOS 26. Then the [manual check list](./ios#manual-check-before-a-release). |
 
 Pull requests do not run the UI tests on GitHub; a pull request is merged on
 the reviewer's test report plus the required checks.
+
+The maintainer watches the nightly runs (GitHub mails failed scheduled runs).
+Before starting or merging a pull request that depends on a nightly run, the
+implementer checks its latest run and reports a red one.
 
 ## Project layout
 

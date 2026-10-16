@@ -74,7 +74,7 @@ jobs:
           set -o pipefail
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-            build | xcbeautify --renderer github-actions
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build | xcbeautify --renderer github-actions
       # Every UI string compiled for this platform must have a German translation.
       - name: Check translations
         run: python3 scripts/check-localization.py build
@@ -96,7 +96,7 @@ jobs:
           xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-            build | xcbeautify --renderer github-actions
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build | xcbeautify --renderer github-actions
       - name: Check translations
         run: python3 scripts/check-localization.py build
 
@@ -118,7 +118,7 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
-            -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO \
+            -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             | xcbeautify --renderer github-actions
       # Line coverage of the app and its least covered files in the job summary. No gate: the
       # script prints "no coverage data" and exits 0 when there is nothing to read.
@@ -156,7 +156,7 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
-            -enableCodeCoverage YES CODE_SIGN_IDENTITY=- \
+            -enableCodeCoverage YES CODE_SIGN_IDENTITY=- SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             | xcbeautify --renderer github-actions
       # Line coverage of the app and its least covered files in the job summary. No gate: the
       # script prints "no coverage data" and exits 0 when there is nothing to read.
