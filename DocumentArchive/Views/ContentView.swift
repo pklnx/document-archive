@@ -128,6 +128,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var editorTarget: RuleEditorTarget?
     @State private var importNotice: ImportNotice?
+    private let externalImport = ExternalImport.shared
 
     /// What the list shows; the selection only ever refers to these documents.
     private var visibleDocuments: [Document] {
@@ -137,7 +138,7 @@ struct ContentView: View {
     var body: some View {
         // Split into parts: one long modifier chain is too much for the type checker of older
         // Xcode versions (CI).
-        dialogs(presentations(selectionTracking(splitView)))
+        externalFiles(dialogs(presentations(selectionTracking(splitView))))
     }
 
     @ViewBuilder
@@ -332,6 +333,27 @@ struct ContentView: View {
         }
     }
 
+    /// Files opened from other apps ("Open with", the Dock icon, "Open in…"): this window receives
+    /// them instead of a new one, imports them through `ExternalImport` and shows the result like
+    /// an import from the file dialog.
+    private func externalFiles(_ content: some View) -> some View {
+        content
+        .onOpenURL { OpenURLHandler.handle($0) }
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+        .onChange(of: externalImport.pendingResult != nil) { _, hasResult in
+            if hasResult { showExternalImportResult() }
+        }
+        .onAppear {
+            // Files opened at launch waited for the archive; they are imported now.
+            externalImport.context = context
+            showExternalImportResult()
+        }
+    }
+
+    private func showExternalImportResult() {
+        if let result = externalImport.takeResult() { report(result) }
+    }
+
     /// The list's selection. Tapping the document that is already open sets the same value,
     /// so `onChange(of: openDocumentID)` does not fire; on iPad it must still bring the
     /// document back to the front when the list was laid over it (Show List in a narrow window).
@@ -448,25 +470,9 @@ struct ContentView: View {
 
     /// Tells about skipped duplicates and errors, and opens what was imported.
     private func report(_ result: DocumentImporter.ImportResult) {
-        var lines: [String] = []
-        if !result.duplicates.isEmpty {
-            lines.append(result.duplicates.count == 1
-                ? String(localized: "This file is already in the archive and was skipped:")
-                : String(localized: "\(result.duplicates.count) files are already in the archive and were skipped:"))
-            lines += result.duplicates.map { String(localized: "• \($0.fileName) → “\($0.existing.title)”") }
-        }
-        lines += result.errors.map(\.localizedDescription)
-        if !lines.isEmpty {
-            let title = result.errors.isEmpty
-                ? (result.imported.isEmpty ? String(localized: "Already in the archive")
-                                           : String(localized: "\(result.imported.count) imported, duplicates skipped"))
-                : String(localized: "Import partly failed")
-            importNotice = ImportNotice(title: title, message: lines.joined(separator: "\n"))
-        }
-        if result.imported.count == 1, let document = result.imported.first {
-            select(document)
-        } else if result.imported.isEmpty, result.duplicates.count == 1, let existing = result.duplicates.first?.existing {
-            showExisting(existing)
+        if let notice = result.notice { importNotice = notice }
+        if let (document, isNew) = result.documentToOpen {
+            if isNew { select(document) } else { showExisting(document) }
         }
     }
 

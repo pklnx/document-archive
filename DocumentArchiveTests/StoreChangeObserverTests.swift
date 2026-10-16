@@ -21,24 +21,37 @@ import Testing
         return (counter, task)
     }
 
+    /// Waits until `counter` reaches `count` or `timeout` passes; slow CI runners need the margin.
+    private func waitUntil(_ counter: Counter, reaches count: Int, timeout: Duration = .seconds(10)) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while counter.count < count, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     @Test func severalSavesGiveOneDebouncedSignal() async throws {
         let container = try TestSupport.makeContainer()
-        let observer = StoreChangeObserver(container: container, debounce: .milliseconds(200))
+        // A long debounce compared with the time three back-to-back saves take, also on a slow runner.
+        let debounce = Duration.milliseconds(800)
+        let observer = StoreChangeObserver(container: container, debounce: debounce)
         let (counter, task) = subscribe(observer)
         defer { task.cancel(); observer.stop() }
 
         for title in ["A", "B", "C"] {
             container.mainContext.insert(ArchiveTag(name: title))
             try container.mainContext.save()
-            try await Task.sleep(for: .milliseconds(20))
         }
         #expect(counter.count == 0, "still waiting for quiet")
-        try await Task.sleep(for: .milliseconds(600))
+        try await waitUntil(counter, reaches: 1)
+        // No second signal for the same burst.
+        try await Task.sleep(for: debounce * 2)
         #expect(counter.count == 1)
 
         container.mainContext.insert(ArchiveTag(name: "D"))
         try container.mainContext.save()
-        try await Task.sleep(for: .milliseconds(600))
+        try await waitUntil(counter, reaches: 2)
+        try await Task.sleep(for: debounce * 2)
         #expect(counter.count == 2)
     }
 

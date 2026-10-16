@@ -249,6 +249,26 @@ Pull requests that touch `DocumentArchive/Model` get the `schema-change`
 label automatically. The plan must say why the change is compatible with
 devices still running the previous version.
 
+## Files from other apps (#12)
+
+Every file that arrives from outside goes through `ExternalImport` and then
+`DocumentImporter.importFile(data:name:into:)`, the same pipeline as the file
+dialog and drag and drop (duplicate check on the original bytes, insert,
+processing). `App/OpenURLHandler.swift` is the app's **only** URL entry point:
+`ContentView` has the single `.onOpenURL` and `.handlesExternalEvents`, so an
+opened file goes to the existing window. File URLs go to `ExternalImport`;
+other URL kinds (#15) are added as branches there, never as a second
+`.onOpenURL`. The app declares PDFs and images as document types
+(`CFBundleDocumentTypes` in `Config/Info-macOS.plist` and
+`Config/Info-iOS.plist`, role `Viewer`, rank `Alternate`, so it never becomes
+the default viewer). On iOS, `LSSupportsOpeningDocumentsInPlace` makes Files
+hand over the file itself; copies the system puts into `Documents/Inbox`
+(Mail, "Copy to …") are removed after the import. On the Mac nothing is
+removed: the build is not sandboxed, so `~/Documents/Inbox` is the user's own
+folder. Files opened before a
+window exists wait in `ExternalImport` until `ContentView` hands over the
+`ModelContext`.
+
 ## External services
 
 Documents leave the device only through features the user turns on:
