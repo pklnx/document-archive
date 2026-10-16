@@ -21,6 +21,9 @@ enum DocumentProcessor {
     /// At most this many pages are read with OCR, so very long scans do not take forever.
     static let maxOCRPages = 40
 
+    /// `Document.textSource` of text read by Mistral OCR, which is Markdown.
+    static let mistralTextSource = "Mistral OCR"
+
     /// - Parameter mistral: When set and Mistral OCR is on, the text is read through Mistral.
     ///   On errors, the embedded PDF text or local Apple text recognition is used instead.
     /// - Parameter textLayerSource: The document's source when a text layer should be added
@@ -47,7 +50,7 @@ enum DocumentProcessor {
                 let mistralText = try await MistralClient(config: mistral).ocr(pdfData: pdfData)
                 if !mistralText.isEmpty {
                     text = mistralText
-                    source = "Mistral OCR"
+                    source = mistralTextSource
                 }
             } catch {
                 notes.append(String(localized: "\(error.localizedDescription) Local text recognition was used instead."))

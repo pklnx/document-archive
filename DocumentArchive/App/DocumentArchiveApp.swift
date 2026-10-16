@@ -22,6 +22,12 @@ struct DocumentArchiveApp: App {
         }
         if !TestEnvironment.isRunningTests {
             TagCycleRepair.shared.start(container: container, changes: changes)
+            // Copies handed to other apps last time (share sheet, Copy PDF) are not needed anymore.
+            ExportFolder.shared.clear()
+            #if os(macOS)
+            NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+                                                   object: nil, queue: .main) { _ in ExportFolder.shared.clear() }
+            #endif
         }
     }
 
@@ -35,6 +41,7 @@ struct DocumentArchiveApp: App {
         #endif
         .commands {
             AppCommands()
+            DocumentCommands()
         }
 
         #if os(macOS)

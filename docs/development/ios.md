@@ -102,10 +102,10 @@ and landscape:
 | Navigation | sidebar → list → document and back; a new import opens the document |
 | List | swipe actions, context menu, sort, search, empty states |
 | Selection | "Select", Select All, checkmarks without opening a document; bottom toolbar on iPhone and narrow iPad windows, bulk actions column on wide iPads; select 3, narrow the search to 1 and check that only 1 is changed; Done ends the selection; in a narrow iPad window ⌘-click with a pointer selects several documents without edit mode, the list then covers `BulkActionsView` and there is no bottom toolbar, so the context menu (secondary click) is the way to act on them |
-| Document | PDF view, inspector (sheet on iPhone, column on iPad), share, export |
+| Document | PDF view, inspector (sheet on iPhone, column on iPad), share, export; "Share as…" with an edited name to Mail, AirDrop and "Save to Files" (the receiver gets the edited name); Print… (Xcode's Printer Simulator); Copy PDF / Copy Text pasted into Mail, Notes and Files |
 | Sheets and dialogs | settings, rule editor, alerts and delete confirmations can be dismissed |
 | Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad; "Open in…" from Files (file stays where it is) and "Copy to Document Archive" from Mail (the copy in `Documents/Inbox` is removed), with the app running and not running: the document opens, a second time it is reported as a duplicate |
-| iPad | keyboard shortcuts (⌘O, ⌘,) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list, also after rotating with it open; after deleting the open document the list is back |
+| iPad | keyboard shortcuts (⌘O, ⌘,, ⌘P with a document open) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list, also after rotating with it open; after deleting the open document the list is back |
 | Sidebar footer | sync status matches the build (local only on unsigned builds) |
 | Saved views | "+" in the Views header opens the editor (popover on iPad, sheet on iPhone) and the pickers push inside it; "Save as View…" from a tag list and from a search; the view's sort menu; "Manage Views…": rename, drag to reorder, delete; a view whose tag was deleted shows the banner and "(deleted)" in the editor |
 | Storage Location | "Choose Folder…" opens the folder picker (iCloud Drive, On My iPhone); the copy appears in `Document Archive/`; "Show in Files" opens it or shows the path with a share button; "Back to Default" keeps the files |
