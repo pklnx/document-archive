@@ -74,9 +74,11 @@ To release:
 1. Check that CI on `main` is green, and run the tests listed for a release
    in the [test strategy](./#test-strategy) (full local run, the nightly UI
    test workflow by hand, the manual check list).
-2. Set `MARKETING_VERSION` in the Xcode project to the new version (for
-   example `0.2.0`) and raise `CURRENT_PROJECT_VERSION` by one, in a pull
-   request labeled `chore`.
+2. Edit `Config/Project.xcconfig`: set `MARKETING_VERSION` to the new version
+   (for example `0.2.0`) and raise `CURRENT_PROJECT_VERSION` (the build
+   number) by one, in a pull request labeled `chore`. Both are set only
+   there; every target inherits them. The build number is raised by hand for
+   now; a build number from CI comes with a signing and upload workflow.
 3. On GitHub: **Releases → Draft a new release → Choose a tag**, type the new
    version (for example `v0.2.0`) and create it on `main`.
 4. Click **Generate release notes**. Pull requests are grouped by label
@@ -84,6 +86,12 @@ To release:
    dependencies, maintenance; see `.github/release.yml`). Add upgrade notes
    for `breaking` and `schema-change` entries.
 5. Publish.
+
+Before the **first** upload to App Store Connect, fill in the app's privacy
+label there so it matches `DocumentArchive/PrivacyInfo.xcprivacy` (see
+[Privacy manifest and export compliance](./#privacy-manifest-and-export-compliance)):
+"Other User Content", linked to the user, not used for tracking, for app
+functionality (Mistral). Check it again whenever the manifest changes.
 
 The macOS *About* window shows the version (`MARKETING_VERSION`) and build number.
 

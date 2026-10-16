@@ -193,7 +193,7 @@ implementer checks its latest run and reports a red one.
 | `DocumentArchive/Services` | Import, PDF building, OCR, Mistral client, auto-assignment, maintenance |
 | `DocumentArchive/Views` | SwiftUI views shared by macOS and iOS |
 | `DocumentArchive/Platform` | Platform wrappers: PDFKit view, VisionKit scanner, sharing |
-| `Config` | Entitlements and Info.plist additions |
+| `Config` | Shared build settings (`Project.xcconfig`: version, build flags), entitlements and Info.plist additions |
 | `DocumentArchiveTests` | Unit tests (Swift Testing) and their helpers in `Support/` |
 | `DocumentArchiveUITests` | UI smoke tests (XCUITest, iOS only) |
 
@@ -595,6 +595,37 @@ Documents leave the device only through features the user turns on:
 New features that send data anywhere else need this stated in the plan and a
 setting to turn them off. API keys are stored in the Keychain, never in
 `UserDefaults`, files or logs.
+
+### Privacy manifest and export compliance
+
+`DocumentArchive/PrivacyInfo.xcprivacy` is copied into the app on every
+platform. It declares:
+
+- **No tracking** and no tracking domains.
+- **Collected data:** "Other User Content", linked, no tracking, for app
+  functionality: Mistral receives documents under the user's own API key
+  and may keep them for a while. iCloud and the folder copy go to the user's
+  own storage and are not "collected". The App Store Connect privacy label
+  must say the same (see [Releases](./process#releases)).
+- **Required-reason APIs:** `UserDefaults` with `CA92.1` (the app's own
+  settings) and file timestamps with `3B52.1` (the folder copy reads
+  modification dates in the folder the user chose). Nothing reads timestamps
+  of files inside the app container (`C617.1`), the boot time, the disk space
+  or the active keyboards. An App Group (#12's share extension) adds `1C8F.1`.
+
+`scripts/check-privacy-manifest.py` (in `build (macOS)`; its `--self-test` in
+the `changes` job) searches the app's Swift files for the symbols of each
+required-reason category and fails when a category is used but not declared,
+or declared but no longer used. Comment lines and `setAttributes(` (writing a
+date is not a read) do not count. When it fails, declare the category with
+the right reason from Apple's list, or remove the declaration, and add a new
+symbol to the script's list when it misses one. `PrivacyManifestTests` check
+the bundled file.
+
+**Export compliance:** `ITSAppUsesNonExemptEncryption` is `NO` (build setting
+`INFOPLIST_KEY_ITSAppUsesNonExemptEncryption`): the app only uses HTTPS and
+CryptoKit hashing, which are exempt. A feature that adds encryption (#22's
+vault) checks this again.
 
 ## Secrets
 
