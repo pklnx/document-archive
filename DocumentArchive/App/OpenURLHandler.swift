@@ -15,7 +15,6 @@ enum OpenURLHandler {
 
     @discardableResult
     static func handle(_ url: URL, externalImport: ExternalImport) -> Bool {
-        let unusedForTheCIProof = 1 // TEMPORARY (#43 part 1): a warning that must fail the build
         if url.isFileURL {
             externalImport.receive([url], origin: .openWith)
             return true
