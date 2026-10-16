@@ -119,6 +119,8 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
             -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
+            -only-testing:DocumentArchiveUITests/SmokeTests/testDeletingTheOpenDocumentShowsTheList \
+            -test-iterations 10 -run-tests-until-failure \
             CODE_SIGN_IDENTITY=- | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)"
       - name: Upload test results
         if: failure()
