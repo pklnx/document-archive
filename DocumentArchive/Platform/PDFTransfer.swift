@@ -3,13 +3,50 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// A PDF for sharing (ShareLink) or dragging out of the app.
+///
+/// The file representation comes first: it writes `<fileName>` into `ExportFolder`, so Mail,
+/// AirDrop and "Save to Files" receive the chosen name even where they ignore a data
+/// representation's suggested name (#19). The bytes are loaded only when a receiver asks for
+/// them, so building transfers for a list row or for several documents (#10) reads no PDF.
 struct PDFTransfer: Transferable {
-    let data: Data
+    enum TransferError: Error {
+        /// The document has no PDF (still downloading from iCloud) or was deleted.
+        case noData
+    }
+
+    /// The file name with ".pdf" (`FileNaming.sanitized`).
     let fileName: String
+    private let load: @MainActor () -> Data?
+    private let folder: ExportFolder
+
+    init(fileName: String, folder: ExportFolder = .shared, load: @escaping @MainActor () -> Data?) {
+        self.fileName = FileNaming.sanitized(fileName)
+        self.folder = folder
+        self.load = load
+    }
+
+    init(data: Data, fileName: String, folder: ExportFolder = .shared) {
+        self.init(fileName: fileName, folder: folder) { data }
+    }
 
     static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .pdf) { $0.data }
+        FileRepresentation(exportedContentType: .pdf) { transfer in
+            SentTransferredFile(try await transfer.writeFile())
+        }
+        .suggestedFileName { $0.fileName }
+        DataRepresentation(exportedContentType: .pdf) { try await $0.data() }
             .suggestedFileName { $0.fileName }
+    }
+
+    /// The PDF's bytes, read now.
+    func data() async throws -> Data {
+        guard let data = await load() else { throw TransferError.noData }
+        return data
+    }
+
+    /// Writes the PDF as `<folder>/<random>/<fileName>`; what the file representation sends.
+    func writeFile() async throws -> URL {
+        try folder.write(try await data(), named: fileName)
     }
 }
 
@@ -30,7 +67,14 @@ struct PDFFile: FileDocument {
 }
 
 extension Document {
+    /// For a document with a PDF; `nil` while it is still downloading.
     var transfer: PDFTransfer? {
-        pdfData.map { PDFTransfer(data: $0, fileName: exportFileName) }
+        pdfData == nil ? nil : transfer(named: exportFileName)
+    }
+
+    /// The document's PDF under `fileName` ("Share as…"), read when a receiver asks for it. A
+    /// deleted document sends nothing.
+    func transfer(named fileName: String) -> PDFTransfer {
+        PDFTransfer(fileName: fileName) { [self] in isAlive ? pdfData : nil }
     }
 }

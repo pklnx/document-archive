@@ -48,3 +48,29 @@ struct AppCommands: Commands {
         #endif
     }
 }
+
+/// Actions on the one open document (#19), set by `ContentView` from the selection: `nil` when
+/// no document or several are selected, so ⌘P never prints a document that is not in front.
+struct DocumentActions {
+    /// `nil` while the document has no PDF (still downloading).
+    var print: (() -> Void)?
+}
+
+extension FocusedValues {
+    @Entry var documentActions: DocumentActions?
+}
+
+/// Document items of the menu bar (#19): File → Print… (⌘P) instead of the system's default
+/// item. Works with the list focused, too, and on iPadOS with a hardware keyboard (also listed in
+/// the ⌘-hold overlay). #9 adds ⌘F / ⌘G here.
+struct DocumentCommands: Commands {
+    @FocusedValue(\.documentActions) private var actions
+
+    var body: some Commands {
+        CommandGroup(replacing: .printItem) {
+            Button("Print…") { actions?.print?() }
+                .keyboardShortcut("p")
+                .disabled(actions?.print == nil)
+        }
+    }
+}

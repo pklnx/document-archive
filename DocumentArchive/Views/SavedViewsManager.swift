@@ -11,6 +11,8 @@ struct SavedViewsManager: View {
     @Binding var selection: SidebarItem?
 
     @Query private var queriedViews: [SavedView]
+    /// Deleting asks first, like the sidebar: the deletion reaches all devices and cannot be undone.
+    @State private var pendingDeletion: SidebarView.PendingDeletion?
     private var views: [SavedView] { SavedViewMaintenance.sorted(queriedViews) }
 
     var body: some View {
@@ -21,8 +23,7 @@ struct SavedViewsManager: View {
                 }
                 .onMove(perform: move)
                 .onDelete { offsets in
-                    let views = views
-                    delete(offsets.filter { $0 < views.count }.map { views[$0] })
+                    requestDelete(Self.views(at: offsets, in: views))
                 }
             }
             .overlay {
@@ -48,6 +49,7 @@ struct SavedViewsManager: View {
         #if os(macOS)
         .frame(minWidth: 380, minHeight: 360)
         #endif
+        .deletionConfirmation($pendingDeletion) { $0.perform(in: context, selection: &selection) }
         // Also when the sheet is swiped away.
         .onDisappear(perform: nameUntitledViews)
     }
@@ -63,7 +65,7 @@ struct SavedViewsManager: View {
             #if os(macOS)
             // macOS has no swipe or edit-mode delete button.
             Button {
-                delete([view])
+                requestDelete([view])
             } label: {
                 Image(systemName: "trash")
             }
@@ -77,7 +79,7 @@ struct SavedViewsManager: View {
         // Reordering without dragging (VoiceOver, Switch Control).
         .accessibilityAction(named: Text("Move Up")) { moveByOne(view, up: true) }
         .accessibilityAction(named: Text("Move Down")) { moveByOne(view, up: false) }
-        .accessibilityAction(named: Text("Delete")) { delete([view]) }
+        .accessibilityAction(named: Text("Delete")) { requestDelete([view]) }
     }
 
     private func move(_ source: IndexSet, _ destination: Int) {
@@ -94,12 +96,21 @@ struct SavedViewsManager: View {
         }
     }
 
-    private func delete(_ deleted: [SavedView]) {
-        for view in deleted where !view.isDeleted && view.modelContext != nil {
-            if selection == .savedView(view) { selection = .all }
-            MetadataDeletion.delete(view, in: context, recorder: DocumentDeletion.recorder())
-        }
-        try? context.save()
+    /// Asks before deleting (trash button on macOS, the VoiceOver action, the edit-mode delete
+    /// button on iPhone and iPad).
+    private func requestDelete(_ views: [SavedView]) {
+        pendingDeletion = Self.pendingDeletion(for: views)
+    }
+
+    /// The views the list's delete offsets point at; offsets beyond the list are ignored.
+    static func views(at offsets: IndexSet, in views: [SavedView]) -> [SavedView] {
+        offsets.filter { $0 < views.count }.map { views[$0] }
+    }
+
+    /// The confirmation for deleting `views`: the first one that still exists (the list deletes
+    /// one row at a time); `nil` when none does.
+    static func pendingDeletion(for views: [SavedView]) -> SidebarView.PendingDeletion? {
+        views.first { !$0.isDeleted && $0.modelContext != nil }.map { .savedView($0) }
     }
 
     private func close() {

@@ -21,7 +21,7 @@ The app is available in English and German.
 - **Correspondents, document types, tags** and **ASN** (archive serial number), as in paperless; tags can be nested ("Auto › Golf") by drag and drop or "Move To…", and a tag shows the documents of the tags inside it, with its nested tags as subfolders
 - **Automatic assignment** with matching rules (any/all words, exact phrase, regex), sender detection and **issue date detection**
 - **Duplicate detection:** identical files are skipped on import
-- **Inbox** for new documents, favorites, sorting, sharing and PDF export
+- **Inbox** for new documents, favorites, sorting, sharing (also under a chosen file name), PDF export, printing (⌘P) and copying the PDF or its text
 - **Several documents at once:** select them (Mac: ⌘/⇧-click, ⌘A; iPhone/iPad: "Select") and set tags, correspondent, type, inbox and favorite, analyze them again or delete them together
 - **Copy in a folder** (optional, Settings → Storage Location): the app keeps a copy of the archive as plain files in a folder you choose, e.g. in iCloud Drive – one PDF and one JSON file with the details and the recognized text per document. Deleted documents stay in its `Deleted` folder for 30 days. The archive itself stays on the device; reading the folder back (restore, sync between devices) follows in a later version.
 
@@ -46,7 +46,7 @@ Note: CloudKit schemas start in the *Development* environment. For lasting use, 
 | `DocumentArchive/Model` | SwiftData models: `Document`, `Tag`, `Correspondent`, `DocumentType`, matching rules |
 | `DocumentArchive/Services` | PDF building, OCR (Vision, Mistral), auto-assignment, import, sync status |
 | `DocumentArchive/Views` | SwiftUI interface (sidebar, list, detail view, editors, settings) |
-| `DocumentArchive/Platform` | PDF viewer (PDFKit), document scanner (VisionKit), sharing/export |
+| `DocumentArchive/Platform` | PDF viewer (PDFKit), document scanner (VisionKit), sharing/export, printing, pasteboard |
 | `DocumentArchive/*.xcstrings` | String Catalogs: English source strings with German translations |
 | `DocumentArchiveTests` | Unit tests (Swift Testing) |
 | `Config` | Entitlements (iCloud, sandbox) and Info.plist additions |

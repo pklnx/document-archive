@@ -224,9 +224,7 @@ struct ContentView: View {
     private var splitView: some View {
         let visibleDocuments = visibleDocuments
         let selectedDocuments = DocumentSelection.resolve(selection, in: visibleDocuments)
-        // The open document stays open while an edit hides it from the list (see DocumentSelection).
-        let openDocument = DocumentSelection.openDocument(selection, in: allDocuments)
-            ?? (selectedDocuments.count == 1 ? selectedDocuments.first : nil)
+        let openDocument = openDocument(selected: selectedDocuments)
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: $sidebarSelection, editorTarget: $editorTarget, showSettings: $showSettings,
                         showsTagTree: !isCompact)
@@ -262,6 +260,12 @@ struct ContentView: View {
             .toolbar(removing: showsListButton ? .sidebarToggle : nil)
             #endif
         }
+    }
+
+    /// The document the detail column shows: the one selected document. It stays open while an
+    /// edit hides it from the list (see DocumentSelection). `nil` for none or several.
+    private func openDocument(selected: [Document]) -> Document? {
+        DocumentSelection.openDocument(selection, in: allDocuments) ?? (selected.count == 1 ? selected.first : nil)
     }
 
     /// The document list; on iPhone inside its own `NavigationStack`, which pushes the lists of
@@ -454,6 +458,9 @@ struct ContentView: View {
             saveAsView: { saveAsView() },
             showSettings: { showSettings = true }
         ))
+        // ⌘P (#19): only for the one open document, never for a multi-selection.
+        .focusedSceneValue(\.documentActions, DocumentActionRunner.actions(
+            for: openDocument(selected: DocumentSelection.resolve(selection, in: visibleDocuments))))
         // The folder copy catches up with changes made while the app was in the background.
         .onChange(of: scenePhase) {
             if scenePhase == .active { ArchiveMirrorController.shared.syncNow() }
