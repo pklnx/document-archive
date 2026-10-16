@@ -101,17 +101,7 @@ struct SidebarView: View {
             SavedViewsManager(selection: $selection)
         }
         .onChange(of: selection) { revealSelectedTag() }
-        .confirmationDialog(
-            pendingDeletion?.title ?? "",
-            isPresented: Binding(presenting: $pendingDeletion),
-            titleVisibility: .visible,
-            presenting: pendingDeletion
-        ) { deletion in
-            Button("Delete", role: .destructive) { delete(deletion) }
-            Button("Cancel", role: .cancel) {}
-        } message: { deletion in
-            Text(deletion.message)
-        }
+        .deletionConfirmation($pendingDeletion) { $0.perform(in: context, selection: &selection) }
     }
 
     /// Saved views (#14), after the library. Reordering: dragging on macOS, the "Manage Views"
@@ -312,8 +302,15 @@ struct SidebarView: View {
         }
     }
 
-    private func delete(_ deletion: PendingDeletion) {
-        switch deletion {
+}
+
+extension SidebarView.PendingDeletion {
+    /// Deletes the confirmed object (through `TagHierarchy` / `MetadataDeletion`, so the folder
+    /// copy records it) and shows "All Documents" instead when it was shown. Nothing happens
+    /// for a saved view that is already gone (deleted on another device while the dialog was
+    /// open).
+    @MainActor func perform(in context: ModelContext, selection: inout SidebarItem?) {
+        switch self {
         case .tag(let tag):
             if selection == .tag(tag) { selection = .all }
             TagHierarchy.delete(tag, in: context, recorder: DocumentDeletion.recorder())
@@ -329,6 +326,27 @@ struct SidebarView: View {
             MetadataDeletion.delete(view, in: context, recorder: DocumentDeletion.recorder())
         }
         try? context.save()
+    }
+}
+
+extension View {
+    /// The confirmation before deleting a tag, correspondent, document type or saved view: the
+    /// sidebar and the "Manage Views" sheet ask the same way (the deletion reaches all devices
+    /// and cannot be undone).
+    func deletionConfirmation(_ pending: Binding<SidebarView.PendingDeletion?>,
+                              perform: @escaping (SidebarView.PendingDeletion) -> Void) -> some View {
+        confirmationDialog(
+            pending.wrappedValue?.title ?? "",
+            isPresented: Binding(presenting: pending),
+            titleVisibility: .visible,
+            presenting: pending.wrappedValue
+        ) { deletion in
+            Button("Delete", role: .destructive) { perform(deletion) }
+                .accessibilityIdentifier(AccessibilityID.deletionConfirm)
+            Button("Cancel", role: .cancel) {}
+        } message: { deletion in
+            Text(deletion.message)
+        }
     }
 }
 

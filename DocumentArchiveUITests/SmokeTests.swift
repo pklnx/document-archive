@@ -448,6 +448,45 @@ final class SmokeTests: XCTestCase {
         openDocument(secondDocument)
     }
 
+    /// #19: the More menu offers Print, Copy PDF / Copy Text and "Share as…"; the sheet shows the
+    /// name the receiver gets and follows the edited name.
+    func testShareAsShowsTheEditedFileName() {
+        openDocument(firstDocument)
+        let more = element("documentDetail.more")
+        XCTAssertTrue(waitUntilHittable(more), "no More menu")
+        more.tap()
+        let shareAs = element("documentDetail.shareAs")
+        XCTAssertTrue(waitUntilHittable(shareAs, timeout: 10), "no Share as in the More menu")
+        XCTAssertTrue(element("documentDetail.print").exists, "no Print in the More menu")
+        XCTAssertTrue(element("documentDetail.copyPDF").exists, "no Copy PDF in the More menu")
+        XCTAssertTrue(element("documentDetail.copyText").exists, "no Copy Text in the More menu")
+        attachScreenshot("More menu")
+        shareAs.tap()
+
+        let name = element("shareOptions.name")
+        XCTAssertTrue(name.waitForExistence(timeout: 5), "the Share as sheet did not open")
+        let fileName = element("shareOptions.fileName")
+        XCTAssertTrue(fileName.label.contains("\(firstDocument).pdf"), "unexpected file name: \(fileName.label)")
+        XCTAssertTrue(element("shareOptions.share").exists, "no Share button")
+        attachScreenshot("Share as sheet")
+
+        // The long pre-filled name: the tap may put the cursor in the middle, so tap at the end
+        // and delete again until the field is empty (it then shows its placeholder).
+        for _ in 0..<4 {
+            let current = name.value as? String ?? ""
+            if current.isEmpty || current == name.placeholderValue { break }
+            name.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+            name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 5))
+        }
+        name.typeText("Strom: März")
+        XCTAssertTrue(fileName.label.contains("Strom- März.pdf"), "the file name does not follow: \(fileName.label)")
+        attachScreenshot("Share as sheet with an edited name")
+
+        element("shareOptions.done").tap()
+        XCTAssertTrue(name.waitForNonExistence(timeout: 5), "the sheet did not close")
+        XCTAssertTrue(element("documentDetail").exists)
+    }
+
     /// Select mode: several documents are selected without opening one, and deleted together.
     func testSelectSeveralDocumentsAndDeleteThem() {
         let select = element("documentList.select")

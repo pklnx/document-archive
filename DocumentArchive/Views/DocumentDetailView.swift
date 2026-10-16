@@ -17,6 +17,7 @@ struct DocumentDetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
     @State private var showExporter = false
+    @State private var showShareOptions = false
     @State private var confirmDelete = false
     /// Set by the More menu's Delete action; only read by `UITestMarker`.
     @State private var deleteRequested = false
@@ -70,6 +71,11 @@ struct DocumentDetailView: View {
                 }
 
                 Menu {
+                    DocumentActionItems(document: document)
+                    Divider()
+                    Button("Share as…", systemImage: "square.and.arrow.up.on.square") { showShareOptions = true }
+                        .disabled(document.pdfData == nil)
+                        .accessibilityIdentifier(AccessibilityID.documentShareAs)
                     Button("Export as PDF…", systemImage: "arrow.down.doc") { showExporter = true }
                     Divider()
                     Button("Delete", systemImage: "trash", role: .destructive) {
@@ -100,6 +106,9 @@ struct DocumentDetailView: View {
         .onChange(of: showInspector) { if inspectorIsColumn { remembersInspector = showInspector } }
         .fileExporter(isPresented: $showExporter, document: document.pdfData.map(PDFFile.init(data:)),
                       contentType: .pdf, defaultFilename: document.exportFileName) { _ in }
+        .sheet(isPresented: $showShareOptions) {
+            ShareOptionsSheet(document: document)
+        }
         .confirmationDialog("Delete document?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 onDelete()

@@ -731,6 +731,26 @@
         }
       }
     },
+    "Copy PDF": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF kopieren"
+          }
+        }
+      }
+    },
+    "Copy Text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text kopieren"
+          }
+        }
+      }
+    },
     "Copy in folder is up to date": {
       "localizations": {
         "de": {
@@ -1371,6 +1391,16 @@
         }
       }
     },
+    "Export…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportieren …"
+          }
+        }
+      }
+    },
     "Favorite": {
       "localizations": {
         "de": {
@@ -1397,6 +1427,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nur Favoriten"
+          }
+        }
+      }
+    },
+    "File name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateiname"
           }
         }
       }
@@ -2651,6 +2691,16 @@
         }
       }
     },
+    "Print…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drucken …"
+          }
+        }
+      }
+    },
     "Purple": {
       "localizations": {
         "de": {
@@ -2977,6 +3027,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Teilen"
+          }
+        }
+      }
+    },
+    "Share as": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilen als"
+          }
+        }
+      }
+    },
+    "Share as…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilen als …"
           }
         }
       }
@@ -3507,6 +3577,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Datei wird gerade aus iCloud geladen."
+          }
+        }
+      }
+    },
+    "The file will be named “%@”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Datei heißt „%@“."
           }
         }
       }

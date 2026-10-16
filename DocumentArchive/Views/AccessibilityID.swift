@@ -43,6 +43,17 @@ enum AccessibilityID {
     static let documentMore = "documentDetail.more"
     static let documentDelete = "documentDetail.delete"
     static let documentDeleteConfirm = "documentDetail.deleteConfirm"
+    /// Print, copy and "Share as…" (#19) in the More menu and the context menu.
+    static let documentPrint = "documentDetail.print"
+    static let documentCopyPDF = "documentDetail.copyPDF"
+    static let documentCopyText = "documentDetail.copyText"
+    static let documentShareAs = "documentDetail.shareAs"
+    static let shareOptions = "shareOptions"
+    static let shareOptionsName = "shareOptions.name"
+    static let shareOptionsFileName = "shareOptions.fileName"
+    static let shareOptionsShare = "shareOptions.share"
+    static let shareOptionsExport = "shareOptions.export"
+    static let shareOptionsDone = "shareOptions.done"
     /// UI tests only: shown once the More menu's Delete action ran (see `UITestMarker`).
     static let documentDeleteRequested = "documentDetail.deleteRequested"
 
@@ -69,6 +80,8 @@ enum AccessibilityID {
     static let savedViewEditorCancel = "savedViewEditor.cancel"
     static let savedViewsManager = "savedViewsManager"
     static let savedViewsManagerDone = "savedViewsManager.done"
+    /// "Delete" in the confirmation for tags, correspondents, types and saved views.
+    static let deletionConfirm = "metadata.deleteConfirm"
     static func savedViewsManagerRow(_ name: String) -> String { "savedViewsManager.row.\(name)" }
     static func savedViewsManagerName(_ name: String) -> String { "savedViewsManager.name.\(name)" }
     /// The list's menu with the sort and "Save as View…" / "Edit View…".

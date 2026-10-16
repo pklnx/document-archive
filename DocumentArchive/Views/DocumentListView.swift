@@ -109,7 +109,8 @@ struct DocumentListView<ImportMenu: View>: View {
                         }
                         .tint(.yellow)
                     }
-                    .draggable(document.transfer ?? PDFTransfer(data: Data(), fileName: String(localized: "Document") + ".pdf"))
+                    // The PDF is read only when the drag is dropped (#19).
+                    .draggable(document.transfer(named: document.exportFileName))
             }
         }
         // One menu for the row under the pointer or the whole selection.
@@ -370,6 +371,8 @@ struct DocumentListView<ImportMenu: View>: View {
                 Label("Share…", systemImage: "square.and.arrow.up")
             }
         }
+        Divider()
+        DocumentActionItems(document: document)
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { documentToDelete = document }
     }

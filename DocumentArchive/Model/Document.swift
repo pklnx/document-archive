@@ -106,17 +106,16 @@ final class Document {
         return terms.allSatisfy { haystack.localizedStandardContains($0) }
     }
 
-    /// File name for export and sharing, e.g. "2026-10-15 Stadtwerke Rechnung.pdf".
+    /// File name for export and sharing, e.g. "2026-10-15 Stadtwerke Rechnung.pdf"
+    /// (rules in `FileNaming.sanitized`).
     var exportFileName: String {
-        let invalid = CharacterSet(charactersIn: "/\\:?%*|\"<>")
         let date = documentDate.formatted(.iso8601.year().month().day())
         var parts = [date]
         if let correspondent, !title.localizedCaseInsensitiveContains(correspondent.name) {
             parts.append(correspondent.name)
         }
         parts.append(title.isEmpty ? String(localized: "Document") : title)
-        let name = parts.joined(separator: " ").components(separatedBy: invalid).joined(separator: "-")
-        return name.trimmingCharacters(in: .whitespacesAndNewlines) + ".pdf"
+        return FileNaming.sanitized(parts.joined(separator: " "))
     }
 }
 

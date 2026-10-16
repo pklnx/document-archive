@@ -400,6 +400,31 @@ folder. Files opened before a
 window exists wait in `ExternalImport` until `ContentView` hands over the
 `ModelContext`.
 
+## Print, copy and share (#19)
+
+- **Print…** (⌘P) is a `DocumentCommands` group in `App/AppCommands.swift`, also active on
+  iPadOS (menu bar and ⌘-hold overlay). It reads the `documentActions` FocusedValue, which
+  `ContentView` sets from the selection: only the one open document, never a multi-selection.
+  The same item is in the detail view's "More" menu and the list's single-document context
+  menu (`DocumentActionItems`). `PrintJob` holds the PDF and the job name (the title);
+  `Platform/DocumentPrinter.swift` shows the system panel (macOS: scaled to the page, for the
+  key window; iOS: the AirPrint sheet, a form sheet on iPad).
+- **Copy PDF / Copy Text** are menu items only; ⌘C is not overridden (maintainer decision).
+  `ClipboardContent` decides what is copied (testable without a pasteboard), `Platform/Clipboard.swift`
+  writes it: on macOS the PDF data plus the URL of a copy named like the export (paste into
+  Finder creates the file, into Mail attaches it), on iOS an item provider with the name.
+  "Copy Text" copies plain text: Mistral's Markdown is converted by `MarkdownNotes.plainText`
+  (table rows become tab-separated cells), text from the PDF or Apple Vision is copied as is.
+- **File names** come from `Services/FileNaming.swift` (owner of the rules, also used by #10):
+  invalid and control characters become "-", whitespace is collapsed, spaces and dots trimmed,
+  exactly one ".pdf", at most 240 UTF-8 bytes cut between characters; `unique` adds " (2)", " (3)".
+- **`PDFTransfer`** lists a file representation (writes `<name>.pdf` into `ExportFolder`) before
+  the data representation, so receivers that ignore a suggested name still get the chosen one.
+  The PDF is read only when a receiver asks for it. `ExportFolder` (the app's `Exports` folder in
+  the temporary directory) is emptied at launch on every platform and when the Mac app quits.
+- **Share as…** (detail "More" menu, `ShareOptionsSheet`) edits the name before sharing or
+  exporting; the toolbar's Share button keeps the default name.
+
 ## External services
 
 Documents leave the device only through features the user turns on:
@@ -411,6 +436,10 @@ Documents leave the device only through features the user turns on:
 - **Mistral AI** for OCR and auto-assignment, only with an API key in the
   settings and the corresponding switch on. Without a key or on errors, the
   app falls back to Apple Vision and the local rules.
+- **The pasteboard and the printer**, only by the user's action: copied PDFs
+  and text reach the user's other Apple devices through Universal Clipboard
+  for a short time (the system's normal behavior); printing goes to the
+  printer the user picks.
 
 New features that send data anywhere else need this stated in the plan and a
 setting to turn them off. API keys are stored in the Keychain, never in
