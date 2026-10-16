@@ -25,6 +25,8 @@ enum UITestSeed {
     static let tags = [("Tax", "#22C55E"), ("Important", "#EF4444"), ("Auto", "#3B82F6"), ("Golf", "#3B82F6")]
     /// Nested tags (#13): child → parent, so the UI tests can open "Auto › Golf".
     static let tagParents = ["Golf": "Auto"]
+    /// A saved view (#14): the documents tagged "Tax".
+    static let savedViewName = "Taxes"
 
     static let documents = [
         SampleDocument(title: "Electricity bill March", correspondent: correspondents[0], type: "Invoice", tags: ["Tax"]),
@@ -75,6 +77,12 @@ enum UITestSeed {
             document.documentType = typesByName[sample.type]
             document.tags = sample.tags.compactMap { tagsByName[$0] }
         }
+
+        var taxes = DocumentFilter()
+        taxes.tags = tagsByName["Tax"].map { [DocumentFilter.Ref($0)] } ?? []
+        taxes.sort = .title
+        taxes.ascending = true
+        context.insert(SavedView(name: savedViewName, symbol: "eurosign.circle", filter: taxes, sortIndex: 0))
         try? context.save()
     }
 

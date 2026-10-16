@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ Copy": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Kopie"
+          }
+        }
+      }
+    },
     "%@ Local text recognition was used instead.": {
       "localizations": {
         "de": {
@@ -47,6 +57,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld Zeichen"
+          }
+        }
+      }
+    },
+    "%lld chosen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ausgewählt"
           }
         }
       }
@@ -141,6 +161,26 @@
         }
       }
     },
+    "A document matches one of the chosen correspondents and one of the chosen types.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Dokument passt, wenn es einen der gewählten Korrespondenten und einen der gewählten Typen hat."
+          }
+        }
+      }
+    },
+    "A specific year": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein bestimmtes Jahr"
+          }
+        }
+      }
+    },
     "AI (Mistral)": {
       "localizations": {
         "de": {
@@ -201,6 +241,16 @@
         }
       }
     },
+    "Add View": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht hinzufügen"
+          }
+        }
+      }
+    },
     "Add to Favorites": {
       "localizations": {
         "de": {
@@ -237,6 +287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alle Dokumente werden in deiner privaten iCloud gespeichert und automatisch zwischen Mac, iPhone und iPad abgeglichen. Es gibt keinen Server und kein Benutzerkonto außer deiner Apple-ID."
+          }
+        }
+      }
+    },
+    "All of these tags": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle diese Tags"
           }
         }
       }
@@ -351,6 +411,16 @@
         }
       }
     },
+    "Any": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Egal"
+          }
+        }
+      }
+    },
     "Any of the words": {
       "localizations": {
         "de": {
@@ -361,12 +431,42 @@
         }
       }
     },
+    "Any of these tags": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einen dieser Tags"
+          }
+        }
+      }
+    },
+    "Any time": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jederzeit"
+          }
+        }
+      }
+    },
     "As set in the settings, the documents are sent to Mistral AI.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Wie in den Einstellungen festgelegt, werden die Dokumente an Mistral AI gesendet."
+          }
+        }
+      }
+    },
+    "Ascending": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufsteigend"
           }
         }
       }
@@ -471,6 +571,26 @@
         }
       }
     },
+    "Both days are included. Relative periods end today.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beide Tage zählen mit. Relative Zeiträume enden heute."
+          }
+        }
+      }
+    },
+    "Calendar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kalender"
+          }
+        }
+      }
+    },
     "Camera scan": {
       "localizations": {
         "de": {
@@ -517,6 +637,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ordner wählen …"
+          }
+        }
+      }
+    },
+    "Clock": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uhr"
           }
         }
       }
@@ -691,6 +821,16 @@
         }
       }
     },
+    "Create entries in the sidebar first.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lege zuerst Einträge in der Seitenleiste an."
+          }
+        }
+      }
+    },
     "Create new senders as correspondents automatically": {
       "localizations": {
         "de": {
@@ -707,6 +847,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eigene Farbe"
+          }
+        }
+      }
+    },
+    "Date": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datum"
           }
         }
       }
@@ -761,6 +911,16 @@
         }
       }
     },
+    "Delete View": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht löschen"
+          }
+        }
+      }
+    },
     "Delete correspondent “%@”?": {
       "localizations": {
         "de": {
@@ -801,6 +961,26 @@
         }
       }
     },
+    "Delete view “%@”?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht „%@“ löschen?"
+          }
+        }
+      }
+    },
+    "Delete “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ löschen"
+          }
+        }
+      }
+    },
     "Delete…": {
       "localizations": {
         "de": {
@@ -817,6 +997,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Löschungen warten auf Bestätigung: %lld"
+          }
+        }
+      }
+    },
+    "Descending": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Absteigend"
           }
         }
       }
@@ -931,12 +1121,32 @@
         }
       }
     },
+    "Document types": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumenttypen"
+          }
+        }
+      }
+    },
     "Documents": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Dokumente"
+          }
+        }
+      }
+    },
+    "Documents need": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumente brauchen"
           }
         }
       }
@@ -967,6 +1177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ziehe PDFs oder Bilder hierher oder importiere sie mit ⌘O."
+          }
+        }
+      }
+    },
+    "Duplicate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplizieren"
           }
         }
       }
@@ -1007,6 +1227,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tag bearbeiten"
+          }
+        }
+      }
+    },
+    "Edit View": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht bearbeiten"
+          }
+        }
+      }
+    },
+    "Edit View…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht bearbeiten …"
           }
         }
       }
@@ -1071,6 +1311,26 @@
         }
       }
     },
+    "Excluded Tags": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgeschlossene Tags"
+          }
+        }
+      }
+    },
+    "Excluded tags": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgeschlossene Tags"
+          }
+        }
+      }
+    },
     "Expand": {
       "localizations": {
         "de": {
@@ -1121,6 +1381,26 @@
         }
       }
     },
+    "Favorites only": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Favoriten"
+          }
+        }
+      }
+    },
+    "Filter": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter"
+          }
+        }
+      }
+    },
     "Flag": {
       "localizations": {
         "de": {
@@ -1167,6 +1447,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Von jeder identischen Datei bleibt das zuerst importierte Dokument erhalten. Fehlende Angaben wie Tags oder Notizen werden von den Duplikaten übernommen."
+          }
+        }
+      }
+    },
+    "From": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von"
+          }
+        }
+      }
+    },
+    "From – to": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von – bis"
           }
         }
       }
@@ -1301,6 +1601,16 @@
         }
       }
     },
+    "In the inbox": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Posteingang"
+          }
+        }
+      }
+    },
     "Inactive – local only": {
       "localizations": {
         "de": {
@@ -1327,6 +1637,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Posteingang leer"
+          }
+        }
+      }
+    },
+    "Include nested tags (also when excluding)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untertags einbeziehen (auch beim Ausschließen)"
           }
         }
       }
@@ -1391,6 +1711,26 @@
         }
       }
     },
+    "Last 12 months": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte 12 Monate"
+          }
+        }
+      }
+    },
+    "Last 30 days": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte 30 Tage"
+          }
+        }
+      }
+    },
     "Last copy": {
       "localizations": {
         "de": {
@@ -1407,6 +1747,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzte Synchronisation"
+          }
+        }
+      }
+    },
+    "Last year": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letztes Jahr"
           }
         }
       }
@@ -1461,6 +1811,26 @@
         }
       }
     },
+    "Manage Views": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansichten verwalten"
+          }
+        }
+      }
+    },
+    "Manage Views…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansichten verwalten …"
+          }
+        }
+      }
+    },
     "Mark Done": {
       "localizations": {
         "de": {
@@ -1487,6 +1857,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Als erledigt markieren (aus dem Posteingang entfernen)"
+          }
+        }
+      }
+    },
+    "Matches %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trifft auf %@ zu"
           }
         }
       }
@@ -1651,12 +2031,42 @@
         }
       }
     },
+    "More for Views": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr zu Ansichten"
+          }
+        }
+      }
+    },
+    "Move Down": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach unten"
+          }
+        }
+      }
+    },
     "Move To…": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Verschieben nach …"
+          }
+        }
+      }
+    },
+    "Move Up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach oben"
           }
         }
       }
@@ -1771,6 +2181,16 @@
         }
       }
     },
+    "New View": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Ansicht"
+          }
+        }
+      }
+    },
     "New correspondent (AI): %@": {
       "localizations": {
         "de": {
@@ -1851,6 +2271,26 @@
         }
       }
     },
+    "No Matching Documents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Dokumente"
+          }
+        }
+      }
+    },
+    "No Views": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Ansichten"
+          }
+        }
+      }
+    },
     "No automatic assignment": {
       "localizations": {
         "de": {
@@ -1861,12 +2301,32 @@
         }
       }
     },
+    "No document matches the criteria of this view.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Dokument erfüllt die Kriterien dieser Ansicht."
+          }
+        }
+      }
+    },
     "No duplicates found.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Keine Duplikate gefunden."
+          }
+        }
+      }
+    },
+    "No favorites": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Favoriten"
           }
         }
       }
@@ -1931,6 +2391,16 @@
         }
       }
     },
+    "Not in the inbox": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht im Posteingang"
+          }
+        }
+      }
+    },
     "Not signed in": {
       "localizations": {
         "de": {
@@ -1967,6 +2437,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nichts Neues erkannt. Lege Korrespondenten, Dokumenttypen oder Tags an oder richte Mistral in den Einstellungen ein."
+          }
+        }
+      }
+    },
+    "Nothing to Choose": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts zur Auswahl"
           }
         }
       }
@@ -2011,12 +2491,32 @@
         }
       }
     },
+    "Only the view is deleted, on all devices. The documents themselves are kept.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur die Ansicht wird gelöscht, auf allen Geräten. Die Dokumente selbst bleiben erhalten."
+          }
+        }
+      }
+    },
     "Orange": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Orange"
+          }
+        }
+      }
+    },
+    "Order": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reihenfolge"
           }
         }
       }
@@ -2087,6 +2587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gehaltsabrechnung"
+          }
+        }
+      }
+    },
+    "Period": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitraum"
           }
         }
       }
@@ -2251,6 +2761,16 @@
         }
       }
     },
+    "Remove “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ entfernen"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "de": {
@@ -2267,6 +2787,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schlüssel speichern"
+          }
+        }
+      }
+    },
+    "Save a list with its filters as a view to see it here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sichere eine Liste mit ihren Filtern als Ansicht, um sie hier zu sehen."
+          }
+        }
+      }
+    },
+    "Save as View…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Ansicht sichern …"
           }
         }
       }
@@ -2341,6 +2881,16 @@
         }
       }
     },
+    "Search term": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchbegriff"
+          }
+        }
+      }
+    },
     "Search words, separated by spaces": {
       "localizations": {
         "de": {
@@ -2377,6 +2927,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wähle links ein Dokument aus oder füge ein neues hinzu."
+          }
+        }
+      }
+    },
+    "Set by a newer app version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von neuerer App-Version gesetzt"
           }
         }
       }
@@ -2501,12 +3061,32 @@
         }
       }
     },
+    "Some settings of this view were made in a newer version of the app. They are kept unless you change them here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einige Einstellungen dieser Ansicht stammen aus einer neueren Version der App. Sie bleiben erhalten, solange du sie hier nicht änderst."
+          }
+        }
+      }
+    },
     "Sort": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Sortieren"
+          }
+        }
+      }
+    },
+    "Sort and Views": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sortierung und Ansichten"
           }
         }
       }
@@ -2537,6 +3117,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stern"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
           }
         }
       }
@@ -2981,6 +3571,26 @@
         }
       }
     },
+    "This view refers to deleted items, so it may show fewer documents.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Ansicht verweist auf gelöschte Einträge und zeigt deshalb eventuell weniger Dokumente."
+          }
+        }
+      }
+    },
+    "This year": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Jahr"
+          }
+        }
+      }
+    },
     "Title": {
       "localizations": {
         "de": {
@@ -3007,6 +3617,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Titel: %@"
+          }
+        }
+      }
+    },
+    "To": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bis"
           }
         }
       }
@@ -3041,12 +3661,32 @@
         }
       }
     },
+    "Tray": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ablage"
+          }
+        }
+      }
+    },
     "Unknown error": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Unbekannter Fehler"
+          }
+        }
+      }
+    },
+    "Untitled View": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbenannte Ansicht"
           }
         }
       }
@@ -3061,6 +3701,26 @@
         }
       }
     },
+    "Views": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansichten"
+          }
+        }
+      }
+    },
+    "Views: create new": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansichten: neu anlegen"
+          }
+        }
+      }
+    },
     "With a key, new documents are sent to the Mistral API for text recognition and assignment. Without a key, or on errors, the app keeps working with Apple's local text recognition and your rules. The key is stored in the Keychain.": {
       "localizations": {
         "de": {
@@ -3071,12 +3731,52 @@
         }
       }
     },
+    "With number": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Nummer"
+          }
+        }
+      }
+    },
+    "Without number": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Nummer"
+          }
+        }
+      }
+    },
+    "Words in the text, title or notes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörter in Text, Titel oder Notizen"
+          }
+        }
+      }
+    },
     "Work": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Arbeit"
+          }
+        }
+      }
+    },
+    "Year": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jahr"
           }
         }
       }
@@ -3247,6 +3947,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "–"
+          }
+        }
+      }
+    },
+    "“%@” (deleted)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ (gelöscht)"
           }
         }
       }

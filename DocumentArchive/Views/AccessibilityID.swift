@@ -58,6 +58,25 @@ enum AccessibilityID {
     static let tagParentTopLevel = "tagParentPicker.topLevel"
     static func tagParentChoice(_ name: String) -> String { "tagParentPicker.tag.\(name)" }
 
+    /// Saved views (#14): the sidebar section's menu, the editor, the manage sheet and the list's
+    /// "Save as View" / "Edit View" button and banner.
+    static let savedViewsMenu = "sidebar.savedViews.menu"
+    static let manageSavedViews = "sidebar.savedViews.manage"
+    static let savedViewEditor = "savedViewEditor"
+    static let savedViewEditorName = "savedViewEditor.name"
+    static let savedViewEditorCount = "savedViewEditor.count"
+    static let savedViewEditorSave = "savedViewEditor.save"
+    static let savedViewEditorCancel = "savedViewEditor.cancel"
+    static let savedViewsManager = "savedViewsManager"
+    static let savedViewsManagerDone = "savedViewsManager.done"
+    static func savedViewsManagerRow(_ name: String) -> String { "savedViewsManager.row.\(name)" }
+    static func savedViewsManagerName(_ name: String) -> String { "savedViewsManager.name.\(name)" }
+    /// The list's menu with the sort and "Save as View…" / "Edit View…".
+    static let listOptions = "documentList.options"
+    static let saveAsView = "documentList.saveAsView"
+    static let editView = "documentList.editView"
+    static let unresolvedBanner = "documentList.unresolvedBanner"
+
     static func sidebarRow(_ item: SidebarItem) -> String {
         switch item {
         case .inbox: "sidebar.inbox"
@@ -68,6 +87,7 @@ enum AccessibilityID {
         case .documentType(let type): "sidebar.documentType.\(type.name)"
         case .correspondent(let correspondent): "sidebar.correspondent.\(correspondent.name)"
         case .tag(let tag): "sidebar.tag.\(tag.name)"
+        case .savedView(let view): "sidebar.savedView.\(view.name)"
         }
     }
 

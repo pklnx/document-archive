@@ -235,6 +235,48 @@ import Testing
         }
     }
 
+    /// Follow-up from the part 1 review: on a device set to the Japanese (or Buddhist) calendar,
+    /// days are still Gregorian (`"2026-03-15"`, not Reiwa year 8), `.year(2025)` means 2025, and
+    /// the device's time zone still decides the day.
+    @Test(arguments: [Calendar.Identifier.japanese, .buddhist])
+    func daysAreGregorianOnANonGregorianDevice(_ identifier: Calendar.Identifier) throws {
+        var device = Calendar(identifier: identifier)
+        device.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        #expect(DocumentFilter.Day(now, calendar: device) == .init(year: 2026, month: 3, day: 15))
+        #expect(DocumentFilter.Day(now, calendar: device).string == "2026-03-15")
+        #expect(DocumentFilter.Day(year: 2026, month: 3, day: 15).date(calendar: device) == at(2026, 3, 15))
+        // Shortly after midnight in Berlin (still the 15th in UTC) is the 16th, whatever the calendar.
+        #expect(DocumentFilter.Day(at(2026, 3, 16, hour: 0) + 60, calendar: device) == .init(year: 2026, month: 3, day: 16))
+
+        document("2025", date: at(2025, 6, 1))
+        document("2026", date: at(2026, 2, 1))
+        document("Last week", date: at(2026, 3, 8))
+        var filter = DocumentFilter()
+        filter.dateRange = .year(2025)
+        #expect(try titles(filter, calendar: device) == ["2025"])
+        filter.dateRange = .thisYear
+        #expect(try titles(filter, calendar: device) == ["2026", "Last week"])
+        filter.dateRange = .last30Days
+        #expect(try titles(filter, calendar: device) == ["Last week"])
+        filter.dateRange = .absolute(from: .init(year: 2026, month: 1, day: 1), to: .init(year: 2026, month: 2, day: 28))
+        #expect(try titles(filter, calendar: device) == ["2026"])
+        #expect(filterContext(filter, calendar: device).calendar.identifier == .gregorian)
+    }
+
+    /// The bounds are computed once per context, not per document (follow-up from the part 1 review).
+    @Test func dateBoundsAreComputedOnceInTheContext() throws {
+        var filter = DocumentFilter()
+        #expect(filterContext(filter).dateBounds == nil)
+        filter.dateRange = .last30Days
+        let bounds = try #require(filterContext(filter).dateBounds)
+        #expect(bounds.from == .init(year: 2026, month: 2, day: 14))
+        #expect(bounds.to == .init(year: 2026, month: 3, day: 15))
+        filter.dateRange = .last12Months
+        let year = try #require(filterContext(filter).dateBounds)
+        #expect(year.from == .init(year: 2025, month: 3, day: 16))
+        #expect(year.to == .init(year: 2026, month: 3, day: 15))
+    }
+
     /// "Rechnungen 2026 von Telekom" and "Versicherung, nicht erledigt".
     @Test func combinations() throws {
         let telekom = Correspondent(name: "Telekom")
@@ -572,6 +614,190 @@ import Testing
         edited.dateRange = .lastYear
         let replaced = try Self.object(DocumentFilter.json(edited, preserving: stored))
         #expect((replaced["dateRange"] as? [String: String])?["kind"] == "lastYear")
+    }
+
+    /// Follow-up from the part 1 review: a field that fell back can be set to the value it fell
+    /// back to (the user picks "Added" for a newer version's sort, or clears its date range).
+    /// Changing only the direction keeps the newer sort.
+    @Test func fallenBackFieldCanBeSetToItsDefault() throws {
+        let view = SavedView(name: "From a newer version")
+        view.filterJSON = #"{"ascending":true,"dateRange":{"kind":"nextQuarter"},"sort":"future"}"#
+        context.insert(view)
+        #expect(view.filter.fallbackKeys == ["dateRange", "sort"])
+
+        view.setAscending(false)
+        var object = try Self.object(view.filterJSON)
+        #expect(object["sort"] as? String == "future")
+        #expect(object["ascending"] as? Bool == false)
+
+        view.setSort(.added, ascending: false)
+        object = try Self.object(view.filterJSON)
+        #expect(object["sort"] as? String == "added")
+        #expect((object["dateRange"] as? [String: String])?["kind"] == "nextQuarter")
+
+        var filter = view.filter
+        #expect(filter.fallbackKeys == ["dateRange"])
+        filter.dateRange = nil
+        #expect(filter.fallbackKeys.isEmpty)
+        view.filter = filter
+        #expect(try Self.object(view.filterJSON)["dateRange"] == nil)
+    }
+
+    // MARK: Editor and sidebar
+
+    /// The editor shows references resolved by key as the live object (so the picker marks it)
+    /// and keeps unresolved ones; untouched fields keep a newer version's value.
+    @Test func editorResolvesReferencesToLiveObjects() throws {
+        let tax = tag("Steuer")
+        let telekom = Correspondent(name: "Telekom")
+        context.insert(telekom)
+        let byKey = DocumentFilter.Ref(id: UUID(), name: "steuer", key: "steuer")
+        let gone = DocumentFilter.Ref(id: UUID(), name: "Gone", key: "gone")
+        var stored = DocumentFilter.decode(#"{"sort":"future"}"#)
+        stored.tags = [byKey, gone]
+        stored.correspondents = [.init(telekom)]
+
+        let edited = stored.resolvingReferences(tags: [tax], correspondents: [telekom], documentTypes: [])
+        #expect(edited.tags == [.init(tax), gone])
+        #expect(edited.correspondents == [.init(telekom)])
+        #expect(edited.fallbackKeys == ["sort"])
+        #expect(DocumentFilter.json(edited, preserving: #"{"sort":"future"}"#).contains(#""sort":"future""#))
+
+        // Two references that resolve to the same tag become one.
+        var twice = DocumentFilter()
+        twice.tags = [byKey, .init(tax)]
+        #expect(twice.resolvingReferences(tags: [tax], correspondents: [], documentTypes: []).tags == [.init(tax)])
+    }
+
+    /// "Save as View" from each sidebar list gives a filter that shows the same documents as the
+    /// list (with its search text and sort). "Recently Added" uses the real date, so this test does too.
+    @Test func saveAsViewPrefillMatchesTheList() throws {
+        let now = Date()
+        let telekom = Correspondent(name: "Telekom")
+        let invoice = DocumentType(name: "Invoice")
+        context.insert(telekom)
+        context.insert(invoice)
+        let auto = tag("Auto")
+        let golf = tag("Golf", under: auto)
+        document("Inbox invoice", correspondent: telekom, type: invoice, createdAt: now - 86_400, inbox: true,
+                 text: "Rechnung")
+        document("Golf", tags: [golf], createdAt: now - 40 * 86_400, favorite: true, text: "Werkstatt")
+        document("Auto", tags: [auto], text: "Rechnung Werkstatt")
+        document("Plain", createdAt: now - 2 * 86_400)
+        let documents = try allDocuments()
+
+        let items: [SidebarItem] = [.all, .inbox, .favorites, .recent, .documentType(invoice), .correspondent(telekom),
+                                    .tag(auto)]
+        for item in items {
+            for search in ["", "Rechnung"] {
+                let prefill = item.savedViewPrefill(searchText: search, sort: .title)
+                let list = item.visibleDocuments(in: documents, searchText: search, sort: .title).map(\.title)
+                let viaFilter = prefill.filter.apply(to: documents, context: FilterContext(filter: prefill.filter, in: context))
+                    .map(\.title)
+                #expect(viaFilter == list, "\(item.title), search “\(search)”")
+            }
+        }
+        #expect(SidebarItem.inbox.savedViewPrefill(searchText: "", sort: .added).name == SidebarItem.inbox.title)
+        #expect(SidebarItem.all.savedViewPrefill(searchText: "", sort: .added).name == "")
+        #expect(SidebarItem.all.savedViewPrefill(searchText: " Rechnung ", sort: .added).name == "Rechnung")
+        #expect(SidebarItem.tag(auto).savedViewPrefill(searchText: "", sort: .added).filter.tags == [.init(auto)])
+
+        // A saved view is copied, its search term combined with the search text.
+        var werkstatt = DocumentFilter()
+        werkstatt.query = "Werkstatt"
+        werkstatt.sort = .title
+        werkstatt.ascending = true
+        let view = SavedView(name: "Workshop", filter: werkstatt)
+        context.insert(view)
+        let copy = SidebarItem.savedView(view).savedViewPrefill(searchText: "Rechnung", sort: .added)
+        #expect(copy.filter.query == "Werkstatt Rechnung")
+        #expect(copy.filter.sort == .title)
+        #expect(copy.name == SavedViewMaintenance.copyName(of: view))
+        #expect(copy.filter.apply(to: documents, context: FilterContext(filter: copy.filter, in: context)).map(\.title) == ["Auto"])
+    }
+
+    /// Moved from part 1: the sidebar entry of a saved view includes exactly the documents its
+    /// filter matches, and its list is the filter's result in the view's sort, narrowed by the search.
+    @Test func savedViewSidebarItemIncludesEqualsFilterMatches() throws {
+        let insurance = tag("Versicherung")
+        let car = tag("Auto", under: insurance)
+        let telekom = Correspondent(name: "Telekom")
+        context.insert(telekom)
+        document("Car open", tags: [car], date: at(2026, 1, 5), inbox: true)
+        document("Insurance done", tags: [insurance], date: at(2025, 5, 1))
+        document("Telekom", correspondent: telekom, date: at(2026, 2, 1), favorite: true, text: "Rechnung")
+        document("Plain", date: at(2026, 3, 1), asn: 3)
+        let documents = try allDocuments()
+
+        var filters: [DocumentFilter] = [DocumentFilter()]
+        var byTag = DocumentFilter()
+        byTag.tags = [.init(insurance)]
+        byTag.inbox = true
+        filters.append(byTag)
+        var byYear = DocumentFilter()
+        byYear.dateRange = .thisYear
+        byYear.excludedTags = [.init(insurance)]
+        byYear.sort = .title
+        byYear.ascending = true
+        filters.append(byYear)
+        var byCorrespondent = DocumentFilter()
+        byCorrespondent.correspondents = [.init(telekom), .init(id: UUID(), name: "Gone", key: "gone")]
+        filters.append(byCorrespondent)
+
+        for filter in filters {
+            let view = SavedView(name: "View", filter: filter)
+            context.insert(view)
+            let item = SidebarItem.savedView(view)
+            let filterContext = FilterContext(filter: filter, in: context)
+            for document in documents {
+                #expect(item.includes(document) == filter.matches(document, context: filterContext), "\(document.title)")
+            }
+            #expect(item.visibleDocuments(in: documents, searchText: "", sort: .added).map(\.id)
+                    == filter.apply(to: documents, context: filterContext).map(\.id))
+            let searched = item.visibleDocuments(in: documents, searchText: "Rechnung", sort: .added)
+            #expect(searched.map(\.id) == filter.apply(to: documents, context: filterContext).filter { $0.matches("Rechnung") }.map(\.id))
+        }
+
+        let deleted = SavedView(name: "Deleted")
+        context.insert(deleted)
+        try context.save()
+        MetadataDeletion.delete(deleted, in: context, recorder: nil)
+        try context.save()
+        #expect(documents.allSatisfy { !SidebarItem.savedView(deleted).includes($0) })
+        #expect(SidebarItem.savedView(deleted).visibleDocuments(in: documents, searchText: "", sort: .added).isEmpty)
+    }
+
+    @Test func sidebarCountsMatchTheFilters() throws {
+        let tax = tag("Tax")
+        document("Tax 1", tags: [tax])
+        document("Tax 2", tags: [tax], inbox: true)
+        document("Other", inbox: true)
+        var taxes = DocumentFilter()
+        taxes.tags = [.init(tax)]
+        var inbox = DocumentFilter()
+        inbox.inbox = true
+        let views = [SavedView(name: "Taxes", filter: taxes), SavedView(name: "Inbox", filter: inbox),
+                     SavedView(name: "Everything")]
+        views.forEach(context.insert)
+        let counts = SavedViewMaintenance.counts(of: views, documents: try allDocuments(), tags: [tax],
+                                                 correspondents: [], documentTypes: [], now: now)
+        #expect(views.map { counts[$0.id] } == [2, 2, 3])
+    }
+
+    /// "Duplicate" copies the stored JSON exactly (also a newer version's keys) and adds the copy
+    /// at the end.
+    @Test func duplicateCopiesTheStoredFilter() throws {
+        let view = SavedView(name: "Original", symbol: "star", sortIndex: 3)
+        view.filterJSON = #"{"deadline":{"within":30},"sort":"future"}"#
+        context.insert(view)
+        let other = SavedView(name: "Other", sortIndex: 5)
+        context.insert(other)
+        let copy = SavedViewMaintenance.duplicate(view, among: [view, other], in: context)
+        #expect(copy.filterJSON == view.filterJSON)
+        #expect(copy.symbol == "star")
+        #expect(copy.name == SavedViewMaintenance.copyName(of: view))
+        #expect(copy.id != view.id)
+        #expect(copy.sortIndex == 6)
     }
 
     // MARK: SavedView

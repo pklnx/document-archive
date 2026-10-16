@@ -38,12 +38,28 @@ final class SavedView {
     }
 
     /// The sort menu of a saved view writes here (maintainer decision: a sort change is saved into
-    /// the view). Only a different value is written.
+    /// the view). Choosing a sort replaces a newer version's sort value even when it is the value
+    /// this version fell back to; the record is written only when the JSON changes.
     func setSort(_ sort: DocumentSort, ascending: Bool) {
         var filter = filter
-        guard filter.sort != sort || filter.ascending != ascending else { return }
         filter.sort = sort
         filter.ascending = ascending
         self.filter = filter
+    }
+
+    /// The sort menu's direction choice; the sort itself stays (also a newer version's value).
+    func setAscending(_ ascending: Bool) {
+        var filter = filter
+        filter.ascending = ascending
+        self.filter = filter
+    }
+
+    /// The decoded filter and its `FilterContext` (references resolved in the view's own store).
+    /// `nil` once the view is deleted.
+    @MainActor
+    func filterAndContext(now: Date = Date()) -> (DocumentFilter, FilterContext)? {
+        guard !isDeleted, let modelContext else { return nil }
+        let filter = filter
+        return (filter, FilterContext(filter: filter, in: modelContext, now: now))
     }
 }

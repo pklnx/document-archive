@@ -256,11 +256,15 @@ change. Older app versions ignore the model.
 
 - **Tolerant decoding:** every filter field is decoded on its own. A value
   this version does not know (a newer sort or date range) falls back to the
-  default and is listed in `fallbackKeys`. Writing through `SavedView.filter`
-  keeps keys this version does not know, keeps a fallen-back raw value unless
-  that field was changed, removes the keys of cleared fields, and writes only
-  when the JSON string changes (also for the sort menu: a sort change is saved
-  into the view).
+  default and is listed in `fallbackKeys`. Setting a field removes it from
+  `fallbackKeys` (the user touched it), even when the new value equals the
+  fallback, so "Added" or "Any time" can replace a newer version's value.
+  Writing through `SavedView.filter` keeps keys this version does not know,
+  keeps the raw value of every key still in `fallbackKeys`, removes the keys of
+  cleared fields, and writes only when the JSON string changes (also for the
+  sort menu: a sort change is saved into the view). The editor and the sort
+  menu show a fallen-back value as its own choice ("Set by a newer app
+  version"), so choosing any value is a change.
 - **References** are stored as `{id, name, key}`; `key` is the normalized
   merge key (core name for correspondents, parent path and name for tags). A
   missing id is resolved by key, which also covers merges by older versions.
@@ -271,13 +275,51 @@ change. Older app versions ignore the model.
   (`MetadataMaintenance.didMerge`) and rewrites references to the keeper.
 - A tag criterion includes the tag's subtree when `includeSubTags` is on; the
   same switch makes excluding a parent exclude its children.
-- Absolute date ranges are calendar days (`"2026-01-01"`), compared by day in
-  the device's calendar, both bounds inclusive.
-- `FilterContext` (references resolved, subtrees, `now`) is built once per
-  view; `DocumentFilter.apply` filters the list it is given (after any central
-  exclusion) and sorts with `DocumentSort.sort(_:ascending:)`, the same sort
-  the sidebar lists use. Decoded filters are cached by their JSON string.
+- **Days** are always counted in the Gregorian calendar in the device's time
+  zone (`DocumentFilter.dayCalendar`), also on a device set to the Japanese or
+  Buddhist calendar, so `"2026-01-01"` and `year(2026)` mean the same dates
+  everywhere. A document's day is the day its date falls on in the device's
+  time zone. Absolute ranges are stored as such days (`"2026-01-01"`).
+- **Date ranges**, all bounds inclusive, "today" being the day of `now`:
+
+  | Range | First day | Last day |
+  |---|---|---|
+  | `absolute(from:to:)` | `from` (open if missing) | `to` (open if missing) |
+  | `thisYear` | 1 January of today's year | 31 December of today's year |
+  | `lastYear` | 1 January of the previous year | 31 December of the previous year |
+  | `year(n)` | 1 January n | 31 December n |
+  | `last30Days` | today − 29 days | today |
+  | `last12Months` | the day after the same day 12 months ago | today |
+
+  So a document dated in the future is outside `last30Days` and
+  `last12Months`, but inside `thisYear` while it is in this year.
+- `FilterContext` (references resolved, subtrees, `now`, the date bounds) is
+  built once per view and render; it fetches only the kinds (tags,
+  correspondents, types) the filter refers to, and the sidebar passes its
+  `@Query` arrays instead. `DocumentFilter.apply` filters the list it is given
+  (after any central exclusion) and sorts with `DocumentSort.sort(_:ascending:)`,
+  the same sort the sidebar lists use. Decoded filters are cached by their JSON
+  string.
 - Order: `sortIndex`, then `createdAt`, then `id`; reordering renumbers 0…n.
+- **Sidebar:** a "Views" section after "Library" (`SidebarItem.savedView`),
+  with counts in one pass per view (`SavedViewMaintenance.counts`). The header
+  has "+" (new view) and a menu with "Manage Views…"; a row's context menu
+  has "Edit…", "Duplicate" (an exact copy of the stored JSON) and "Delete"
+  (`MetadataDeletion`). macOS reorders by dragging in the sidebar; iPhone and
+  iPad reorder, rename and delete in the "Manage Views" sheet
+  (`SavedViewsManager`), because edit mode would turn the sidebar into a
+  multi-selection.
+- **Editor** (`SavedViewEditor`): a popover on macOS and iPad, a sheet on
+  iPhone (`presentationCompactAdaptation(.sheet)`), with a `NavigationStack`
+  for the multi-select lists (`ReferencePicker`) and a live count. References
+  that resolve by key are shown as the live object; unresolved ones are listed
+  as "(deleted)" with a button that removes them.
+- **List:** a saved view's list uses the view's sort; the sort menu writes into
+  the view (with a direction), the search field narrows it further, and a
+  banner with "Edit View" appears while a reference cannot be resolved. Other
+  lists offer "Save as View…" (also ⌥⌘S), which fills the editor from the list
+  (inbox, favorites, recently added as `createdAt` in the last 30 days, type,
+  correspondent, tag with its nested tags), the search text and the sort.
 
 ### Copy in a folder (#8)
 

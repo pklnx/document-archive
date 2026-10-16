@@ -30,6 +30,12 @@ import Testing
         let auto = try #require(golf.parent)
         #expect(Set(SidebarItem.tag(auto).visibleDocuments(in: documents, searchText: "", sort: .added).map(\.title))
                 == ["Car insurance", "Golf inspection"])
+        // A saved view (#14) for the UI test: the "Tax" documents, by title.
+        let views = try context.fetch(FetchDescriptor<SavedView>())
+        #expect(views.map(\.name) == [UITestSeed.savedViewName])
+        let taxes = try #require(views.first)
+        #expect(SidebarItem.savedView(taxes).visibleDocuments(in: documents, searchText: "", sort: .added).map(\.title)
+                == ["Electricity bill March", "Medical invoice"])
     }
 
     @Test func seededChoiceFillsTheInMemoryStore() throws {

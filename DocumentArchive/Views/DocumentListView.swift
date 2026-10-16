@@ -12,6 +12,11 @@ extension SidebarItem {
                 .flatMap { $0 }
                 .filter { $0.matches(searchText) }
         }
+        if case .savedView(let view) = self {
+            // The view's own sort (saved into the view); the search field narrows it further.
+            guard let (filter, context) = view.filterAndContext() else { return [] }
+            return filter.apply(to: allDocuments.filter { $0.matches(searchText) }, context: context)
+        }
         let includes = documentFilter()
         let filtered = allDocuments.filter { includes($0) && $0.matches(searchText) }
         return sort.sort(filtered, ascending: sort.defaultAscending)
@@ -40,6 +45,11 @@ struct DocumentListView<ImportMenu: View>: View {
     /// Regular width: a chip selects its tag in the sidebar. `nil` (iPhone): chips are
     /// `NavigationLink(value: Tag)`, pushed by the content column's `NavigationStack`.
     var openSubfolder: ((Tag) -> Void)?
+    /// The saved view editor of the list in front (#14): "Save as View…" (also ⌥⌘S), "Edit
+    /// View…" and the banner. `nil` for lists behind it (iPhone's stack).
+    var viewEditor: Binding<SavedViewEditorTarget?>?
+    /// A view was saved in the editor: show it.
+    var openView: (SavedView) -> Void = { _ in }
 
     @AppStorage("documentSort") private var sort: DocumentSort = .added
     @State private var isDropTargeted = false
@@ -50,6 +60,10 @@ struct DocumentListView<ImportMenu: View>: View {
 
     var body: some View {
         List(selection: $selection) {
+            if let view = unresolvedView {
+                UnresolvedReferencesBanner { viewEditor?.wrappedValue = .edit(view) }
+                    .listRowSeparator(.hidden)
+            }
             // A row without a selection tag: never selected, scrolls with the list, so the large
             // title stays visible above it.
             if !subfolders.isEmpty, !isEditing {
@@ -211,14 +225,19 @@ struct DocumentListView<ImportMenu: View>: View {
         }
         if !isEditing {
             ToolbarItem {
+                // One menu for the sort and "Save as View…", so narrow columns (iPad) keep their
+                // buttons in the toolbar. The editor points at this menu.
                 Menu {
-                    Picker("Sort by", selection: $sort) {
-                        ForEach(DocumentSort.allCases) { Text($0.label).tag($0) }
+                    sortMenu
+                    if filter != .duplicates, let viewEditor {
+                        Divider()
+                        savedViewButton(viewEditor)
                     }
-                    .pickerStyle(.inline)
                 } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down")
+                    Label("Sort and Views", systemImage: "arrow.up.arrow.down")
                 }
+                .accessibilityIdentifier(AccessibilityID.listOptions)
+                .savedViewEditor(item: viewEditor ?? .constant(nil), onSave: openView)
             }
         }
         #if os(iOS)
@@ -229,6 +248,66 @@ struct DocumentListView<ImportMenu: View>: View {
             }
         }
         #endif
+    }
+
+    /// The sidebar lists share one sort setting; a saved view's sort is saved into the view
+    /// (maintainer decision), with its direction.
+    @ViewBuilder
+    private var sortMenu: some View {
+        if case .savedView(let view) = filter, !view.isDeleted, view.modelContext != nil {
+            let fellBack = view.filter.fallbackKeys
+            Picker("Sort by", selection: Binding<DocumentSort?> {
+                fellBack.contains("sort") ? nil : view.filter.sort
+            } set: { sort in
+                guard let sort else { return }
+                view.setSort(sort, ascending: sort.defaultAscending)
+                try? context.save()
+            }) {
+                SavedViewEditor.fallbackChoice(DocumentSort.self, shown: fellBack.contains("sort"))
+                ForEach(DocumentSort.allCases) { Text($0.label).tag(DocumentSort?.some($0)) }
+            }
+            .pickerStyle(.inline)
+            Picker("Order", selection: Binding<Bool?> {
+                fellBack.contains("ascending") ? nil : view.filter.ascending
+            } set: { ascending in
+                guard let ascending else { return }
+                view.setAscending(ascending)
+                try? context.save()
+            }) {
+                SavedViewEditor.fallbackChoice(Bool.self, shown: fellBack.contains("ascending"))
+                Text("Ascending").tag(Bool?.some(true))
+                Text("Descending").tag(Bool?.some(false))
+            }
+            .pickerStyle(.inline)
+        } else {
+            Picker("Sort by", selection: $sort) {
+                ForEach(DocumentSort.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.inline)
+        }
+    }
+
+    /// "Edit View…" for a saved view, otherwise "Save as View…" filled from this list, its search
+    /// and sort.
+    @ViewBuilder
+    private func savedViewButton(_ viewEditor: Binding<SavedViewEditorTarget?>) -> some View {
+        if case .savedView(let view) = filter {
+            Button("Edit View…", systemImage: "slider.horizontal.3") { viewEditor.wrappedValue = .edit(view) }
+                .accessibilityIdentifier(AccessibilityID.editView)
+        } else {
+            Button("Save as View…", systemImage: "rectangle.stack.badge.plus") {
+                let prefill = filter.savedViewPrefill(searchText: searchText, sort: sort)
+                viewEditor.wrappedValue = .new(name: prefill.name, filter: prefill.filter)
+            }
+            .accessibilityIdentifier(AccessibilityID.saveAsView)
+        }
+    }
+
+    /// The saved view in front when it refers to items that no longer exist (banner).
+    private var unresolvedView: SavedView? {
+        guard case .savedView(let view) = filter, viewEditor != nil,
+              let (_, filterContext) = view.filterAndContext(), filterContext.hasUnresolvedReferences else { return nil }
+        return view
     }
 
     private var isEditing: Bool {
@@ -255,6 +334,9 @@ struct DocumentListView<ImportMenu: View>: View {
         } else if filter == .duplicates {
             ContentUnavailableView("No Duplicates", systemImage: "checkmark.circle",
                                    description: Text("Every file is in your archive only once."))
+        } else if case .savedView = filter {
+            ContentUnavailableView("No Matching Documents", systemImage: SavedView.defaultSymbol,
+                                   description: Text("No document matches the criteria of this view."))
         } else if filter == .inbox {
             ContentUnavailableView("Inbox Empty", systemImage: "tray",
                                    description: Text("New documents appear here until you mark them as done."))
@@ -358,6 +440,28 @@ struct DocumentRow: View {
         if let correspondent = document.correspondent { parts.append(correspondent.name) }
         if let type = document.documentType { parts.append(type.name) }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// "This view refers to deleted items – Edit View" above a saved view's documents (#14): a
+/// reference that cannot be resolved makes its criterion match nothing, never more.
+struct UnresolvedReferencesBanner: View {
+    let edit: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            Text("This view refers to deleted items, so it may show fewer documents.")
+                .font(.callout)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Edit View", action: edit)
+                .buttonStyle(.borderless)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(AccessibilityID.unresolvedBanner)
     }
 }
 
