@@ -117,6 +117,7 @@ extension GlobalStateTests {
             #expect(try documents().isEmpty)
         }
 
+        #if os(iOS)
         /// iOS copies files from Mail and "Copy to …" into `Documents/Inbox`; the app owns these
         /// copies and removes them, also when the file was a duplicate. A file opened in place
         /// (Files) belongs to the user and stays.
@@ -142,5 +143,26 @@ extension GlobalStateTests {
             #expect(!FileManager.default.fileExists(atPath: duplicateCopy.path(percentEncoded: false)))
             #expect(FileManager.default.fileExists(atPath: inbox.path(percentEncoded: false)), "only the file is removed")
         }
+        #else
+        /// The Mac build is not sandboxed: `Documents/Inbox` is the user's own folder, so a file
+        /// opened from there with "Open with" stays, also when it was a duplicate.
+        @Test func filesInAnInboxFolderAreKeptOnTheMac() async throws {
+            let opened = try writePDF("Rechnung.pdf", in: inbox, lines: ["Rechnung"])
+            let data = try Data(contentsOf: opened)
+            let externalImport = makeImport()
+
+            externalImport.receive([opened], origin: .openWith)
+            let result = try #require(externalImport.takeResult())
+            try await TestSupport.waitUntilProcessed(result.imported)
+            #expect(result.imported.count == 1)
+            #expect(FileManager.default.fileExists(atPath: opened.path(percentEncoded: false)))
+
+            let duplicate = inbox.appending(path: "Rechnung 2.pdf")
+            try data.write(to: duplicate)
+            externalImport.receive([duplicate], origin: .openWith)
+            #expect(externalImport.takeResult()?.duplicates.count == 1)
+            #expect(FileManager.default.fileExists(atPath: duplicate.path(percentEncoded: false)))
+        }
+        #endif
     }
 }

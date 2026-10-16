@@ -231,7 +231,9 @@ other URL kinds (#15) are added as branches there, never as a second
 `Config/Info-iOS.plist`, role `Viewer`, rank `Alternate`, so it never becomes
 the default viewer). On iOS, `LSSupportsOpeningDocumentsInPlace` makes Files
 hand over the file itself; copies the system puts into `Documents/Inbox`
-(Mail, "Copy to …") are removed after the import. Files opened before a
+(Mail, "Copy to …") are removed after the import. On the Mac nothing is
+removed: the build is not sandboxed, so `~/Documents/Inbox` is the user's own
+folder. Files opened before a
 window exists wait in `ExternalImport` until `ContentView` hands over the
 `ModelContext`.
 

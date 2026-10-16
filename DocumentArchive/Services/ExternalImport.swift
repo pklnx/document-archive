@@ -31,7 +31,8 @@ final class ExternalImport {
 
     /// Where iOS puts copies of files handed over by other apps ("Copy to …", Mail attachments).
     /// The app owns these copies and removes them after the import; files opened in place
-    /// (Files) stay where they are.
+    /// (Files) stay where they are. Only used on iOS and iPadOS: the Mac build is not sandboxed,
+    /// so there `Documents/Inbox` is a folder of the user's that is never touched.
     let inboxFolder: URL
 
     init(inboxFolder: URL = URL.documentsDirectory.appending(path: "Inbox", directoryHint: .isDirectory)) {
@@ -47,7 +48,9 @@ final class ExternalImport {
         switch origin {
         case .openWith:
             let result = DocumentImporter.importFiles(urls, into: context)
+            #if os(iOS)
             removeInboxCopies(urls)
+            #endif
             guard !result.isEmpty else { return }
             if pendingResult == nil {
                 pendingResult = result
@@ -72,6 +75,7 @@ final class ExternalImport {
         }
     }
 
+    #if os(iOS)
     private func removeInboxCopies(_ urls: [URL]) {
         let inbox = Self.normalizedPath(inboxFolder)
         for url in urls where url.isFileURL {
@@ -87,4 +91,5 @@ final class ExternalImport {
         while path.count > 1, path.hasSuffix("/") { path.removeLast() }
         return path
     }
+    #endif
 }
