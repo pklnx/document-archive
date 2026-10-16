@@ -79,6 +79,9 @@ never see the real archive and never call Mistral. Rules:
 - Extra sample data goes into `UITestSeed`, not into a new launch argument.
 - Alerts and dialogs use real bindings (`Binding(presenting:)`), never
   `.constant(…)`: the system dismisses them by setting the binding to `false`.
+- `SmokeTests.launchApp()` launches once more when the first launch fails or
+  shows neither the list nor the sidebar (slow CI runners); wait for an
+  element before using it instead of adding sleeps.
 
 CI runs them as `test (iOS UI, iphone)` and `test (iOS UI, ipad)`. These checks
 are not required yet; they become required after a week without flaky runs.
@@ -145,6 +148,10 @@ platform. Check every new or changed screen against this list:
 - **Contrast:** text 4.5:1, borders and other non-text parts 3:1, in light and
   dark mode. Colors chosen by the user (tags) go through `ColorContrast`
   before they are used for text. Never use color alone to carry meaning.
+  Text on a list row must also be readable when the row is selected (accent
+  color on iPad and in a focused macOS list, grey in iPhone edit mode and an
+  unfocused macOS list); `backgroundProminence` does not tell these apart
+  reliably, so tag chips use an opaque fill.
 - **Changes the user does not trigger** (processing finished) are announced
   with `AccessibilityNotification.Announcement` when they matter on the screen
   in front of the user.

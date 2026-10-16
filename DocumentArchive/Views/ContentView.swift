@@ -187,6 +187,11 @@ struct ContentView: View {
             prune(keepingOpen: false)
         }
         #if os(iOS)
+        .onChange(of: editMode.isEditing) { _, isEditing in
+            guard isEditing else { return }
+            let pruned = DocumentSelection.enteringEditMode(selection, visible: visibleDocuments)
+            if pruned != selection { selection = pruned }
+        }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
         .onChange(of: openDocumentID) {
             guard horizontalSizeClass == .regular, !editMode.isEditing else { return }
@@ -298,7 +303,8 @@ struct ContentView: View {
                 bringOpenDocumentToFront()
             }
             #endif
-            selection = newSelection
+            // Adding rows to a hidden open document must not keep it in the bulk selection.
+            selection = DocumentSelection.fromList(newSelection, visible: visibleDocuments)
         }
     }
 

@@ -421,23 +421,21 @@ struct TagChip: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-    /// `.increased` on a selected row, which is drawn in the accent color.
-    @Environment(\.backgroundProminence) private var backgroundProminence
 
     var body: some View {
         let dark = colorScheme == .dark
-        let selected = backgroundProminence == .increased
         Text(tag.name)
             .font(compact ? .caption2.weight(.medium) : .caption.weight(.medium))
             .padding(.horizontal, compact ? 6 : 8)
             .padding(.vertical, compact ? 2 : 4)
-            .background(tag.color.opacity(ColorContrast.chipBackgroundOpacity), in: Capsule())
+            // Opaque, so the chip reads the same on a selected row (accent or grey) as on a normal one.
+            .background(Color(ColorContrast.chipBackground(tagHex: tag.colorHex, dark: dark)), in: Capsule())
             // The tag color itself is too light for small text (yellow, teal); this one is
             // adjusted to 4.5:1 on the chip background.
-            .foregroundStyle(Color(ColorContrast.chipText(tagHex: tag.colorHex, dark: dark, selected: selected)))
+            .foregroundStyle(Color(ColorContrast.chipText(tagHex: tag.colorHex, dark: dark)))
             .overlay {
                 if colorSchemeContrast == .increased {
-                    Capsule().strokeBorder(Color(ColorContrast.chipBorder(tagHex: tag.colorHex, dark: dark, selected: selected)), lineWidth: 1)
+                    Capsule().strokeBorder(Color(ColorContrast.chipBorder(tagHex: tag.colorHex, dark: dark)), lineWidth: 1)
                 }
             }
     }
