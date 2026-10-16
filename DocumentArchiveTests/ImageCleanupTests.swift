@@ -23,6 +23,15 @@ import Vision
         return width / height
     }
 
+    /// Whether R, G and B agree (± 2) in every pixel of RGBA bytes.
+    static func isGray(_ pixels: [UInt8]) -> Bool {
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            let red = Int(pixels[index]), green = Int(pixels[index + 1]), blue = Int(pixels[index + 2])
+            if abs(red - green) > 2 || abs(green - blue) > 2 { return false }
+        }
+        return true
+    }
+
     static func aspect(_ image: CGImage) -> Double { Double(image.width) / Double(image.height) }
 
     // 1
@@ -130,9 +139,7 @@ import Vision
 
         let gray = try #require(ImageCleanup.apply(CleanupSettings(filter: .grayscale), to: photo))
         let grayPixels = TestSupport.pixels(of: gray)
-        #expect(stride(from: 0, to: grayPixels.count, by: 4).allSatisfy {
-            abs(Int(grayPixels[$0]) - Int(grayPixels[$0 + 1])) <= 2 && abs(Int(grayPixels[$0 + 1]) - Int(grayPixels[$0 + 2])) <= 2
-        })
+        #expect(Self.isGray(grayPixels))
 
         let blackAndWhite = try #require(ImageCleanup.apply(CleanupSettings(filter: .blackAndWhite), to: photo))
         let bwPixels = TestSupport.pixels(of: blackAndWhite)
