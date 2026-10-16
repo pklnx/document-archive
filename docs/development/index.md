@@ -313,17 +313,23 @@ default.
 
 - **Which PDFs:** scans and photos (the app built them) always; PDFs imported from
   elsewhere only when every page is image-only and none of the skip rules applies
-  (encrypted or locked, `/AcroForm`, `/Perms`, `/Outlines`, embedded files, XMP
-  conformance such as PDF/A or PDF/X, annotations, and images filtered with
+  (encrypted or locked, `/AcroForm`, `/Perms`, `/Outlines`, `/StructTreeRoot`,
+  `/OCProperties`, `/PageLabels`, embedded files, XMP conformance such as PDF/A or
+  PDF/X, annotations, and images filtered with
   CCITT, JBIG2 or JPEG 2000, also inside nested Form XObjects). Anything that cannot
   be read counts as "skip". Mixed PDFs are skipped. A page needs a layer when it
   has fewer than 15 characters of text, so a second run does nothing. Pages beyond
   the OCR limit (40) stay image-only.
 - **Geometry:** every page is rewritten in its displayed geometry (crop box,
   rotation baked into the content), and Vision reads the same upright rendering.
-- **Check before replacing:** `TextLayer.verify` (same page count, every page
-  renders within a pixel tolerance of the original, at most 10 % + 20 KB larger);
-  otherwise the old PDF stays and the processing note says so.
+- **Check before replacing:** `TextLayer.check` (same page count, every page
+  renders within a pixel tolerance of the original, as a whole and in every tile of
+  a 16 × 16 grid so a lost stamp is caught, at most 10 % + 20 KB larger); otherwise
+  the old PDF stays and the processing note says why.
+- **Words** are written as one glyph run each at the font's own advance widths,
+  stretched only through the text matrix. Core Text's line drawing added character
+  spacing and per-glyph adjustments, which PDFKit on macOS/iOS 26 extracted as
+  spaces inside words.
 - **Writing back:** `DocumentImporter.replacePDF` replaces `pdfData` only when the
   stored bytes are still the analyzed ones (a sync or edit during the analysis
   wins), then calls `touch()` for the folder copy. `contentHash` stays the hash of

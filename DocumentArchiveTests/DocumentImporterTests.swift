@@ -223,14 +223,15 @@ extension GlobalStateTests {
 
         // 8
         @Test func rewriteThatFailsTheCheckKeepsTheOriginal() async throws {
-            TextLayer.rewriteHookForTesting = { data in
-                // Drops the last page, so the page count no longer matches.
-                let pdf = PDFDocument(data: data)!
+            let scan = TestSupport.scanPDF(pages: [Self.letter, ["Seite zwei Kontoauszug"]])
+            TextLayer.rewriteHookForTesting = { analyzed, rewritten in
+                // Only this test's document: drops the last page, so the page count no longer matches.
+                guard analyzed == scan else { return rewritten }
+                let pdf = PDFDocument(data: rewritten)!
                 pdf.removePage(at: pdf.pageCount - 1)
                 return pdf.dataRepresentation()!
             }
             defer { TextLayer.rewriteHookForTesting = nil }
-            let scan = TestSupport.scanPDF(pages: [Self.letter, ["Seite zwei Kontoauszug"]])
             let document = try imported(try DocumentImporter.importFile(data: scan, name: "Scan.pdf", into: context))
             try await TestSupport.waitUntilProcessed([document])
 

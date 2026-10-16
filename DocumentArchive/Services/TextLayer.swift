@@ -47,8 +47,12 @@ enum TextLayer {
     static var isEnabled: Bool { isEnabledProvider() }
 
     /// Test seam: changes a rewritten PDF before it is verified, so tests can force a rewrite
-    /// that fails the check. Always `nil` in the app.
-    nonisolated(unsafe) static var rewriteHookForTesting: (@Sendable (Data) -> Data)?
+    /// that fails the check. It receives the analyzed and the rewritten data, so a test changes
+    /// only its own document. Read on the main actor by `DocumentImporter.processAndWait`, which
+    /// passes it to `DocumentProcessor.analyze`; always `nil` in the app.
+    nonisolated(unsafe) static var rewriteHookForTesting: RewriteHook?
+
+    typealias RewriteHook = @Sendable (_ analyzed: Data, _ rewritten: Data) -> Data
 
     // MARK: Which pages and PDFs
 
@@ -94,7 +98,8 @@ enum TextLayer {
     }
 
     /// Conformance declarations in XMP metadata that a rewrite would no longer meet.
-    private static let conformanceMarkers = ["pdfaid", "pdfxid", "pdfx:", "pdfuaid", "pdfeid", "pdfvtid"]
+    /// (`pdfx:` alone is not one: Adobe's custom-properties namespace uses that prefix too.)
+    private static let conformanceMarkers = ["pdfaid", "pdfxid", "gts_pdfxversion", "pdfuaid", "pdfeid", "pdfvtid"]
 
     /// Image filters Quartz may decode and re-encode (growing the file or changing the image).
     private static let riskyFilters: Set<String> = ["CCITTFaxDecode", "CCF", "JBIG2Decode", "JPXDecode"]
@@ -102,6 +107,8 @@ enum TextLayer {
     private static func catalogHasSkippedContent(_ catalog: CGPDFDictionaryRef) -> Bool {
         // Forms and signature fields (/AcroForm, /SigFlags), signature permissions, an outline
         if has(catalog, "AcroForm") || has(catalog, "Perms") || has(catalog, "Outlines") { return true }
+        // Structure (tagged PDF), optional content and page labels: a rewrite would drop them.
+        if has(catalog, "StructTreeRoot") || has(catalog, "OCProperties") || has(catalog, "PageLabels") { return true }
         // Embedded files
         if let names = dictionary(catalog, "Names"), has(names, "EmbeddedFiles") { return true }
         // XMP metadata declaring a conformance
@@ -305,26 +312,80 @@ enum TextLayer {
     }
 
     /// Draws one word so that its glyph run covers the word's box: the font size follows the
-    /// box height, a horizontal scale makes the run as wide as the box. Quartz embeds a subset of
-    /// the font with a `ToUnicode` map, so copied text (umlauts included) pastes correctly.
+    /// box height, a horizontal scale in the text matrix (`Tm`) makes the run as wide as the box.
+    ///
+    /// The glyphs are placed at the font's own advance widths, so Quartz writes the word as one
+    /// show operation without character spacing (`Tc`) or per-glyph adjustments. Core Text's
+    /// size-dependent tracking would add those, and older PDFKit versions (macOS 26) then read
+    /// gaps *inside* words as spaces ("G rü ß e"). Quartz embeds a subset of the font with a
+    /// `ToUnicode` map, so copied text (umlauts included) pastes correctly.
     private static func draw(_ word: RecognizedWord, in context: CGContext) {
         let box = word.box
-        guard !word.text.isEmpty, box.width > 0.5, box.height > 0.5 else { return }
+        let text = word.text.precomposedStringWithCanonicalMapping
+        guard !text.isEmpty, box.width > 0.5, box.height > 0.5 else { return }
         let font = CTFontCreateWithName("Helvetica" as CFString, box.height, nil)
-        let attributes = [NSAttributedString.Key(kCTFontAttributeName as String): font]
-        let width = CTLineGetTypographicBounds(
-            CTLineCreateWithAttributedString(NSAttributedString(string: word.text, attributes: attributes)), nil, nil, nil)
-        guard width > 0 else { return }
-        // The space (if any) is drawn after the box, into the gap before the next word.
-        let line = CTLineCreateWithAttributedString(NSAttributedString(
-            string: word.spaceAfter ? word.text + " " : word.text, attributes: attributes))
         let descent = CTFontGetDescent(font)
         let ascent = CTFontGetAscent(font)
         // Center the font's ascent + descent vertically in the box.
         let baseline = box.minY + descent + (box.height - ascent - descent) / 2
+        // The space (if any) is drawn after the box, into the gap before the next word.
+        let run = word.spaceAfter ? text + " " : text
+        guard let glyphRun = GlyphRun(run, font: font, wordLength: text.utf16.count) else {
+            // Characters Helvetica does not have: Core Text picks a fallback font.
+            drawWithCoreText(run, word: text, font: font, box: box, baseline: baseline, in: context)
+            return
+        }
+        context.setFont(glyphRun.font)
+        context.setFontSize(box.height)
+        context.textMatrix = CGAffineTransform(scaleX: box.width / glyphRun.wordWidth, y: 1)
+        context.textPosition = CGPoint(x: box.minX, y: baseline)
+        context.showGlyphs(glyphRun.glyphs, at: glyphRun.positions)
+    }
+
+    /// The glyphs of a word in one font, placed at the font's advance widths (text space).
+    private struct GlyphRun {
+        let font: CGFont
+        let glyphs: [CGGlyph]
+        let positions: [CGPoint]
+        /// Width of the word without a trailing space, in text space.
+        let wordWidth: CGFloat
+
+        /// `nil` when the font lacks a glyph for one of the characters.
+        init?(_ text: String, font ctFont: CTFont, wordLength: Int) {
+            let characters = Array(text.utf16)
+            var glyphs = [CGGlyph](repeating: 0, count: characters.count)
+            guard CTFontGetGlyphsForCharacters(ctFont, characters, &glyphs, characters.count),
+                  !glyphs.contains(0)
+            else { return nil }
+            let font = CTFontCopyGraphicsFont(ctFont, nil)
+            var advances = [Int32](repeating: 0, count: glyphs.count)
+            guard font.getGlyphAdvances(glyphs: glyphs, count: glyphs.count, advances: &advances) else { return nil }
+            let scale = CTFontGetSize(ctFont) / CGFloat(max(font.unitsPerEm, 1))
+            var x: CGFloat = 0
+            var positions: [CGPoint] = []
+            var wordWidth: CGFloat = 0
+            for (index, advance) in advances.enumerated() {
+                positions.append(CGPoint(x: x, y: 0))
+                x += CGFloat(advance) * scale
+                if index == wordLength - 1 { wordWidth = x }
+            }
+            guard wordWidth > 0 else { return nil }
+            self.font = font
+            self.glyphs = glyphs
+            self.positions = positions
+            self.wordWidth = wordWidth
+        }
+    }
+
+    private static func drawWithCoreText(_ run: String, word: String, font: CTFont, box: CGRect, baseline: CGFloat,
+                                         in context: CGContext) {
+        let attributes = [NSAttributedString.Key(kCTFontAttributeName as String): font]
+        let width = CTLineGetTypographicBounds(
+            CTLineCreateWithAttributedString(NSAttributedString(string: word, attributes: attributes)), nil, nil, nil)
+        guard width > 0 else { return }
         context.textMatrix = CGAffineTransform(scaleX: box.width / width, y: 1)
         context.textPosition = CGPoint(x: box.minX, y: baseline)
-        CTLineDraw(line, context)
+        CTLineDraw(CTLineCreateWithAttributedString(NSAttributedString(string: run, attributes: attributes)), context)
     }
 
     /// Title, author, subject and keywords of the original, plus the creator marker.
@@ -347,43 +408,85 @@ enum TextLayer {
 
     // MARK: Verification
 
-    /// The largest mean difference per color channel (0–255) between a page before and after the
-    /// rewrite. The invisible text adds nothing visible, so real rewrites stay far below.
+    /// The largest mean difference per color channel (0–255) over a whole page before and after
+    /// the rewrite. The invisible text adds nothing visible, so real rewrites stay far below.
     static let maxMeanPixelDifference = 2.5
+    /// The largest mean difference within one tile of a `tileGrid` × `tileGrid` grid, so a local
+    /// change (a lost stamp or signature on a few percent of the page) fails the check although
+    /// the page as a whole barely changes.
+    static let maxTilePixelDifference = 12.0
+    static let tileGrid = 16
+
+    /// The outcome of the check before a rewrite replaces the stored PDF.
+    enum Verification: Equatable {
+        case passed
+        /// More than 10 % + 20 KB larger than the original.
+        case tooLarge
+        /// The rewritten PDF (or the original) cannot be opened or rendered.
+        case unreadable
+        case pageCountChanged
+        /// A page looks different (whole page or one tile beyond the tolerance).
+        case looksDifferent
+    }
 
     /// Checked before a rewrite replaces the stored PDF: it opens, has the same page count, every
-    /// page looks the same (rendered at 480 px) and it is at most 10 % + 20 KB larger.
-    static func verify(original: Data, rewritten: Data) -> Bool {
-        guard rewritten.count <= maxRewrittenSize(for: original.count),
-              let before = PDFDocument(data: original), let after = PDFDocument(data: rewritten),
-              before.pageCount == after.pageCount, before.pageCount > 0
-        else { return false }
+    /// page looks the same (rendered at 480 px, as a whole and per tile) and it is at most
+    /// 10 % + 20 KB larger.
+    static func check(original: Data, rewritten: Data) -> Verification {
+        guard rewritten.count <= maxRewrittenSize(for: original.count) else { return .tooLarge }
+        guard let before = PDFDocument(data: original), let after = PDFDocument(data: rewritten),
+              before.pageCount > 0
+        else { return .unreadable }
+        guard before.pageCount == after.pageCount else { return .pageCountChanged }
         for index in 0..<before.pageCount {
             guard let old = before.page(at: index), let new = after.page(at: index),
-                  let difference = pixelDifference(old, new),
-                  difference <= maxMeanPixelDifference
-            else { return false }
+                  let difference = pixelDifference(old, new)
+            else { return .looksDifferent }
+            if difference.mean > maxMeanPixelDifference || difference.maxTile > maxTilePixelDifference {
+                return .looksDifferent
+            }
         }
-        return true
+        return .passed
+    }
+
+    static func verify(original: Data, rewritten: Data) -> Bool {
+        check(original: original, rewritten: rewritten) == .passed
     }
 
     static func maxRewrittenSize(for originalSize: Int) -> Int {
         originalSize + originalSize / 10 + 20_000
     }
 
-    /// Mean difference per color channel between two pages rendered at `size` pixels;
-    /// `nil` when they cannot be rendered or have different dimensions.
-    static func pixelDifference(_ first: PDFPage, _ second: PDFPage, size: CGFloat = 480) -> Double? {
+    /// Mean difference per color channel between two pages rendered at `size` pixels, over the
+    /// whole page and the largest over the tiles of a `tileGrid` grid; `nil` when they cannot be
+    /// rendered or have different dimensions.
+    static func pixelDifference(_ first: PDFPage, _ second: PDFPage,
+                                size: CGFloat = 480) -> (mean: Double, maxTile: Double)? {
         guard let a = DocumentProcessor.render(first, maxPixelSize: size),
               let b = DocumentProcessor.render(second, maxPixelSize: size),
-              a.width == b.width, a.height == b.height,
+              a.width == b.width, a.height == b.height, a.width > 0, a.height > 0,
               let pixelsA = rgbaPixels(a), let pixelsB = rgbaPixels(b)
         else { return nil }
+        let width = a.width, height = a.height
+        let columns = min(tileGrid, width), rows = min(tileGrid, height)
+        var tileTotals = [Int](repeating: 0, count: columns * rows)
+        var tileCounts = [Int](repeating: 0, count: columns * rows)
         var total = 0
-        for index in pixelsA.indices where index % 4 != 3 {
-            total += abs(Int(pixelsA[index]) - Int(pixelsB[index]))
+        for y in 0..<height {
+            let row = y * rows / height
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let difference = abs(Int(pixelsA[offset]) - Int(pixelsB[offset]))
+                    + abs(Int(pixelsA[offset + 1]) - Int(pixelsB[offset + 1]))
+                    + abs(Int(pixelsA[offset + 2]) - Int(pixelsB[offset + 2]))
+                total += difference
+                let tile = row * columns + x * columns / width
+                tileTotals[tile] += difference
+                tileCounts[tile] += 3
+            }
         }
-        return Double(total) / Double(a.width * a.height * 3)
+        let maxTile = zip(tileTotals, tileCounts).map { $1 > 0 ? Double($0) / Double($1) : 0 }.max() ?? 0
+        return (Double(total) / Double(width * height * 3), maxTile)
     }
 
     private static func rgbaPixels(_ image: CGImage) -> [UInt8]? {

@@ -2791,6 +2791,16 @@
         }
       }
     },
+    "Text layer skipped: the result would be too large.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Textebene übersprungen: Das Ergebnis wäre zu groß."
+          }
+        }
+      }
+    },
     "Text recognition": {
       "localizations": {
         "de": {

@@ -26,8 +26,10 @@ enum DocumentProcessor {
     /// - Parameter textLayerSource: The document's source when a text layer should be added
     ///   (the setting is on); `nil` never rewrites the PDF. The layer always comes from Vision on
     ///   the device, also when the text comes from Mistral.
+    /// - Parameter rewriteHook: Test seam (`TextLayer.rewriteHookForTesting`); `nil` in the app.
     static func analyze(_ pdfData: Data, mistral: MistralConfig? = nil,
-                        textLayerSource: DocumentSource? = nil) async -> Result {
+                        textLayerSource: DocumentSource? = nil,
+                        rewriteHook: TextLayer.RewriteHook? = nil) async -> Result {
         guard let pdf = PDFDocument(data: pdfData) else {
             return Result(pageCount: 0, thumbnail: nil, text: "", textSource: "", note: String(localized: "The PDF could not be read."))
         }
@@ -71,7 +73,8 @@ enum DocumentProcessor {
 
         var searchablePDF: Data?
         if let textLayerSource {
-            let layer = await textLayer(for: pdfData, pdf: pdf, source: textLayerSource, recognition: &recognition)
+            let layer = await textLayer(for: pdfData, pdf: pdf, source: textLayerSource,
+                                        recognition: &recognition, rewriteHook: rewriteHook)
             searchablePDF = layer.data
             if let note = layer.note { notes.append(note) }
         }
@@ -82,7 +85,8 @@ enum DocumentProcessor {
     /// Builds and verifies the PDF with a text layer. `data` is `nil` when the PDF does not
     /// qualify, has no page that needs a layer, no words were found, or the check failed.
     private static func textLayer(for pdfData: Data, pdf: PDFDocument, source: DocumentSource,
-                                  recognition: inout PageRecognition) async -> (data: Data?, note: String?) {
+                                  recognition: inout PageRecognition,
+                                  rewriteHook: TextLayer.RewriteHook?) async -> (data: Data?, note: String?) {
         guard TextLayer.qualifies(pdf, source: source) else { return (nil, nil) }
         let pages = TextLayer.pagesNeedingLayer(in: pdf).filter { $0 < maxOCRPages }
         var words: [Int: [RecognizedWord]] = [:]
@@ -94,8 +98,15 @@ enum DocumentProcessor {
         guard var rewritten = TextLayer.addingTextLayer(to: pdfData, words: words) else {
             return (nil, String(localized: "Text layer skipped: the PDF could not be rewritten."))
         }
-        if let hook = TextLayer.rewriteHookForTesting { rewritten = hook(rewritten) }
-        guard TextLayer.verify(original: pdfData, rewritten: rewritten) else {
+        if let rewriteHook { rewritten = rewriteHook(pdfData, rewritten) }
+        switch TextLayer.check(original: pdfData, rewritten: rewritten) {
+        case .passed:
+            break
+        case .tooLarge:
+            return (nil, String(localized: "Text layer skipped: the result would be too large."))
+        case .unreadable:
+            return (nil, String(localized: "Text layer skipped: the PDF could not be rewritten."))
+        case .pageCountChanged, .looksDifferent:
             return (nil, String(localized: "Text layer skipped: the result did not match the original."))
         }
         let note = pdf.pageCount > maxOCRPages

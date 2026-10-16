@@ -230,8 +230,9 @@ enum DocumentImporter {
         document.isProcessing = true
         let mistral = MistralConfig.current()
         let layerSource: DocumentSource? = TextLayer.isEnabled ? document.source : nil
+        let rewriteHook = TextLayer.rewriteHookForTesting
         let result = await Task.detached(priority: .utility) {
-            await DocumentProcessor.analyze(data, mistral: mistral, textLayerSource: layerSource)
+            await DocumentProcessor.analyze(data, mistral: mistral, textLayerSource: layerSource, rewriteHook: rewriteHook)
         }.value
         guard document.isAlive else { return }
         document.pageCount = result.pageCount

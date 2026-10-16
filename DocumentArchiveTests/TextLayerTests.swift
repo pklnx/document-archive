@@ -55,6 +55,53 @@ import Testing
         #expect(text.contains("ä ö ü ß Grüße"), "\(text)")
     }
 
+    /// Regression (macOS 26 CI): Core Text wrote each word with character spacing (`Tc`) and
+    /// per-glyph `TJ` adjustments, which PDFKit on macOS 26 extracted as "G rü ß e". Each word is
+    /// now one run at the font's own advances, scaled only through the text matrix.
+    @Test func wordsAreWrittenWithoutCharacterSpacingOrGlyphGaps() throws {
+        let scan = TestSupport.scanPDF(pages: [["Test"]])
+        let words = ["Rechnung", "Grüße", "Straße"].enumerated().map { index, text in
+            RecognizedWord(text: text, box: CGRect(x: 60 + Double(index) * 120, y: 400, width: 70 + Double(index) * 9, height: 14),
+                           spaceAfter: index < 2)
+        }
+        let layered = try #require(TextLayer.addingTextLayer(to: scan, words: [0: words]))
+        let content = try Self.contentStream(of: layered)
+
+        let characterSpacing = try Regex(#"(-?[0-9.]+) Tc"#)
+        for match in content.matches(of: characterSpacing) {
+            #expect(Double(match.output[1].substring ?? "") == 0, "character spacing in \(content)")
+        }
+        // Inside TJ arrays, only rounding-sized adjustments (thousandths of an em) are allowed.
+        let adjustment = try Regex(#"\)\s*(-?[0-9.]+)\s*\("#)
+        for match in content.matches(of: adjustment) {
+            let value = abs(Double(match.output[1].substring ?? "") ?? 0)
+            #expect(value < 1, "glyph gap \(value) in \(content)")
+        }
+        let text = try page(layered).string ?? ""
+        #expect(text.contains("Rechnung Grüße Straße"), "\(text)")
+    }
+
+    /// The decoded content stream(s) of the first page.
+    private static func contentStream(of data: Data) throws -> String {
+        let document = try #require(CGPDFDocument(CGDataProvider(data: data as CFData)!))
+        let page = try #require(document.page(at: 1)?.dictionary)
+        var streams: [CGPDFStreamRef] = []
+        var single: CGPDFStreamRef?
+        var array: CGPDFArrayRef?
+        if CGPDFDictionaryGetStream(page, "Contents", &single), let single {
+            streams = [single]
+        } else if CGPDFDictionaryGetArray(page, "Contents", &array), let array {
+            for index in 0..<CGPDFArrayGetCount(array) {
+                var stream: CGPDFStreamRef?
+                if CGPDFArrayGetStream(array, index, &stream), let stream { streams.append(stream) }
+            }
+        }
+        return streams.compactMap { stream in
+            var format = CGPDFDataFormat.raw
+            return (CGPDFStreamCopyData(stream, &format) as Data?).map { String(decoding: $0, as: UTF8.self) }
+        }.joined(separator: "\n")
+    }
+
     // 2
     @Test func selectsASingleWordInTheMiddleOfALine() async throws {
         let scan = TestSupport.scanPDF(pages: [Self.letter])
@@ -89,7 +136,8 @@ import Testing
         let layeredPage = try page(try await layered(original, source: .file))
 
         let difference = try #require(TextLayer.pixelDifference(originalPage, layeredPage))
-        #expect(difference < 1, "renders as before (mean difference \(difference))")
+        #expect(difference.mean < 1, "renders as before (mean difference \(difference.mean))")
+        #expect(difference.maxTile < TextLayer.maxTilePixelDifference, "no tile changed (\(difference.maxTile))")
         #expect(TextLayer.displayedSize(of: layeredPage) == TextLayer.displayedSize(of: originalPage))
         let selected = selectedText(on: layeredPage, in: box)
         #expect(selected.contains("Rechnung"), "selected “\(selected)”")
@@ -107,10 +155,49 @@ import Testing
             let old = try #require(before.page(at: index))
             let new = try #require(after.page(at: index))
             let difference = try #require(TextLayer.pixelDifference(old, new))
-            #expect(difference < 1, "page \(index + 1): mean difference \(difference)")
+            #expect(difference.mean < 1, "page \(index + 1): mean difference \(difference.mean)")
+            #expect(difference.maxTile < TextLayer.maxTilePixelDifference, "page \(index + 1): tile \(difference.maxTile)")
         }
         #expect(rewritten.count <= scan.count + scan.count / 10 + 20_000, "\(scan.count) → \(rewritten.count) bytes")
         #expect(TextLayer.verify(original: scan, rewritten: rewritten))
+    }
+
+    /// A small local change (a stamp on 2 % of the page) fails the check, although the mean over
+    /// the whole page stays within its tolerance.
+    @Test func localChangeFailsTheCheck() throws {
+        let scan = TestSupport.scanPDF(pages: [Self.letter])
+        let stamped = try Self.stamped(scan, fraction: 0.02)
+        let difference = try #require(TextLayer.pixelDifference(try page(scan), try page(stamped)))
+        #expect(difference.mean > 0 && difference.maxTile > TextLayer.maxTilePixelDifference)
+        #expect(TextLayer.check(original: scan, rewritten: stamped) == .looksDifferent)
+        #expect(TextLayer.check(original: scan, rewritten: scan) == .passed)
+    }
+
+    /// The first page redrawn with a black square covering `fraction` of its area.
+    private static func stamped(_ data: Data, fraction: Double) throws -> Data {
+        let document = try #require(CGPDFDocument(CGDataProvider(data: data as CFData)!))
+        let pdfPage = try #require(document.page(at: 1))
+        var box = pdfPage.getBoxRect(.mediaBox)
+        let output = NSMutableData()
+        let context = try #require(CGContext(consumer: CGDataConsumer(data: output as CFMutableData)!, mediaBox: &box, nil))
+        context.beginPDFPage(nil)
+        context.drawPDFPage(pdfPage)
+        let side = (box.width * box.height * fraction).squareRoot()
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: box.midX, y: box.minY + 40, width: side, height: side))
+        context.endPDFPage()
+        context.closePDF()
+        return output as Data
+    }
+
+    /// A rewrite beyond the size bound is skipped with its own note.
+    @Test func tooLargeRewriteIsSkippedWithItsOwnNote() async throws {
+        let scan = TestSupport.scanPDF(pages: [Self.letter])
+        let padding = Data(repeating: 0x20, count: TextLayer.maxRewrittenSize(for: scan.count))
+        let result = await DocumentProcessor.analyze(scan, mistral: nil, textLayerSource: .scan,
+                                                     rewriteHook: { _, rewritten in rewritten + padding })
+        #expect(result.searchablePDF == nil)
+        #expect(result.note == String(localized: "Text layer skipped: the result would be too large."))
     }
 
     // 5: a full page of words (many text objects, a bigger font subset) also fits the bound.
@@ -151,6 +238,10 @@ import Testing
             ("PDF/A", TestSupport.rawImagePDF(xmp: Self.xmp(conformance: "pdfaid:part=\"2\" pdfaid:conformance=\"B\""))),
             ("PDF/X", TestSupport.rawImagePDF(xmp: Self.xmp(conformance: "pdfxid:GTS_PDFXVersion=\"PDF/X-4\""))),
             ("embedded file", TestSupport.rawImagePDF(catalogExtra: "/Names << /EmbeddedFiles << /Names [] >> >>")),
+            ("tagged PDF", TestSupport.rawImagePDF(catalogExtra: "/StructTreeRoot << /Type /StructTreeRoot >>")),
+            ("optional content", TestSupport.rawImagePDF(catalogExtra: "/OCProperties << /OCGs [] /D << >> >>")),
+            ("page labels", TestSupport.rawImagePDF(catalogExtra: "/PageLabels << /Nums [0 << /S /r >>] >>")),
+            ("old PDF/X", TestSupport.rawImagePDF(xmp: Self.xmp(conformance: "xmlns:pdfx=\"http://ns.adobe.com/pdfx/1.3/\" pdfx:GTS_PDFXVersion=\"PDF/X-3:2002\""))),
             ("CCITT", TestSupport.rawImagePDF(imageFilter: "/CCITTFaxDecode")),
             ("JBIG2", TestSupport.rawImagePDF(imageFilter: "[/FlateDecode /JBIG2Decode]")),
             ("JPEG 2000 in a form", TestSupport.rawImagePDF(imageFilter: "/JPXDecode", nestedInForm: true)),
@@ -169,6 +260,8 @@ import Testing
         for (name, data) in [("raw", TestSupport.rawImagePDF()),
                              ("raw in a form", TestSupport.rawImagePDF(imageFilter: "/FlateDecode", nestedInForm: true)),
                              ("raw with XMP", TestSupport.rawImagePDF(xmp: Self.xmp(conformance: "dc:format=\"application/pdf\""))),
+                             // Adobe's custom-properties namespace is also called pdfx; it is no conformance.
+                             ("raw with pdfx properties", TestSupport.rawImagePDF(xmp: Self.xmp(conformance: "xmlns:pdfx=\"http://ns.adobe.com/pdfx/1.3/\" pdfx:SourceModified=\"D:20260101\""))),
                              ("scan", scan)] {
             let pdf = try #require(PDFDocument(data: data), "\(name) opens")
             #expect(TextLayer.qualifies(pdf, source: .file), "\(name) qualifies")
