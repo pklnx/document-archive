@@ -40,7 +40,7 @@ extension GlobalStateTests {
         }
 
         @Test func usesEmbeddedTextWhenThePDFHasEnough() async throws {
-            let pdf = try #require(Self.textPDF("Dies ist ein PDF mit eingebettetem Text, lang genug für die Erkennung."))
+            let pdf = try #require(TestSupport.textPDF("Dies ist ein PDF mit eingebettetem Text, lang genug für die Erkennung."))
             let result = await DocumentProcessor.analyze(pdf, mistral: nil)
             #expect(result.textSource == "PDF-Text")
             #expect(result.text.contains("eingebettetem Text"))
@@ -52,6 +52,19 @@ extension GlobalStateTests {
             #expect(result.textSource == "Mistral OCR")
             #expect(result.text == "Von Mistral")
             #expect(result.thumbnail != nil)
+        }
+
+        /// The text comes from Mistral, the text layer from Vision on the device; Mistral receives
+        /// exactly the one OCR request it received before.
+        @Test func textLayerComesFromVisionWhenMistralReadsTheText() async throws {
+            MistralStub.install(config: MistralStub.config()) { _, _ in .json(["pages": [["index": 0, "markdown": "Von Mistral"]]]) }
+            let result = await DocumentProcessor.analyze(TestSupport.samplePDF(lines: Self.letter), mistral: MistralStub.config(),
+                                                         textLayerSource: .scan)
+            #expect(result.textSource == "Mistral OCR")
+            #expect(result.text == "Von Mistral")
+            let layered = try #require(result.searchablePDF.flatMap(PDFDocument.init(data:)))
+            #expect(layered.page(at: 0)?.string?.contains("Rechnung") == true)
+            #expect(MistralStub.requests.count == 1)
         }
 
         @Test func fallsBackToVisionWhenMistralFails() async throws {
@@ -73,24 +86,6 @@ extension GlobalStateTests {
             #expect(result.pageCount == 0)
             #expect(result.text.isEmpty)
             #expect(!result.note.isEmpty)
-        }
-
-        /// A one-page PDF with real (selectable) text, as exported by office software.
-        private static func textPDF(_ text: String) -> Data? {
-            let data = NSMutableData()
-            var box = CGRect(x: 0, y: 0, width: 595, height: 842)
-            guard let consumer = CGDataConsumer(data: data as CFMutableData),
-                  let context = CGContext(consumer: consumer, mediaBox: &box, nil) else { return nil }
-            context.beginPDFPage(nil)
-            let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [
-                NSAttributedString.Key(kCTFontAttributeName as String): font,
-            ]))
-            context.textPosition = CGPoint(x: 40, y: 780)
-            CTLineDraw(line, context)
-            context.endPDFPage()
-            context.closePDF()
-            return data as Data
         }
     }
 }

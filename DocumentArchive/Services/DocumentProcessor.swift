@@ -5,6 +5,8 @@ import Vision
 
 /// Analyzes a PDF: page count, thumbnail and full text.
 /// If the PDF has no embedded text (e.g. scans), the text is read with Vision text recognition.
+/// For qualifying scans and image-only PDFs it also builds a copy with an invisible text layer
+/// (`TextLayer`); Vision runs once per page for both.
 enum DocumentProcessor {
     struct Result: Sendable {
         var pageCount: Int
@@ -12,14 +14,20 @@ enum DocumentProcessor {
         var text: String
         var textSource: String
         var note: String = ""
+        /// The PDF with a text layer, already verified; `nil` when no layer was added.
+        var searchablePDF: Data?
     }
 
     /// At most this many pages are read with OCR, so very long scans do not take forever.
-    private static let maxOCRPages = 40
+    static let maxOCRPages = 40
 
     /// - Parameter mistral: When set and Mistral OCR is on, the text is read through Mistral.
     ///   On errors, the embedded PDF text or local Apple text recognition is used instead.
-    static func analyze(_ pdfData: Data, mistral: MistralConfig? = nil) async -> Result {
+    /// - Parameter textLayerSource: The document's source when a text layer should be added
+    ///   (the setting is on); `nil` never rewrites the PDF. The layer always comes from Vision on
+    ///   the device, also when the text comes from Mistral.
+    static func analyze(_ pdfData: Data, mistral: MistralConfig? = nil,
+                        textLayerSource: DocumentSource? = nil) async -> Result {
         guard let pdf = PDFDocument(data: pdfData) else {
             return Result(pageCount: 0, thumbnail: nil, text: "", textSource: "", note: String(localized: "The PDF could not be read."))
         }
@@ -28,48 +36,89 @@ enum DocumentProcessor {
             .flatMap { render($0, maxPixelSize: 480) }
             .flatMap { ImageCoding.jpegData(from: $0, quality: 0.75) }
 
-        var note = ""
+        var recognition = PageRecognition(pdf: pdf)
+        var notes: [String] = []
+        var text = ""
+        var source = ""
         if let mistral, mistral.useOCR {
             do {
-                let text = try await MistralClient(config: mistral).ocr(pdfData: pdfData)
-                if !text.isEmpty {
-                    return Result(pageCount: pageCount, thumbnail: thumbnail, text: text, textSource: "Mistral OCR")
+                let mistralText = try await MistralClient(config: mistral).ocr(pdfData: pdfData)
+                if !mistralText.isEmpty {
+                    text = mistralText
+                    source = "Mistral OCR"
                 }
             } catch {
-                note = String(localized: "\(error.localizedDescription) Local text recognition was used instead.")
+                notes.append(String(localized: "\(error.localizedDescription) Local text recognition was used instead."))
             }
         }
 
-        var text = (pdf.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        var source = "PDF-Text"
-        let hasUsableText = text.count >= max(20, pageCount * 15)
-        if !hasUsableText {
-            let recognized = await recognizeText(in: pdf)
-            if recognized.count > text.count {
-                text = recognized
-                source = "Apple Vision"
+        if source.isEmpty {
+            text = (pdf.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            source = "PDF-Text"
+            let hasUsableText = text.count >= max(20, pageCount * 15)
+            if !hasUsableText {
+                var pages: [String] = []
+                for index in 0..<min(pageCount, maxOCRPages) {
+                    pages.append(await recognition.page(index).text)
+                }
+                let recognized = pages.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                if recognized.count > text.count {
+                    text = recognized
+                    source = "Apple Vision"
+                }
             }
         }
-        return Result(pageCount: pageCount, thumbnail: thumbnail, text: text, textSource: source, note: note)
+
+        var searchablePDF: Data?
+        if let textLayerSource {
+            let layer = await textLayer(for: pdfData, pdf: pdf, source: textLayerSource, recognition: &recognition)
+            searchablePDF = layer.data
+            if let note = layer.note { notes.append(note) }
+        }
+        return Result(pageCount: pageCount, thumbnail: thumbnail, text: text, textSource: source,
+                      note: notes.joined(separator: "\n"), searchablePDF: searchablePDF)
     }
 
-    private static func recognizeText(in pdf: PDFDocument) async -> String {
-        var pages: [String] = []
-        for index in 0..<min(pdf.pageCount, maxOCRPages) {
-            guard let page = pdf.page(at: index), let image = render(page, maxPixelSize: 2600) else { continue }
-            var request = RecognizeTextRequest()
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
-            request.recognitionLanguages = [Locale.Language(identifier: "de-DE"), Locale.Language(identifier: "en-US")]
-            do {
-                let observations = try await request.perform(on: image)
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-                pages.append(lines.joined(separator: "\n"))
-            } catch {
-                print("Texterkennung fehlgeschlagen (Seite \(index + 1)): \(error)")
-            }
+    /// Builds and verifies the PDF with a text layer. `data` is `nil` when the PDF does not
+    /// qualify, has no page that needs a layer, no words were found, or the check failed.
+    private static func textLayer(for pdfData: Data, pdf: PDFDocument, source: DocumentSource,
+                                  recognition: inout PageRecognition) async -> (data: Data?, note: String?) {
+        guard TextLayer.qualifies(pdf, source: source) else { return (nil, nil) }
+        let pages = TextLayer.pagesNeedingLayer(in: pdf).filter { $0 < maxOCRPages }
+        var words: [Int: [RecognizedWord]] = [:]
+        for index in pages {
+            let found = await recognition.page(index).words
+            if !found.isEmpty { words[index] = found }
         }
-        return pages.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return (nil, nil) }
+        guard var rewritten = TextLayer.addingTextLayer(to: pdfData, words: words) else {
+            return (nil, String(localized: "Text layer skipped: the PDF could not be rewritten."))
+        }
+        if let hook = TextLayer.rewriteHookForTesting { rewritten = hook(rewritten) }
+        guard TextLayer.verify(original: pdfData, rewritten: rewritten) else {
+            return (nil, String(localized: "Text layer skipped: the result did not match the original."))
+        }
+        let note = pdf.pageCount > maxOCRPages
+            ? String(localized: "Text layer added to the first \(maxOCRPages) pages only.")
+            : nil
+        return (rewritten, note)
+    }
+
+    /// Runs Vision at most once per page and keeps the result, so the document's text and the
+    /// text layer share one recognition.
+    private struct PageRecognition {
+        let pdf: PDFDocument
+        private var cache: [Int: RecognizedPage] = [:]
+
+        init(pdf: PDFDocument) { self.pdf = pdf }
+
+        mutating func page(_ index: Int) async -> RecognizedPage {
+            if let cached = cache[index] { return cached }
+            guard let page = pdf.page(at: index) else { return RecognizedPage() }
+            let result = await TextLayer.recognize(page)
+            cache[index] = result
+            return result
+        }
     }
 
     /// Renders a PDF page into a bitmap, the same way on every platform.

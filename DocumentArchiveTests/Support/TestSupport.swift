@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreText
 import Foundation
+import PDFKit
 import SwiftData
 import Testing
 @testable import DocumentArchive
@@ -74,6 +75,108 @@ enum TestSupport {
 
     static func samplePDF(lines: [String] = ["Test"]) -> Data {
         PDFBuilder.makePDF(from: [renderPage(lines: lines)])!
+    }
+
+    /// A scanned document with one page per entry, built like the app's camera scans.
+    static func scanPDF(pages: [[String]]) -> Data {
+        PDFBuilder.makePDF(from: pages.map { renderPage(lines: $0) })!
+    }
+
+    /// A one-page scan whose image lies on its side and whose page is rotated by 90° so it shows
+    /// upright, like a page turned in Preview or by a scanner.
+    static func rotatedScanPDF(lines: [String]) -> Data {
+        let upright = renderPage(lines: lines)
+        let context = CGContext(
+            data: nil, width: upright.height, height: upright.width, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        )!
+        // Turned counterclockwise; the page's /Rotate 90 turns it clockwise again when shown.
+        context.translateBy(x: CGFloat(upright.height), y: 0)
+        context.rotate(by: .pi / 2)
+        context.draw(upright, in: CGRect(x: 0, y: 0, width: upright.width, height: upright.height))
+        let sideways = PDFBuilder.makePDF(from: [context.makeImage()!])!
+        return modifiedPDF(sideways) { $0.page(at: 0)?.rotation = 90 }
+    }
+
+    /// A PDF with real (selectable) text on every page, as exported by office software.
+    static func textPDF(_ texts: String...) -> Data? {
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 595, height: 842)
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &box, nil) else { return nil }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        for text in texts {
+            context.beginPDFPage(nil)
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+            ]))
+            context.textPosition = CGPoint(x: 40, y: 780)
+            CTLineDraw(line, context)
+            context.endPDFPage()
+        }
+        context.closePDF()
+        return data as Data
+    }
+
+    /// Changes a PDF with PDFKit (rotation, crop box, annotations, …) and writes it again.
+    static func modifiedPDF(_ data: Data, options: [PDFDocumentWriteOption: Any] = [:],
+                            _ change: (PDFDocument) -> Void) -> Data {
+        let pdf = PDFDocument(data: data)!
+        change(pdf)
+        return pdf.dataRepresentation(options: options)!
+    }
+
+    /// A hand-written one-page PDF (200 × 200 pt) whose page draws one image XObject, for the
+    /// skip rules that PDFKit cannot produce (image filters, catalog entries).
+    /// - Parameters:
+    ///   - imageFilter: The image's `/Filter` value, e.g. `/JBIG2Decode`; `nil` for none.
+    ///   - nestedInForm: Draws the image through a Form XObject.
+    ///   - catalogExtra: Extra entries for the catalog dictionary, e.g. `/AcroForm << … >>`.
+    ///   - xmp: XMP metadata, written as the catalog's `/Metadata` stream.
+    static func rawImagePDF(imageFilter: String? = nil, nestedInForm: Bool = false, catalogExtra: String = "",
+                            xmp: String? = nil) -> Data {
+        let filter = imageFilter.map { " /Filter \($0)" } ?? ""
+        let image = "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8\(filter) /Length 1 >>\nstream\n\u{80}\nendstream"
+        let draw = "q 200 0 0 200 0 0 cm /Im1 Do Q"
+        var objects = [
+            "", // the catalog, filled in below
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        ]
+        if nestedInForm {
+            let formContent = "/Im1 Do"
+            objects += [
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /XObject << /Fm1 4 0 R >> >> /Contents 5 0 R >>",
+                "<< /Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources << /XObject << /Im1 6 0 R >> >> /Length \(formContent.utf8.count) >>\nstream\n\(formContent)\nendstream",
+                "<< /Length 30 >>\nstream\nq 200 0 0 200 0 0 cm /Fm1 Do Q\nendstream",
+                image,
+            ]
+        } else {
+            objects += [
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>",
+                image,
+                "<< /Length \(draw.utf8.count) >>\nstream\n\(draw)\nendstream",
+            ]
+        }
+        var catalog = "<< /Type /Catalog /Pages 2 0 R \(catalogExtra)"
+        if let xmp {
+            objects.append("<< /Type /Metadata /Subtype /XML /Length \(xmp.utf8.count) >>\nstream\n\(xmp)\nendstream")
+            catalog += " /Metadata \(objects.count) 0 R"
+        }
+        objects[0] = catalog + " >>"
+        var pdf = Data("%PDF-1.7\n".utf8)
+        var offsets: [Int] = []
+        for (index, object) in objects.enumerated() {
+            offsets.append(pdf.count)
+            pdf.append(Data("\(index + 1) 0 obj\n".utf8))
+            pdf.append(object.data(using: .isoLatin1)!)
+            pdf.append(Data("\nendobj\n".utf8))
+        }
+        let xref = pdf.count
+        var trailer = "xref\n0 \(objects.count + 1)\n0000000000 65535 f \n"
+        for offset in offsets { trailer += String(format: "%010d 00000 n \n", offset) }
+        trailer += "trailer\n<< /Size \(objects.count + 1) /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n"
+        pdf.append(Data(trailer.utf8))
+        return pdf
     }
 
     /// Waits until background processing (thumbnail, OCR, auto-assignment) has finished.
