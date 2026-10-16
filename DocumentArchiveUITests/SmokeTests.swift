@@ -38,12 +38,24 @@ final class SmokeTests: XCTestCase {
         add(attachment)
     }
 
-    /// Makes `element` reachable: on iPhone by going back, on iPad with the sidebar button
-    /// (the first button of the navigation bar in both cases).
+    /// Makes `element` reachable, one step at a time: on iPad from an opened document with the
+    /// app's "Show List" button, otherwise with the leading button of a navigation bar (back on
+    /// iPhone, the sidebar button on iPad). Never a toolbar button of the document.
     private func reveal(_ element: XCUIElement, _ what: String) {
         _ = element.waitForExistence(timeout: 5)
         for _ in 0..<3 where !element.isHittable {
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            let showList = self.element("documentDetail.showList")
+            if showList.exists, showList.isHittable {
+                showList.tap()
+            } else {
+                // Prefer a bar that is not the document's (iPad); on iPhone only the document's
+                // bar is there, and its first button is Back.
+                let bars = app.navigationBars.allElementsBoundByIndex
+                let bar = bars.first { !$0.buttons["documentDetail.inspectorToggle"].exists } ?? bars.first
+                guard let button = bar?.buttons.element(boundBy: 0), button.exists,
+                      button.identifier != "documentDetail.inspectorToggle" else { break }
+                button.tap()
+            }
             _ = element.waitForExistence(timeout: 2)
         }
         XCTAssertTrue(element.isHittable, "\(what) not reachable")
@@ -64,6 +76,12 @@ final class SmokeTests: XCTestCase {
         openDocument(firstDocument)
         // The document comes to the front, not covered by the list.
         XCTAssertTrue(element("documentDetail.inspectorToggle").isHittable)
+        if !isPhone, element("documentDetail.showList").exists {
+            // Regression (iPadOS 26): with only the document shown there was no way back.
+            element("documentDetail.showList").tap()
+            XCTAssertTrue(row(secondDocument).waitForExistence(timeout: 5) && row(secondDocument).isHittable,
+                          "Show List did not bring the list back")
+        }
         if isPhone {
             // On iPhone the inspector is a sheet that stays closed until Info is tapped.
             XCTAssertFalse(element("documentDetail.inspector").waitForExistence(timeout: 3),
