@@ -1,8 +1,10 @@
+#if os(iOS)
 import XCTest
 
 /// A few smoke tests on iPhone and iPad. The app starts with generated sample data in memory
 /// (`-UITestSeed`), never touches the real archive and never calls Mistral. Elements are found by
 /// accessibility identifier only (see `AccessibilityID` in the app), never by their German text.
+/// iOS only (swipes, rotation, edit mode, navigation bars); the Mac has `MacSmokeTests`.
 final class SmokeTests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -527,3 +529,4 @@ final class SmokeTests: XCTestCase {
         openDocument(favoriteDocument)
     }
 }
+#endif

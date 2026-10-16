@@ -47,7 +47,8 @@ Each issue gets its own branch and pull request. The description says
 `Closes #N`, so merging closes the issue. Labels follow the
 [label table](./#pull-requests-and-labels). The pull request includes tests for
 the behavior it changes (see [Tests](./#tests)); without them it is not ready
-for review. CI must be green; the maintainer reviews and enables auto-merge.
+for review. Which tests the implementer, the reviewer and CI run is in the
+[test strategy](./#test-strategy). CI must be green; the maintainer reviews and enables auto-merge.
 
 ## Labels
 
@@ -70,7 +71,9 @@ version for fixes.
 
 To release:
 
-1. Check that CI on `main` is green.
+1. Check that CI on `main` is green, and run the tests listed for a release
+   in the [test strategy](./#test-strategy) (full local run, the nightly UI
+   test workflow by hand, the manual check list).
 2. Set `MARKETING_VERSION` in the Xcode project to the new version (for
    example `0.2.0`) and raise `CURRENT_PROJECT_VERSION` by one, in a pull
    request labeled `chore`.

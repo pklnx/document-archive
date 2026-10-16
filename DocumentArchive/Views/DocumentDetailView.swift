@@ -160,6 +160,7 @@ struct DocumentInfoForm: View {
             Section {
                 TextField("Title", text: $document.title, axis: .vertical)
                     .font(.headline)
+                    .accessibilityIdentifier(AccessibilityID.inspectorTitle)
                 DatePicker("Issued", selection: $document.documentDate, displayedComponents: .date)
             }
 

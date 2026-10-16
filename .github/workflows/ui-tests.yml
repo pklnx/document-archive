@@ -2,7 +2,8 @@ name: UI tests
 
 # Nightly on main and on demand, not on every pull request: the hosted runners are slow and
 # flaky for UI tests, and pull requests are gated by the reviewer's local UI test report
-# (iOS 27). The runners have an older iOS (26.x), which this run keeps covering.
+# (iOS 27). The runners have an older iOS (26.x) and macOS, which this run keeps covering.
+# Not a required check.
 on:
   schedule:
     - cron: "17 2 * * *"
@@ -48,5 +49,33 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: TestResults-iOS-UI-${{ matrix.device }}
+          path: TestResults.xcresult
+          retention-days: 7
+
+  test-macos-ui:
+    # The Mac smoke tests (MacSmokeTests). An XCUITest runner on macOS must be signed (ad hoc,
+    # "Sign to Run Locally", no team, no secrets) and needs automation mode, otherwise it hangs at
+    # "Timed out while enabling automation mode". The app is signed without its entitlements
+    # (iCloud, sandbox), which an ad-hoc signature cannot carry; the sample data run needs neither.
+    runs-on: macos-latest
+    name: test (macOS UI)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version
+      - name: Enable automation mode
+        run: sudo automationmodetool enable-automationmode-without-authentication
+      - name: UI tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchiveUITests \
+            -destination 'platform=macOS' -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_ENTITLEMENTS= | grep -E "Test Case|error:|TEST (SUCCEEDED|FAILED)"
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TestResults-macOS-UI
           path: TestResults.xcresult
           retention-days: 7
