@@ -28,11 +28,13 @@ enum ClipboardContent {
     }
 
     /// Whether the menu item is enabled; the same decision as `items`, without reading the PDF.
+    /// Text is enabled only when the converted plain text is not empty (a Mistral page with only
+    /// an image has Markdown but no text to copy).
     @MainActor static func canCopy(_ document: Document, kind: Kind) -> Bool {
         guard document.isAlive else { return false }
         switch kind {
         case .pdf: return document.pdfData != nil
-        case .text: return !document.extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .text: return !plainText(of: document).isEmpty
         }
     }
 

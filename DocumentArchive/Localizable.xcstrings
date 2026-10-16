@@ -1251,6 +1251,16 @@
         }
       }
     },
+    "Edit Notes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen bearbeiten"
+          }
+        }
+      }
+    },
     "Edit Tag": {
       "localizations": {
         "de": {
@@ -1907,6 +1917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Als erledigt markieren (aus dem Posteingang entfernen)"
+          }
+        }
+      }
+    },
+    "Markdown: **bold**, *italic*, # Heading, - List, - [ ] Task, [Text](https://…)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown: **fett**, *kursiv*, # Überschrift, - Liste, - [ ] Aufgabe, [Text](https://…)"
           }
         }
       }
@@ -3387,6 +3407,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tags: %@"
+          }
+        }
+      }
+    },
+    "Task completed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erledigt"
+          }
+        }
+      }
+    },
+    "Task open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offen"
           }
         }
       }

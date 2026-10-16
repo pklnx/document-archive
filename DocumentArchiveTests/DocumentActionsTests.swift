@@ -55,6 +55,17 @@ import UIKit
         #expect(ClipboardContent.items(for: document, kind: .text).isEmpty)
     }
 
+    /// Regression (#51 review): a Mistral page with only an image has Markdown but no text, so
+    /// "Copy Text" must be disabled instead of copying nothing.
+    @Test func noTextToCopyFromAnImageOnlyMistralPage() throws {
+        let context = ModelContext(try TestSupport.makeContainer())
+        let document = makeDocument(in: context, text: "![img-0.jpeg](img-0.jpeg)\n\n---\n",
+                                    textSource: DocumentProcessor.mistralTextSource)
+
+        #expect(!ClipboardContent.canCopy(document, kind: .text))
+        #expect(ClipboardContent.items(for: document, kind: .text).isEmpty)
+    }
+
     @Test func nothingToCopyOnceDeleted() throws {
         let context = ModelContext(try TestSupport.makeContainer())
         let document = makeDocument(in: context, text: "Text")

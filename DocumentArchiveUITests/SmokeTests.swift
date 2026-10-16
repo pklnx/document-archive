@@ -337,6 +337,48 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(inspector.waitForNonExistence(timeout: 5), "inspector did not close")
     }
 
+    /// #19: the sample document's notes are rendered as Markdown; "Edit Notes" shows the source
+    /// in the editor and "Done" renders it again.
+    func testNotesAreRenderedAndCanBeEdited() {
+        openDocument(firstDocument)
+        let inspector = element("documentDetail.inspector")
+        if !inspector.exists { element("documentDetail.inspectorToggle").tap() }
+        XCTAssertTrue(inspector.waitForExistence(timeout: 5), "inspector did not open")
+
+        let rendered = element("documentDetail.notes.rendered")
+        scroll(inspector, until: rendered)
+        XCTAssertTrue(rendered.isHittable, "rendered notes not shown")
+        XCTAssertFalse(element("documentDetail.notes.editor").exists, "notes start in the editor")
+        attachScreenshot("rendered notes")
+
+        let edit = element("documentDetail.notes.edit")
+        scroll(inspector, until: edit)
+        edit.tap()
+        let editor = element("documentDetail.notes.editor")
+        XCTAssertTrue(editor.waitForExistence(timeout: 5), "the editor did not open")
+        XCTAssertTrue((editor.value as? String ?? "").contains("**Due**"), "the editor does not show the Markdown source")
+        XCTAssertFalse(rendered.exists, "rendered notes still shown while editing")
+        attachScreenshot("notes editor")
+
+        let done = element("documentDetail.notes.done")
+        scroll(inspector, until: done)
+        done.tap()
+        // The form keeps its scroll position, so the rendered text may be above the visible rows
+        // (and not in the hierarchy); "Edit Notes" belongs to the rendered state.
+        XCTAssertTrue(edit.waitForExistence(timeout: 5), "notes not rendered again after Done")
+        XCTAssertFalse(editor.exists, "the editor is still shown after Done")
+        for _ in 0..<4 where !rendered.exists { inspector.swipeDown() }
+        XCTAssertTrue(rendered.exists, "rendered notes not shown after Done")
+        attachScreenshot("notes after Done")
+    }
+
+    /// Swipes up in `container` (a form) until `target` can be tapped.
+    private func scroll(_ container: XCUIElement, until target: XCUIElement) {
+        for _ in 0..<8 where !(target.exists && target.isHittable) {
+            container.swipeUp()
+        }
+    }
+
     func testSettingsOpenAndClose() {
         showSidebar()
         element("sidebar.settings").tap()

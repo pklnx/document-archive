@@ -18,6 +18,7 @@ enum UITestSeed {
         let tags: [String]
         var isInbox = true
         var isFavorite = false
+        var notes = ""
     }
 
     static let correspondents = ["Stadtwerke Musterstadt", "Musterbank AG", "Dr. Erika Beispiel"]
@@ -27,9 +28,17 @@ enum UITestSeed {
     static let tagParents = ["Golf": "Auto"]
     /// A saved view (#14): the documents tagged "Tax".
     static let savedViewName = "Taxes"
+    /// Markdown notes (#19) on the first document: heading, emphasis, a link and tasks.
+    static let sampleNotes = """
+        ## Payment
+        **Due** by the 30th, see the [customer portal](https://example.com/portal).
+        - [x] Meter reading sent
+        - [ ] Check the bill
+        """
 
     static let documents = [
-        SampleDocument(title: "Electricity bill March", correspondent: correspondents[0], type: "Invoice", tags: ["Tax"]),
+        SampleDocument(title: "Electricity bill March", correspondent: correspondents[0], type: "Invoice", tags: ["Tax"],
+                       notes: sampleNotes),
         SampleDocument(title: "Account statement", correspondent: correspondents[1], type: "Letter", tags: [],
                        isInbox: false),
         SampleDocument(title: "Medical invoice", correspondent: correspondents[2], type: "Invoice",
@@ -71,6 +80,7 @@ enum UITestSeed {
             document.contentHash = DocumentImporter.sha256(pdfData)
             document.isInbox = sample.isInbox
             document.isFavorite = sample.isFavorite
+            document.notes = sample.notes
             document.isProcessing = false
             context.insert(document)
             document.correspondent = correspondentsByName[sample.correspondent]

@@ -56,6 +56,11 @@ enum AccessibilityID {
     static let shareOptionsShare = "shareOptions.share"
     static let shareOptionsExport = "shareOptions.export"
     static let shareOptionsDone = "shareOptions.done"
+    /// Markdown notes (#19): the rendered note, "Edit Notes", the editor and its "Done".
+    static let notesRendered = "documentDetail.notes.rendered"
+    static let notesEdit = "documentDetail.notes.edit"
+    static let notesEditor = "documentDetail.notes.editor"
+    static let notesDone = "documentDetail.notes.done"
     /// UI tests only: shown once the More menu's Delete action ran (see `UITestMarker`).
     static let documentDeleteRequested = "documentDetail.deleteRequested"
 

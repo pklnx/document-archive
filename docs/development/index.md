@@ -458,6 +458,15 @@ window exists wait in `ExternalImport` until `ContentView` hands over the
   the temporary directory) is emptied at launch on every platform and when the Mac app quits.
 - **Share as…** (detail "More" menu, `ShareOptionsSheet`) edits the name before sharing or
   exporting; the toolbar's Share button keeps the default name.
+- **Markdown notes**: `notes` stays a plain `String` (no model change; older versions show the
+  source). `NotesView` in the inspector shows the note rendered from `MarkdownNotes.blocks`
+  (headings `#`–`###`, bullet, numbered and read-only task items, quotes, rules, paragraphs, code
+  fences verbatim) with "Edit Notes" to change the source; empty notes start in the editor. Inline
+  formatting comes from `AttributedString(markdown:)` (inline only), with the text as it is when
+  parsing fails. Bare URLs and e-mail addresses are linked with `NSDataDetector`; only `http`,
+  `https`, `mailto` and `tel` links are kept, everything else stays text. On macOS a block's link
+  addresses are its tooltip. Search uses the raw text. Lines inside a code fence are never parsed,
+  also in "Copy Text", which is only enabled when the converted text is not empty.
 
 ## External services
 
