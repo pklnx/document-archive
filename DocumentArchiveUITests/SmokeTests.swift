@@ -180,6 +180,62 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(row(firstDocument).exists)
     }
 
+    /// Nested tags (#13): Auto's list includes Golf's documents and shows Golf as a subfolder.
+    /// On iPhone the chip pushes Golf's list and Back returns to Auto, then to the sidebar, which
+    /// shows only top-level tags. On iPad the chip selects Golf in the sidebar's tag tree.
+    func testNestedTagDrillDown() {
+        showSidebar()
+        element("sidebar.tag.Auto").tap()
+        XCTAssertTrue(row("Car insurance").waitForExistence(timeout: 5), "Auto's own document missing")
+        XCTAssertTrue(row("Golf inspection").exists, "Auto must include the documents of Golf")
+        XCTAssertFalse(row(firstDocument).exists)
+        let chip = element("documentList.subfolder.Golf")
+        XCTAssertTrue(waitUntilHittable(chip), "no subfolder chip for Golf")
+        attachScreenshot("Auto with subfolder Golf")
+
+        chip.tap()
+        XCTAssertTrue(row("Car insurance").waitForNonExistence(timeout: 5), "Golf's list shows Auto's document")
+        XCTAssertTrue(row("Golf inspection").exists)
+        attachScreenshot("Golf")
+
+        if isPhone {
+            // A document opens from the pushed list, and Back returns to that list.
+            openDocument("Golf inspection")
+            attachScreenshot("document from Golf")
+            backButton().tap()
+            XCTAssertTrue(waitUntilHittable(row("Golf inspection")), "Back did not return to Golf")
+            XCTAssertFalse(row("Car insurance").exists)
+
+            backButton().tap()
+            XCTAssertTrue(waitUntilHittable(row("Car insurance")), "Back did not return to Auto")
+            XCTAssertTrue(chip.exists)
+            backButton().tap()
+            XCTAssertTrue(waitUntilHittable(element("sidebar.settings")), "second Back did not return to the sidebar")
+            XCTAssertTrue(element("sidebar.tag.Auto").exists)
+            XCTAssertFalse(element("sidebar.tag.Golf").exists, "iPhone shows only top-level tags in the sidebar")
+            attachScreenshot("sidebar after going back")
+        } else {
+            showSidebar()
+            let golfRow = element("sidebar.tag.Golf")
+            XCTAssertTrue(golfRow.waitForExistence(timeout: 5), "Golf not shown in the tag tree")
+            attachScreenshot("sidebar with Golf selected")
+            // The chevron collapses and expands Auto without selecting it.
+            element("sidebar.tagDisclosure.Auto").tap()
+            XCTAssertTrue(golfRow.waitForNonExistence(timeout: 5), "Auto did not collapse")
+            XCTAssertTrue(row("Golf inspection").exists && !row("Car insurance").exists, "the chevron changed the list")
+            element("sidebar.tagDisclosure.Auto").tap()
+            XCTAssertTrue(golfRow.waitForExistence(timeout: 5), "Auto did not expand")
+            element("sidebar.tag.Auto").tap()
+            attachScreenshot("Auto selected in the tree")
+        }
+    }
+
+    /// The leading button of the frontmost navigation bar (Back on iPhone).
+    private func backButton() -> XCUIElement {
+        let bar = app.navigationBars.allElementsBoundByIndex.last { $0.isHittable } ?? app.navigationBars.firstMatch
+        return bar.buttons.element(boundBy: 0)
+    }
+
     func testInspectorOpensAndCloses() {
         openDocument(firstDocument)
         attachScreenshot("document")

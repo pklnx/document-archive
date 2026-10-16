@@ -6,6 +6,9 @@ struct SidebarView: View {
     @Binding var selection: SidebarItem?
     @Binding var editorTarget: RuleEditorTarget?
     @Binding var showSettings: Bool
+    /// The tag tree with disclosure triangles and drag and drop (macOS, iPad). iPhone shows only
+    /// the root tags; their lists push the nested tags (`ContentView`).
+    var showsTagTree = true
 
     @Query(filter: #Predicate<Document> { _ in true }) private var queriedDocuments: [Document]
     private var documents: [Document] { queriedDocuments.filter(\.isAlive) }
@@ -14,6 +17,10 @@ struct SidebarView: View {
     @Query(sort: \Tag.name) private var tags: [Tag]
 
     @State private var pendingDeletion: PendingDeletion?
+    /// The tag whose "Move To…" sheet is open.
+    @State private var movingTag: Tag?
+    /// Expanded tags of the tree, per window and device (ids separated by commas).
+    @SceneStorage("sidebar.expandedTags") private var expandedTagsStorage = ""
 
     var body: some View {
         List(selection: $selection) {
@@ -57,15 +64,7 @@ struct SidebarView: View {
                 sectionHeader(String(localized: "Correspondents"), id: "correspondent") { editorTarget = .newCorrespondent }
             }
 
-            Section {
-                // Counts include the tags nested in a tag, each document once (one pass).
-                let counts = TagHierarchy.subtreeCounts(documents: documents)
-                ForEach(TagHierarchy.flattened(tags), id: \.tag.id) { entry in
-                    tagRow(entry.tag, depth: entry.depth, count: counts[entry.tag.id] ?? 0)
-                }
-            } header: {
-                sectionHeader(String(localized: "Tags"), id: "tag") { editorTarget = .newTag }
-            }
+            tagSection
         }
         .accessibilityIdentifier(AccessibilityID.sidebar)
         .navigationTitle("Document Archive")
@@ -87,6 +86,10 @@ struct SidebarView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
         }
+        .sheet(item: $movingTag) { tag in
+            TagParentPicker(tag: tag)
+        }
+        .onChange(of: selection) { revealSelectedTag() }
         .confirmationDialog(
             pendingDeletion?.title ?? "",
             isPresented: Binding(presenting: $pendingDeletion),
@@ -100,27 +103,57 @@ struct SidebarView: View {
         }
     }
 
-    /// Nested tags are indented under their parent; VoiceOver reads the whole path.
-    private func tagRow(_ tag: Tag, depth: Int, count: Int) -> some View {
-        NavigationLink(value: SidebarItem.tag(tag)) {
-            HStack {
-                Label {
-                    Text(tag.name)
-                } icon: {
-                    Image(systemName: tag.symbol).foregroundStyle(tag.color)
-                }
-                Spacer()
-                countBadge(count)
+    /// The tags as a tree (#13), roots only on iPhone. Counts include the tags nested in a tag, each document once
+    /// (one pass). Dropping a tag on the header makes it a top-level tag.
+    private var tagSection: some View {
+        Section {
+            let counts = TagHierarchy.subtreeCounts(documents: documents)
+            let nodes = TagHierarchy.tree(of: tags)
+            ForEach(TagTreeRow.visibleRows(nodes, expanded: showsTagTree ? expandedTags.wrappedValue : [])) { entry in
+                TagTreeRow(entry: entry, count: counts[entry.id] ?? 0, expanded: expandedTags,
+                           showsTree: showsTagTree, allowsDragAndDrop: showsTagTree, actions: tagActions)
             }
-            .padding(.leading, CGFloat(depth) * 14)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(TagHierarchy.displayPath(of: tag))
-            .accessibilityValue(DocumentAccessibility.documentCount(count))
+        } header: {
+            sectionHeader(String(localized: "Tags"), id: "tag") { editorTarget = .newTag }
+                .dropDestination(for: TagReference.self) { references, _ in
+                    TagHierarchy.moveDropped(references, under: nil, in: context)
+                }
         }
-        .accessibilityIdentifier(AccessibilityID.sidebarRow(.tag(tag)))
-        .contextMenu {
-            Button("Edit…", systemImage: "pencil") { editorTarget = .tag(tag) }
-            Button("Delete", systemImage: "trash", role: .destructive) { pendingDeletion = .tag(tag) }
+    }
+
+    private var tagActions: TagTreeRow.Actions {
+        TagTreeRow.Actions(
+            edit: { editorTarget = .tag($0) },
+            newSubtag: { editorTarget = .newSubtag(of: $0) },
+            move: { movingTag = $0 },
+            moveToTopLevel: { tag in
+                TagHierarchy.move(tag, under: nil)
+                try? context.save()
+            },
+            delete: { pendingDeletion = .tag($0) },
+            drop: { references, tag in
+                let moved = TagHierarchy.moveDropped(references, under: tag, in: context)
+                if moved { expandedTags.wrappedValue.insert(tag.id) }
+                return moved
+            }
+        )
+    }
+
+    private var expandedTags: Binding<Set<UUID>> {
+        Binding {
+            Set(expandedTagsStorage.split(separator: ",").compactMap { UUID(uuidString: String($0)) })
+        } set: { ids in
+            expandedTagsStorage = ids.map(\.uuidString).sorted().joined(separator: ",")
+        }
+    }
+
+    /// A nested tag selected elsewhere (a subfolder chip in the list) is shown: its ancestors
+    /// are expanded.
+    private func revealSelectedTag() {
+        guard showsTagTree, case .tag(let tag) = selection else { return }
+        let ancestors = Set(TagHierarchy.ancestors(of: tag).map(\.id))
+        if !ancestors.isSubset(of: expandedTags.wrappedValue) {
+            expandedTags.wrappedValue.formUnion(ancestors)
         }
     }
 

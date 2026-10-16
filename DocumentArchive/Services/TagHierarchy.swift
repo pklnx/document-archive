@@ -97,13 +97,41 @@ enum TagHierarchy {
 
     /// **The only way to delete a tag.** Its children move up to the deleted tag's parent, and
     /// documents lose only this tag. Records the deletion for the folder copy. Does not save.
-    @MainActor
-    static func delete(_ tag: Tag, in context: ModelContext, recorder: DeletionRecording?) {
-        let newParent = tag.parent
+    /// A tag that is already gone (deleted on another device while a dialog was open, or deleted
+    /// twice) is left alone, so no second tombstone is written.
+    /// - Returns: `false` when the tag was already gone.
+    @MainActor @discardableResult
+    static func delete(_ tag: Tag, in context: ModelContext, recorder: DeletionRecording?) -> Bool {
+        guard isAlive(tag) else { return false }
+        let newParent = tag.parent.flatMap { isAlive($0) ? $0 : nil }
         for child in Array(tag.children ?? []) where child.id != tag.id {
             child.parent = newParent.flatMap { canMove(child, under: $0) && $0.id != tag.id ? $0 : nil }
         }
         MetadataDeletion.delete(tag, in: context, recorder: recorder)
+        return true
+    }
+
+    /// Not deleted and still in a store.
+    static func isAlive(_ tag: Tag) -> Bool {
+        !tag.isDeleted && tag.modelContext != nil
+    }
+
+    /// Why the parent chosen in the tag editor cannot be used any more.
+    enum ParentProblem: Error, Equatable {
+        /// The chosen parent was deleted meanwhile (on another device or in another window).
+        case parentDeleted
+        /// The chosen parent is now nested in the edited tag (moved meanwhile, e.g. by sync).
+        case wouldCreateCycle
+    }
+
+    /// The parent the tag editor saves: the tag with `id` among `tags` (`nil` id: top level).
+    /// `tag` is the edited tag, `nil` for a new one. Fails instead of silently choosing another
+    /// parent, so the editor can tell the user.
+    static func parent(withID id: UUID?, for tag: Tag?, among tags: [Tag]) -> Result<Tag?, ParentProblem> {
+        guard let id else { return .success(nil) }
+        guard let parent = tags.first(where: { $0.id == id && isAlive($0) }) else { return .failure(.parentDeleted) }
+        if let tag, !canMove(tag, under: parent) { return .failure(.wouldCreateCycle) }
+        return .success(parent)
     }
 
     // MARK: Cycle repair

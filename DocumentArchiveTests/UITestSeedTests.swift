@@ -22,8 +22,14 @@ import Testing
         #expect(try context.fetchCount(FetchDescriptor<Correspondent>()) == UITestSeed.correspondents.count)
         #expect(try context.fetchCount(FetchDescriptor<DocumentType>()) == UITestSeed.documentTypes.count)
         let tags = try context.fetch(FetchDescriptor<ArchiveTag>(sortBy: [SortDescriptor(\.name)]))
-        #expect(tags.map(\.name) == ["Important", "Tax"])
-        #expect(tags.map(\.documentCount) == [2, 2])
+        #expect(tags.map(\.name) == ["Auto", "Golf", "Important", "Tax"])
+        #expect(tags.map(\.documentCount) == [1, 1, 2, 2])
+        // Auto › Golf for the drill-down test; Auto's list shows both documents.
+        let golf = try #require(tags.first { $0.name == "Golf" })
+        #expect(TagHierarchy.displayPath(of: golf) == "Auto › Golf")
+        let auto = try #require(golf.parent)
+        #expect(Set(SidebarItem.tag(auto).visibleDocuments(in: documents, searchText: "", sort: .added).map(\.title))
+                == ["Car insurance", "Golf inspection"])
     }
 
     @Test func seededChoiceFillsTheInMemoryStore() throws {

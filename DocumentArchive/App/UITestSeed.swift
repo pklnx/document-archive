@@ -22,7 +22,9 @@ enum UITestSeed {
 
     static let correspondents = ["Stadtwerke Musterstadt", "Musterbank AG", "Dr. Erika Beispiel"]
     static let documentTypes = [("Invoice", "doc.text"), ("Letter", "envelope")]
-    static let tags = [("Tax", "#22C55E"), ("Important", "#EF4444")]
+    static let tags = [("Tax", "#22C55E"), ("Important", "#EF4444"), ("Auto", "#3B82F6"), ("Golf", "#3B82F6")]
+    /// Nested tags (#13): child → parent, so the UI tests can open "Auto › Golf".
+    static let tagParents = ["Golf": "Auto"]
 
     static let documents = [
         SampleDocument(title: "Electricity bill March", correspondent: correspondents[0], type: "Invoice", tags: ["Tax"]),
@@ -33,6 +35,10 @@ enum UITestSeed {
         SampleDocument(title: "Credit card terms", correspondent: correspondents[1], type: "Letter", tags: ["Important"],
                        isInbox: false),
         SampleDocument(title: "Water bill", correspondent: correspondents[0], type: "Invoice", tags: []),
+        SampleDocument(title: "Car insurance", correspondent: correspondents[1], type: "Letter", tags: ["Auto"],
+                       isInbox: false),
+        SampleDocument(title: "Golf inspection", correspondent: correspondents[2], type: "Invoice", tags: ["Golf"],
+                       isInbox: false),
     ]
 
     static func fill(_ context: ModelContext) {
@@ -42,6 +48,9 @@ enum UITestSeed {
         correspondentsByName.values.forEach(context.insert)
         typesByName.values.forEach(context.insert)
         tagsByName.values.forEach(context.insert)
+        for (child, parent) in tagParents {
+            tagsByName[child]?.parent = tagsByName[parent]
+        }
 
         for (index, sample) in documents.enumerated() {
             let lines = [sample.correspondent, sample.title, "Sample document \(index + 1)"]

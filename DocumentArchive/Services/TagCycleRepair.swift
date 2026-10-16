@@ -34,4 +34,12 @@ final class TagCycleRepair {
             Task { @MainActor in changes?.signal() }
         }
     }
+
+    /// Stops following the store (tests).
+    func stop() {
+        task?.cancel()
+        task = nil
+        if let importToken { NotificationCenter.default.removeObserver(importToken) }
+        importToken = nil
+    }
 }

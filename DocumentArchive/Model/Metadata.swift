@@ -104,6 +104,13 @@ final class Tag: MatchingRule {
     var color: Color { Color(hex: colorHex) }
     var documentCount: Int { documents?.count ?? 0 }
 
+    /// Symbols offered in the tag editor (#13); the first is the default.
+    static let symbolChoices = [
+        "tag.fill", "folder.fill", "star.fill", "heart.fill", "flag.fill", "bookmark.fill",
+        "house.fill", "car.fill", "briefcase.fill", "cross.case.fill", "eurosign.circle.fill", "building.columns.fill",
+        "graduationcap.fill", "airplane", "cart.fill", "bolt.fill", "pawprint.fill", "leaf.fill",
+    ]
+
     static let palette = [
         "#EF4444", "#F97316", "#EAB308", "#22C55E", "#14B8A6",
         "#3B82F6", "#6366F1", "#A855F7", "#EC4899", "#64748B",

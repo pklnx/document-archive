@@ -225,6 +225,26 @@ A tag can be nested in another (`Tag.parent`, `Tag.children`), shown as
 - Mistral receives the tags' display paths with the rule to pick the most
   specific tag; a returned path is mapped back with the oldest tag winning
   when two share a path.
+- **Sidebar (macOS, iPad):** the tags are a tree of plain rows with a chevron
+  button (`TagTreeRow`; a `DisclosureGroup` label cannot be selected on iOS).
+  Expanded tags are kept per window in `@SceneStorage`. Tags are dragged as
+  `TagReference` (own type `de.patrickklein.documentarchive.tag-ref`, declared
+  in `Config/Info-*.plist`) onto another tag (nest) or the "Tags" header (top
+  level); `TagHierarchy.moveDropped` refuses unknown ids and cycles. The
+  context menu offers the same without dragging: "Move To…"
+  (`TagParentPicker`), "Move to Top Level" and "New Subtag…".
+- **iPhone (compact width):** the sidebar shows only top-level tags. The
+  content column has its own `NavigationStack` (`ContentView.tagPath`); a
+  tag's list shows its nested tags as subfolder chips, which push the child's
+  list, and the back button returns to the parent. In regular width the chips
+  select the child in the sidebar.
+- Menus that assign tags (inspector, bulk actions) are nested: a tag with
+  nested tags is a submenu that starts with the tag itself
+  (`NestedTagMenuItems`). Tag chips show the tag's name; the path is the help
+  text and the VoiceOver label.
+- The tag editor reports a parent that was deleted or moved below the edited
+  tag meanwhile (`TagHierarchy.parent(withID:for:among:)`) instead of saving a
+  different parent.
 
 ### Copy in a folder (#8)
 

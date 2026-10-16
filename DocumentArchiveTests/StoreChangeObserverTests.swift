@@ -31,7 +31,9 @@ import Testing
     }
 
     @Test func severalSavesGiveOneDebouncedSignal() async throws {
-        let container = try TestSupport.makeContainer()
+        // On disk: in-memory stores of tests running in parallel all report `/dev/null` as their
+        // URL, so their saves would count as changes of this store.
+        let container = try makeStoreOnDisk()
         // A long debounce compared with the time three back-to-back saves take, also on a slow runner.
         let debounce = Duration.milliseconds(800)
         let observer = StoreChangeObserver(container: container, debounce: debounce)

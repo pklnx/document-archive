@@ -48,6 +48,16 @@ enum AccessibilityID {
 
     static let ruleEditorCancel = "ruleEditor.cancel"
 
+    /// Nested tags (#13): the list's subfolder chips and the "Move To…" sheet.
+    static let subfolders = "documentList.subfolders"
+    static func subfolderChip(_ name: String) -> String { "documentList.subfolder.\(name)" }
+    static let tagMove = "sidebar.tag.move"
+    /// The chevron that expands or collapses a tag's nested tags in the sidebar.
+    static func tagDisclosure(_ name: String) -> String { "sidebar.tagDisclosure.\(name)" }
+    static let tagParentPicker = "tagParentPicker"
+    static let tagParentTopLevel = "tagParentPicker.topLevel"
+    static func tagParentChoice(_ name: String) -> String { "tagParentPicker.tag.\(name)" }
+
     static func sidebarRow(_ item: SidebarItem) -> String {
         switch item {
         case .inbox: "sidebar.inbox"

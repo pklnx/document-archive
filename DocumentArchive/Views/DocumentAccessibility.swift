@@ -16,7 +16,7 @@ enum DocumentAccessibility {
         if let type = document.documentType, !type.name.isEmpty {
             parts.append(type.name)
         }
-        if let tags = tagList(document.sortedTags.map(\.name), locale: locale) {
+        if let tags = tagList(document.sortedTags.map(TagHierarchy.displayPath), locale: locale) {
             parts.append(String(localized: "tags: \(tags)"))
         }
         if document.isFavorite { parts.append(String(localized: "favorite")) }

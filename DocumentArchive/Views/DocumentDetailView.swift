@@ -172,12 +172,15 @@ struct DocumentInfoForm: View {
                         Label("Tags", systemImage: "tag")
                         Spacer()
                         Menu {
-                            // Nested menus per parent come with #13 part 2; until then the path.
-                            ForEach(TagHierarchy.sortedByPath(tags)) { tag in
-                                Toggle(TagHierarchy.displayPath(of: tag), isOn: Binding(
+                            // A tag with nested tags is a submenu (#13).
+                            NestedTagMenuItems(nodes: TagHierarchy.tree(of: tags)) { tag in
+                                Toggle(isOn: Binding(
                                     get: { document.hasTag(tag) },
                                     set: { _ in document.toggleTag(tag) }
-                                ))
+                                )) {
+                                    Text(verbatim: tag.name)
+                                }
+                                .accessibilityLabel(Text(verbatim: TagHierarchy.displayPath(of: tag)))
                             }
                             if !tags.isEmpty { Divider() }
                             Button("New Tag…", systemImage: "plus") { editorTarget = .newTag }
@@ -202,7 +205,8 @@ struct DocumentInfoForm: View {
                                     }
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel("Remove tag \(tag.name)")
+                                .accessibilityLabel("Remove tag \(TagHierarchy.displayPath(of: tag))")
+                                .help(TagHierarchy.displayPath(of: tag))
                             }
                         }
                     }
