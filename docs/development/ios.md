@@ -101,6 +101,7 @@ and landscape:
 |---|---|
 | Navigation | sidebar → list → document and back; a new import opens the document |
 | List | swipe actions, context menu, sort, search, empty states |
+| Selection | "Select", Select All, checkmarks without opening a document; bottom toolbar on iPhone and narrow iPad windows, bulk actions column on wide iPads; select 3, narrow the search to 1 and check that only 1 is changed; Done ends the selection |
 | Document | PDF view, inspector (sheet on iPhone, column on iPad), share, export |
 | Sheets and dialogs | settings, rule editor, alerts and delete confirmations can be dismissed |
 | Import | Files (several files), Photos (HEIC), camera scan on a device, drag and drop on iPad |

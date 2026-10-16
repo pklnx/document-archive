@@ -245,4 +245,43 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(row(firstDocument).exists, "document was not deleted")
         openDocument(secondDocument)
     }
+
+    /// Select mode: several documents are selected without opening one, and deleted together.
+    func testSelectSeveralDocumentsAndDeleteThem() {
+        let select = element("documentList.select")
+        reveal(select, "Select button")
+        select.tap()
+        row(firstDocument).tap()
+        row(secondDocument).tap()
+        attachScreenshot("two documents selected")
+        // Selecting in edit mode must not open a document.
+        XCTAssertFalse(element("documentDetail").exists, "a document opened while selecting")
+        let more = element("bulkActions.more")
+        if isPhone || isNarrowIPad {
+            // Like on the iPhone, the actions are in the list's bottom toolbar.
+            XCTAssertTrue(waitUntilHittable(more), "no bottom toolbar while selecting")
+            more.tap()
+        } else {
+            XCTAssertTrue(element("bulkActions").waitForExistence(timeout: 5), "no bulk actions for the selection")
+            XCTAssertFalse(more.exists, "bottom toolbar beside the bulk actions column")
+        }
+        let delete = element("bulkActions.delete")
+        if !isPhone, !isNarrowIPad, delete.waitForExistence(timeout: 5), !delete.isHittable {
+            element("bulkActions").swipeUp()   // at the end of the actions column
+        }
+        XCTAssertTrue(waitUntilHittable(delete), "no Delete for the selection")
+        delete.tap()
+        let confirm = element("bulkActions.deleteConfirm")
+        XCTAssertTrue(waitUntilHittable(confirm, timeout: 10), "no delete confirmation")
+        attachScreenshot("bulk delete confirmation")
+        confirm.tap()
+        XCTAssertTrue(row(firstDocument).waitForNonExistence(timeout: 10), "first document was not deleted")
+        XCTAssertFalse(row(secondDocument).exists, "second document was not deleted")
+        XCTAssertTrue(row(favoriteDocument).exists, "an unselected document was deleted")
+
+        // Leaving select mode; a tap opens a document again.
+        reveal(select, "Done button")
+        select.tap()
+        openDocument(favoriteDocument)
+    }
 }
