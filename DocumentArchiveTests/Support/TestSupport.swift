@@ -23,6 +23,16 @@ enum TestSupport {
         )
     }
 
+    /// A fresh archive in a temporary folder, never synced. Only for tests of store change
+    /// notifications: in-memory stores all report `/dev/null` as their URL, so the saves of tests
+    /// running in parallel would count as changes of every in-memory store.
+    static func makeContainerOnDisk() throws -> ModelContainer {
+        let schema = DocumentArchiveApp.schema
+        let url = try makeTemporaryDirectory().appending(path: "Test.store")
+        return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, url: url,
+                                                                                  cloudKitDatabase: .none))
+    }
+
     /// A throwaway settings suite; removed by `removeDefaults`.
     static func makeDefaults() -> (UserDefaults, String) {
         let name = "DocumentArchiveTests.\(UUID().uuidString)"
@@ -246,11 +256,29 @@ enum TestSupport {
         return bytes
     }
 
+    /// The factor every test wait multiplies its timeout by: the environment variable
+    /// `DA_TEST_TIMEOUT_SCALE`, 1 when it is missing or not a positive number. The nightly
+    /// "Thread Sanitizer" configuration (`TestPlans/Nightly.xctestplan`) sets it to 5, because the
+    /// sanitizer slows text recognition down several times.
+    static let timeoutScale = timeoutScale(from: ProcessInfo.processInfo.environment)
+
+    static func timeoutScale(from environment: [String: String]) -> Double {
+        guard let value = environment["DA_TEST_TIMEOUT_SCALE"].flatMap(Double.init),
+              value.isFinite, value > 0 else { return 1 }
+        return value
+    }
+
+    /// A wait's timeout, scaled by `timeoutScale`. Every wait for something asynchronous uses it.
+    static func scaled(_ timeout: Duration) -> Duration {
+        timeout * timeoutScale
+    }
+
     /// Waits until background processing (thumbnail, OCR, auto-assignment) has finished.
-    @MainActor
     /// The timeout is generous because text recognition on the hosted CI runners is slow; it
-    /// only matters when processing really hangs.
+    /// only matters when processing really hangs. It is scaled by `timeoutScale`.
+    @MainActor
     static func waitUntilProcessed(_ documents: [Document], timeout: Duration = .seconds(180)) async throws {
+        let timeout = scaled(timeout)
         let clock = ContinuousClock()
         let deadline = clock.now + timeout
         while documents.contains(where: { $0.isAlive && $0.isProcessing }) {

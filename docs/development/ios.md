@@ -14,13 +14,18 @@ python3 scripts/pick-simulator.py ipad largest      # e.g. iPad Pro 13-inch
 ```
 
 Run the unit tests on the iPhone simulator (this is the required CI check
-`test (iOS)`):
+`test (iOS)`; it runs the scheme's default test plan, see
+[Test plans](./#test-plans)):
 
 ```sh
 xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
   -destination "platform=iOS Simulator,id=$(python3 scripts/pick-simulator.py iphone smallest)" \
   CODE_SIGN_IDENTITY=-
 ```
+
+The nightly configurations run on macOS only. To run one on the simulator,
+add `-testPlan Nightly -only-test-configuration German` (or
+`"Thread Sanitizer"`) to the command above.
 
 Run the UI smoke tests (any iPhone or iPad simulator):
 

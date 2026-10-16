@@ -255,7 +255,7 @@ import UniformTypeIdentifiers
             Task { await DocumentImporter.processAndWait(document, context: context, classify: false) }
         }
         let clock = ContinuousClock()
-        let deadline = clock.now + .seconds(30)
+        let deadline = clock.now + TestSupport.scaled(.seconds(30))
         while stub.requests.isEmpty, clock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
         #expect(!stub.requests.isEmpty, "the analysis is waiting for the stub")
 

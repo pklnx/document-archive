@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "8E7151EE-3E85-419B-9C79-0350771F3966",
+      "name" : "Default",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:DocumentArchive.xcodeproj",
+        "identifier" : "B10000000000000000000040",
+        "name" : "DocumentArchiveTests"
+      }
+    }
+  ],
+  "version" : 1
+}

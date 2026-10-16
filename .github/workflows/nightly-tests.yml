@@ -1,0 +1,86 @@
+name: Nightly tests
+
+# The unit tests in the configurations of TestPlans/Nightly.xctestplan, which are too slow or too
+# rarely affected for every pull request: in German, and with Thread Sanitizer. Nightly on main,
+# on demand, and on pull requests that change this setup, so such a change proves itself on its
+# own pull request. Not a required check; a failure is handled like a bug report.
+on:
+  schedule:
+    # After the UI tests (ui-tests.yml, 02:17).
+    - cron: "47 2 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/nightly-tests.yml
+      - TestPlans/Nightly.xctestplan
+
+permissions:
+  contents: read
+
+# Per ref: a pull request run never cancels the scheduled run on main, or the other way round.
+concurrency:
+  group: nightly-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Unit tests hosted by the macOS app, like `test (macOS)`: in-memory store, Mistral stubbed,
+    # no secrets. Thread Sanitizer slows text recognition down several times; its configuration
+    # sets DA_TEST_TIMEOUT_SCALE=5 for the test waits instead of skipping the OCR suites, and
+    # TSAN_OPTIONS=halt_on_error=0, so one run reports every race. A race does not fail a test,
+    # and xcodebuild shows no report: the sanitizer writes them to /tmp/DocumentArchive-TSan.<pid>
+    # (log_path in the test plan), and the step after the tests fails the job when there is one.
+    runs-on: macos-26
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [German, Thread Sanitizer]
+    name: test (macOS, ${{ matrix.configuration }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/select-xcode
+      - name: Remove old Thread Sanitizer reports
+        run: rm -f /tmp/DocumentArchive-TSan.*
+      - name: Test
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: |
+          set -o pipefail
+          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -testPlan Nightly -only-test-configuration "$CONFIGURATION" \
+            -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+      - name: Check Thread Sanitizer reports
+        if: ${{ !cancelled() }}
+        run: |
+          shopt -s nullglob
+          mkdir -p ThreadSanitizer
+          reports=(/tmp/DocumentArchive-TSan.*)
+          if [ ${#reports[@]} -eq 0 ]; then
+            echo "No Thread Sanitizer reports."
+            exit 0
+          fi
+          cp "${reports[@]}" ThreadSanitizer/
+          cat "${reports[@]}"
+          {
+            echo "### Thread Sanitizer"
+            echo
+            echo "| Reports | Summary |"
+            echo "|---:|---|"
+            grep -h '^SUMMARY: ThreadSanitizer' "${reports[@]}" | sort | uniq -c | sort -rn \
+              | sed -E 's/^ *([0-9]+) SUMMARY: ThreadSanitizer: (.*)$/| \1 | `\2` |/'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Thread Sanitizer found $(cat "${reports[@]}" | grep -c '^SUMMARY: ThreadSanitizer') report(s); see the log, the job summary and the ThreadSanitizer artifact."
+          exit 1
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TestResults-macOS-${{ matrix.configuration }}
+          path: |
+            TestResults.xcresult
+            ThreadSanitizer
+          retention-days: 7

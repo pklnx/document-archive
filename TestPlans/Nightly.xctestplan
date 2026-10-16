@@ -1,0 +1,43 @@
+{
+  "configurations" : [
+    {
+      "id" : "DE938DF8-95E7-4514-89B2-319625CDB579",
+      "name" : "German",
+      "options" : {
+        "language" : "de",
+        "region" : "DE"
+      }
+    },
+    {
+      "id" : "B6726579-42CE-4549-9877-97CC87F497C0",
+      "name" : "Thread Sanitizer",
+      "options" : {
+        "environmentVariableEntries" : [
+          {
+            "key" : "DA_TEST_TIMEOUT_SCALE",
+            "value" : "5"
+          },
+          {
+            "key" : "TSAN_OPTIONS",
+            "value" : "halt_on_error=0 log_path=/tmp/DocumentArchive-TSan"
+          }
+        ],
+        "threadSanitizerEnabled" : true
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:DocumentArchive.xcodeproj",
+        "identifier" : "B10000000000000000000040",
+        "name" : "DocumentArchiveTests"
+      }
+    }
+  ],
+  "version" : 1
+}

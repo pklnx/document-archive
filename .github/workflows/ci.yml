@@ -208,7 +208,8 @@ jobs:
       # perspective correction fail with e5rtError("e5rt_e5_compiler_compile call failed", 11);
       # they work on macos-26 and on a Mac with macOS 27), so the tests that need them are skipped
       # here. A new Vision test that fails only in this job goes into the list. Remove the list
-      # when the image can run Vision.
+      # when the image can run Vision. The identifiers are those of the scheme's default test plan
+      # (TestPlans/Default.xctestplan, target DocumentArchiveTests).
       - name: Test on macOS
         run: |
           set -o pipefail

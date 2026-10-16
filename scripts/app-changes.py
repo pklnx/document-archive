@@ -11,9 +11,10 @@ failed, and a broken filter must never skip the build.
     python3 scripts/app-changes.py --self-test
 
 Not app-relevant: docs/, Markdown files anywhere, LICENSE, issue templates, labels, release
-notes, Dependabot and the label workflows, the nightly UI test workflow, the gitleaks
-configuration and hooks (gitleaks itself always runs). Everything else is relevant, including
-ci.yml and scripts/ (a change to CI must prove itself by running it).
+notes, Dependabot and the label workflows, the nightly UI test and nightly test workflows (they
+run on their own), the gitleaks configuration and hooks (gitleaks itself always runs). Everything
+else is relevant, including ci.yml, scripts/ (a change to CI must prove itself by running it)
+and TestPlans/ (the required test jobs run Default.xctestplan).
 """
 import fnmatch
 import sys
@@ -31,6 +32,7 @@ NOT_APP_RELEVANT = [
     ".github/workflows/labeler.yml",
     ".github/workflows/labels.yml",
     ".github/workflows/ui-tests.yml",
+    ".github/workflows/nightly-tests.yml",
     ".gitleaks.toml",
     ".githooks/*",
 ]
@@ -53,6 +55,8 @@ def self_test() -> None:
         ("LICENSE", ".github/ISSUE_TEMPLATE/bug.yml", ".github/labels.json"): False,
         (".github/workflows/labeler.yml", ".github/workflows/ui-tests.yml", ".gitleaks.toml"): False,
         ("DocumentArchive/Notes.md",): False,
+        # The nightly workflow proves itself on its own pull request (paths trigger).
+        (".github/workflows/nightly-tests.yml",): False,
         # Empty: the diff failed or listed nothing; build rather than skip.
         (): True,
         ("", "  "): True,
@@ -63,6 +67,9 @@ def self_test() -> None:
         ("DocumentArchive.xcodeproj/project.pbxproj",): True,
         (".github/workflows/ci.yml",): True,
         (".xcode-version",): True,
+        # The required test jobs run the scheme's default plan; the nightly plan is attached to it.
+        ("TestPlans/Default.xctestplan",): True,
+        (".github/workflows/nightly-tests.yml", "TestPlans/Nightly.xctestplan"): True,
         (".github/actions/select-xcode/action.yml",): True,
         ("scripts/pick-simulator.py",): True,
         ("Config/Project.xcconfig",): True,
