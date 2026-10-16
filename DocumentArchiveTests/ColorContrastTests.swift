@@ -58,8 +58,8 @@ import Testing
         #expect(fill != translucentOnAccent)
     }
 
-    /// With Increase Contrast, the chip's outline stands out (3:1) on every row: through its border
-    /// on normal and grey selected rows, through its opaque fill on the accent color.
+    /// With Increase Contrast, the chip's outline stands out (3:1) on every row, normal, grey or
+    /// accent selected: through its border, or (light mode on the accent) through its opaque fill.
     @Test(arguments: colors, appearances)
     func increasedContrastChipStandsOut(hex: String, dark: Bool) {
         let border = ColorContrast.chipBorder(tagHex: hex, dark: dark)
@@ -68,11 +68,13 @@ import Testing
             #expect(ColorContrast.ratio(border, row) >= ColorContrast.minimumNonTextContrast, "\(hex) against \(row)")
         }
         let accent = ColorContrast.selectedRowBackground(dark: dark)
-        #expect(ColorContrast.ratio(fill, accent) >= ColorContrast.minimumNonTextContrast,
-                "\(hex) fill against the accent: \(ColorContrast.ratio(fill, accent))")
+        let outline = max(ColorContrast.ratio(border, accent), ColorContrast.ratio(fill, accent))
+        #expect(outline >= ColorContrast.minimumNonTextContrast, "\(hex) on the accent: \(outline)")
     }
 
-    /// The selected row is drawn in the accent color; the constants must follow the asset.
+    /// The selected row is drawn in the accent color; the constant must follow the asset. The
+    /// asset has one universal Petrol (maintainer decision, PR #32); a dark entry, if one is added
+    /// again, must match the dark constant.
     @Test func selectedRowMatchesTheAccentColorAsset() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appending(path: "DocumentArchive/Assets.xcassets/AccentColor.colorset/Contents.json")
@@ -91,7 +93,7 @@ import Testing
                                 blue: try component(components["blue"]))
         }
         for dark in [false, true] {
-            let asset = try #require(found[dark], "accent color for \(dark ? "dark" : "light") missing")
+            let asset = try #require(found[dark] ?? found[false], "accent color for \(dark ? "dark" : "light") missing")
             let constant = ColorContrast.selectedRowBackground(dark: dark)
             #expect(abs(asset.red - constant.red) < 0.003 && abs(asset.green - constant.green) < 0.003
                     && abs(asset.blue - constant.blue) < 0.003, "\(dark ? "dark" : "light"): \(asset) vs \(constant)")
