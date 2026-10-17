@@ -12,90 +12,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  probe-ios:
-    # Step 0 and step 1 on the runner's iOS 26.5 runtime (the one that crashed): name the trap's
-    # addresses in SwiftData, check the premise, then run the two crash probes.
-    runs-on: macos-26
-    timeout-minutes: 60
-    name: probe (iOS 26.5)
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/select-xcode
-      - name: Pick simulator
-        id: simulator
-        run: |
-          echo "udid=$(python3 scripts/pick-simulator.py iphone smallest)" >> "$GITHUB_OUTPUT"
-          xcrun simctl list runtimes
-      - name: Build for testing
-        env:
-          UDID: ${{ steps.simulator.outputs.udid }}
-        run: |
-          set -o pipefail
-          xcodebuild build-for-testing -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build CODE_SIGN_IDENTITY=- \
-            | xcbeautify --renderer github-actions
-      - name: Symbols and premise
-        env:
-          UDID: ${{ steps.simulator.outputs.udid }}
-          TEST_RUNNER_DA_PROBE_59: s
-        run: |
-          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
-            -only-testing:DocumentArchiveTests/Issue59Symbols -only-testing:DocumentArchiveTests/Issue59PremiseTests \
-            -resultBundlePath Symbols.xcresult 2>&1 | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)'
-      - name: Probe a (unsaved insert, container released)
-        env:
-          UDID: ${{ steps.simulator.outputs.udid }}
-          TEST_RUNNER_DA_PROBE_59: a
-        run: |
-          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
-            -only-testing:DocumentArchiveTests/Issue59Probes -resultBundlePath ProbeA.xcresult 2>&1 \
-            | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)|rash|signal' || true
-          xcrun xcresulttool export diagnostics --path ProbeA.xcresult --output-path diag-a || true
-          python3 scripts/crash-summary.py diag-a | tee -a "$GITHUB_STEP_SUMMARY" | grep -v '^ ' | head -40
-      - name: Probe b (container released during the analysis)
-        env:
-          UDID: ${{ steps.simulator.outputs.udid }}
-          TEST_RUNNER_DA_PROBE_59: b
-        run: |
-          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
-            -only-testing:DocumentArchiveTests/Issue59Probes -resultBundlePath ProbeB.xcresult 2>&1 \
-            | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)|rash|signal' || true
-          xcrun xcresulttool export diagnostics --path ProbeB.xcresult --output-path diag-b || true
-          python3 scripts/crash-summary.py diag-b | tee -a "$GITHUB_STEP_SUMMARY" | grep -v '^ ' | head -40
-      - name: Probe c (run loop turns, then the container is released)
-        env:
-          UDID: ${{ steps.simulator.outputs.udid }}
-          TEST_RUNNER_DA_PROBE_59: c
-        run: |
-          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
-            -only-testing:DocumentArchiveTests/Issue59Probes -resultBundlePath ProbeC.xcresult 2>&1 \
-            | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)|rash|signal' || true
-          xcrun xcresulttool export diagnostics --path ProbeC.xcresult --output-path diag-c || true
-          python3 scripts/crash-summary.py diag-c | tee -a "$GITHUB_STEP_SUMMARY" | grep -v '^ ' | head -40
-      - name: Upload results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Probe-iOS
-          path: "*.xcresult"
-          retention-days: 7
-
   stress-ios:
     # Step 1: unchanged main, the unit tests in parallel, five times at once, with PR 2's timeout
     # scale (without it, parallel OCR runs past the 180 s waits, which hides crashes).
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 120
     name: stress (iOS) ${{ matrix.run }}
     strategy:
       fail-fast: false
       matrix:
-        run: [1, 2, 3, 4, 5]
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -112,7 +38,7 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
-            -parallel-testing-enabled YES CODE_SIGN_IDENTITY=- \
+            -parallel-testing-enabled YES -test-iterations 3 CODE_SIGN_IDENTITY=- \
             | xcbeautify --renderer github-actions
       - name: Crash summary
         if: ${{ failure() }}
