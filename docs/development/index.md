@@ -106,7 +106,11 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 
 Every wait for something asynchronous in a test scales its timeout with
 `TestSupport.scaled(_:)` (`DA_TEST_TIMEOUT_SCALE`, default 1);
-`TestSupport.waitUntilProcessed` does this already. On the command line,
+`TestSupport.waitUntilProcessed` does this already. So does a suite's
+`.timeLimit` (`AsyncSemaphoreTests`). Do not assert on elapsed time: under
+parallel tests a busy simulator delayed an instant local failure by up to
+33 seconds (#59); check what happened instead (which error, which state).
+On the command line,
 `xcodebuild` passes it on as `TEST_RUNNER_DA_TEST_TIMEOUT_SCALE=3`. A Thread Sanitizer report
 in app code becomes an issue labeled `bug`; a race in test code is fixed in
 the test.
