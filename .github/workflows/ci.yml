@@ -1,8 +1,7 @@
 name: CI
 
+# Scratch workflow for #59 (PR 1, steps 0 and 1). Never merged; the branch is deleted afterwards.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -13,149 +12,78 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    # Does the pull request change anything the app build depends on? Doc-only pull requests
-    # (docs/, Markdown, issue templates, labels, ...; see scripts/app-changes.py) skip the build
-    # and test jobs: a skipped job counts as passed for the required checks. Pushes to main
-    # always run everything. gitleaks always runs. Fail-safe: if this job fails, its output is
-    # empty and the build and test jobs run (`!= 'false'`), so a broken filter never skips them.
-    runs-on: ubuntu-latest
-    outputs:
-      app: ${{ steps.filter.outputs.app }}
+  probe-ios:
+    # Step 0 and step 1 on the runner's iOS 26.5 runtime (the one that crashed): name the trap's
+    # addresses in SwiftData, check the premise, then run the two crash probes.
+    runs-on: macos-26
+    timeout-minutes: 60
+    name: probe (iOS 26.5)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
-      - name: Check the scripts
+      - uses: ./.github/actions/select-xcode
+      - name: Pick simulator
+        id: simulator
         run: |
-          python3 scripts/app-changes.py --self-test
-          python3 scripts/coverage-summary.py --self-test
-          python3 scripts/check-privacy-manifest.py --self-test
-          python3 scripts/check-logging.py --self-test
-          python3 scripts/check-container-migration.py --self-test
-      - name: Filter changed files
-        id: filter
+          echo "udid=$(python3 scripts/pick-simulator.py iphone smallest)" >> "$GITHUB_OUTPUT"
+          xcrun simctl list runtimes
+      - name: Build for testing
         env:
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        # pipefail: a failing diff fails this job (so everything runs) instead of passing an empty
-        # list on. --no-renames: a file moved out of the app lists its old path too.
+          UDID: ${{ steps.simulator.outputs.udid }}
         run: |
           set -o pipefail
-          if [ "$EVENT" = pull_request ]; then
-            git diff --no-renames --name-only "$BASE...$HEAD" | tee changed.txt
-            app=$(python3 scripts/app-changes.py < changed.txt)
-          else
-            app=true
-          fi
-          echo "app-relevant changes: $app"
-          echo "app=$app" >> "$GITHUB_OUTPUT"
-
-  # The two builds are separate jobs instead of a matrix: a matrix job skipped by `if` reports
-  # its unexpanded name ("build (${{ matrix.platform }})"), which would leave the required checks
-  # "build (macOS)" and "build (iOS)" waiting forever.
-  # Every macOS job runs the Xcode pinned in .xcode-version (select-xcode). Warnings are errors
-  # here, not in the project settings: local builds only warn, CI keeps main warning-free with
-  # the pinned Xcode's diagnostics. xcbeautify turns errors, warnings and failed tests into
-  # annotations on the pull request.
-  build-macos:
-    # macOS and iOS are built from the same target; unsigned, so no secrets are needed.
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: macos-26
-    timeout-minutes: 30
-    name: build (macOS)
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/select-xcode
-      - name: Build
-        run: |
-          set -o pipefail
-          xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build | xcbeautify --renderer github-actions
-      # Every UI string compiled for this platform must have a German translation.
-      - name: Check translations
-        run: python3 scripts/check-localization.py build
-      # The required-reason APIs the code uses must match DocumentArchive/PrivacyInfo.xcprivacy.
-      - name: Check privacy manifest
-        run: python3 scripts/check-privacy-manifest.py
-      # No print/NSLog in the app, and no log call that interpolates the API key or headers.
-      - name: Check logging
-        run: python3 scripts/check-logging.py
-      # The container migration manifest is in the real app, and the build settings keep it out
-      # of every build with a bundle identifier suffix (the sandboxed test builds).
-      - name: Check container migration manifest
-        run: |
-          python3 scripts/check-container-migration.py --app "build/Build/Products/Debug/Document Archive.app"
-          python3 scripts/check-container-migration.py --settings
-
-  build-ios:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: macos-26
-    timeout-minutes: 30
-    name: build (iOS)
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/select-xcode
-      - name: Build
-        run: |
-          set -o pipefail
-          xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build | xcbeautify --renderer github-actions
-      - name: Check translations
-        run: python3 scripts/check-localization.py build
-
-  test:
-    # Unit tests, hosted by the macOS app. They use an in-memory store and stub all
-    # network access, so they need no secrets and never reach Mistral.
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: macos-26
-    timeout-minutes: 45
-    name: test (macOS)
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/select-xcode
-      - name: Test
-        run: |
-          set -o pipefail
-          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
-            -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+          xcodebuild build-for-testing -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build CODE_SIGN_IDENTITY=- \
             | xcbeautify --renderer github-actions
-      # Line coverage of the app and its least covered files in the job summary. No gate: the
-      # script prints "no coverage data" and exits 0 when there is nothing to read.
-      - name: Coverage summary
-        if: ${{ !cancelled() }}
-        run: xcrun xccov view --report --json TestResults.xcresult | python3 scripts/coverage-summary.py >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload test results
+      - name: Symbols and premise
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_RUNNER_DA_PROBE_59: s
+        run: |
+          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
+            -only-testing:DocumentArchiveTests/Issue59Symbols -only-testing:DocumentArchiveTests/Issue59PremiseTests \
+            -resultBundlePath Symbols.xcresult 2>&1 | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)'
+      - name: Probe a (unsaved insert, container released)
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_RUNNER_DA_PROBE_59: a
+        run: |
+          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
+            -only-testing:DocumentArchiveTests/Issue59Probes -resultBundlePath ProbeA.xcresult 2>&1 \
+            | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)|rash|signal' || true
+          xcrun xcresulttool export diagnostics --path ProbeA.xcresult --output-path diag-a || true
+          python3 scripts/crash-summary.py diag-a | tee -a "$GITHUB_STEP_SUMMARY" | grep -v '^ ' | head -40
+      - name: Probe b (container released during the analysis)
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_RUNNER_DA_PROBE_59: b
+        run: |
+          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
+            -only-testing:DocumentArchiveTests/Issue59Probes -resultBundlePath ProbeB.xcresult 2>&1 \
+            | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)|rash|signal' || true
+          xcrun xcresulttool export diagnostics --path ProbeB.xcresult --output-path diag-b || true
+          python3 scripts/crash-summary.py diag-b | tee -a "$GITHUB_STEP_SUMMARY" | grep -v '^ ' | head -40
+      - name: Upload results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: TestResults-macOS
-          path: TestResults.xcresult
+          name: Probe-iOS
+          path: "*.xcresult"
           retention-days: 7
 
-  test-ios:
-    # The same unit tests on the iPhone simulator with the smallest screen. The build is ad-hoc
-    # signed ("Sign to Run Locally", no team, no secrets): the Keychain tests need a signature.
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
+  stress-ios:
+    # Step 1: unchanged main, the unit tests in parallel, five times at once.
     runs-on: macos-26
-    timeout-minutes: 45
-    name: test (iOS)
+    timeout-minutes: 60
+    name: stress (iOS) ${{ matrix.run }}
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -171,120 +99,17 @@ jobs:
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
             -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
-            -enableCodeCoverage YES CODE_SIGN_IDENTITY=- SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            -parallel-testing-enabled YES CODE_SIGN_IDENTITY=- \
             | xcbeautify --renderer github-actions
-      # Line coverage of the app and its least covered files in the job summary. No gate: the
-      # script prints "no coverage data" and exits 0 when there is nothing to read.
-      - name: Coverage summary
-        if: ${{ !cancelled() }}
-        run: xcrun xccov view --report --json TestResults.xcresult | python3 scripts/coverage-summary.py >> "$GITHUB_STEP_SUMMARY"
+      - name: Crash summary
+        if: ${{ failure() }}
+        run: |
+          xcrun xcresulttool export diagnostics --path TestResults.xcresult --output-path diagnostics || true
+          python3 scripts/crash-summary.py diagnostics >> "$GITHUB_STEP_SUMMARY" || true
       - name: Upload test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: TestResults-iOS
+          name: TestResults-iOS-stress-${{ matrix.run }}
           path: TestResults.xcresult
           retention-days: 7
-
-  next-xcode:
-    # Early warning for the next Xcode: the preview image's default Xcode, not pinned on purpose
-    # and without warnings as errors. Not a required check: a red run means "look at it", the
-    # pull request may still be merged.
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
-    runs-on: xcode-27
-    timeout-minutes: 60
-    name: build (macOS, next Xcode)
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Show Xcode
-        run: |
-          xcodebuild -version
-          echo "xcbeautify $(xcbeautify --version)"
-      - name: Build for macOS
-        run: |
-          set -o pipefail
-          xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination 'platform=macOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build \
-            | xcbeautify --renderer github-actions
-      - name: Build for iOS
-        run: |
-          set -o pipefail
-          xcodebuild -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | xcbeautify --renderer github-actions
-      # Apple Vision's models do not run on the xcode-27 preview VMs (text recognition and
-      # perspective correction fail with e5rtError("e5rt_e5_compiler_compile call failed", 11);
-      # they work on macos-26 and on a Mac with macOS 27), so the tests that need them are skipped
-      # here. A new Vision test that fails only in this job goes into the list. Remove the list
-      # when the image can run Vision. The identifiers are those of the scheme's default test plan
-      # (TestPlans/Default.xctestplan, target DocumentArchiveTests).
-      - name: Test on macOS
-        run: |
-          set -o pipefail
-          skip=()
-          for test in \
-            DocumentImporterTests/importedImageGetsATextLayerAndStaysADuplicate \
-            DocumentImporterTests/folderCopyPicksUpTheReplacedPDF \
-            DocumentImporterTests/rewriteThatFailsTheCheckKeepsTheOriginal \
-            DocumentImporterTests/importReachesTheStubThroughTheDetachedAnalysis \
-            DocumentImporterTests/settingOffLeavesThePDFUnchanged \
-            DocumentImporterTests/automaticCleanupStraightensThePhotoAndKeepsTheOriginalHash \
-            DocumentImporterTests/importOfSeveralFilesRecognizesOneAtATime \
-            DocumentImporterTests/resumePendingProcessingRecognizesOneAtATime \
-            DocumentProcessorTests/readsScannedTextWithVision \
-            DocumentProcessorTests/textLayerComesFromVisionWhenMistralReadsTheText \
-            DocumentProcessorTests/fallsBackToVisionWhenMistralFails \
-            ScanImportTests/threePagesBecomeOneProcessedDocument \
-            ImageCleanupTests/correctsThePerspective \
-            TextLayerTests/wordsLandOnTheRightPage \
-            TextLayerTests/selectsASingleWordInTheMiddleOfALine \
-            TextLayerTests/rotatedPageLooksTheSameAndSelectsTheWord \
-            TextLayerTests/croppedPageLooksTheSameAndSelectsTheWord \
-            TextLayerTests/looksTheSameAndStaysSmall \
-            TextLayerTests/tooLargeRewriteIsSkippedWithItsOwnNote \
-            TextLayerTests/densePageStaysSmall \
-            TextLayerTests/secondRunFindsNothingToDo \
-            VisionGateTests/concurrentRecognitionsRunOneAtATime \
-            VisionGateTests/cancelledRecognitionDoesNotBlockTheGate
-          do
-            skip+=("-skip-testing:DocumentArchiveTests/$test()")
-          done
-          xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
-            -destination 'platform=macOS,arch=arm64' -derivedDataPath build "${skip[@]}" \
-            -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO \
-            | xcbeautify --renderer github-actions
-      - name: Upload test results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: TestResults-macOS-next-Xcode
-          path: TestResults.xcresult
-          retention-days: 7
-
-  gitleaks:
-    # Scans the full history for credentials. The gitleaks binary is pinned and
-    # checked against a SHA-256 kept here, so no third-party action runs with a token.
-    runs-on: ubuntu-latest
-    env:
-      GITLEAKS_VERSION: 8.30.1
-      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install gitleaks
-        run: |
-          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfL -o "$archive" \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
-          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
-          tar -xzf "$archive" gitleaks
-          ./gitleaks version
-      # Only the history of the checked-out commit: by default gitleaks scans all
-      # fetched branches, so a leak on another open branch would fail every PR.
-      - name: Scan history
-        run: ./gitleaks git --config .gitleaks.toml --redact --exit-code 1 --no-banner --log-opts="HEAD" .
