@@ -9,6 +9,16 @@
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 
+// Concurrency checking (#44). Complete Sendable and actor isolation checking while the targets
+// still build in the Swift 5 language mode (their own SWIFT_VERSION = 5.0 until #44 part 4).
+// Default actor isolation stays nonisolated (maintainer decision; set explicitly in #44 part 3).
+// See docs/development/index.md → Concurrency.
+SWIFT_STRICT_CONCURRENCY = complete
+// SE-0418: key path literals such as `SortDescriptor(\.createdAt)` are `Sendable` when they
+// capture nothing that is not. Part of the Swift 6 language mode and of Approachable Concurrency
+// (#44 part 3, which replaces this line); without it every such literal is a warning here.
+SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES = YES
+
 // CloudKit sync needs a build signed with the paid Apple Developer team. Leave this NO for
 // unsigned, ad-hoc (simulator) and free Personal Team builds; set it to YES in
 // Config/Local.xcconfig (not in git) for the signed build. See docs/development/ios.md.

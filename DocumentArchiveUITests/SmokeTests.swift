@@ -5,6 +5,11 @@ import XCTest
 /// (`-UITestSeed`), never touches the real archive and never calls Mistral. Elements are found by
 /// accessibility identifier only (see `AccessibilityID` in the app), never by their German text.
 /// iOS only (swipes, rotation, edit mode, navigation bars); the Mac has `MacSmokeTests`.
+///
+/// `@MainActor`: XCTest runs UI tests on the main thread, and the UI automation API is
+/// main-actor isolated. `setUp` and `tearDown` are the `async` variants, which may run on the
+/// main actor; a failed assertion there still ends the test (`continueAfterFailure`).
+@MainActor
 final class SmokeTests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -13,7 +18,7 @@ final class SmokeTests: XCTestCase {
     private let secondDocument = "Account statement"
     private let favoriteDocument = "Medical invoice"
 
-    override func setUp() {
+    override func setUp() async throws {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
         app = XCUIApplication()
@@ -24,7 +29,9 @@ final class SmokeTests: XCTestCase {
     /// Generous: slow CI runners need a long time for the first launch of a simulator.
     private let launchTimeout: TimeInterval = 60
     /// Set while the first launch attempt runs; its failures are collected instead of recorded.
-    private var firstLaunchIssues: [XCTIssue]?
+    /// `nonisolated(unsafe)` for `record`, which overrides a nonisolated XCTest method: only the
+    /// main thread uses it (`launchApp`, and `record` called from the launch).
+    nonisolated(unsafe) private var firstLaunchIssues: [XCTIssue]?
 
     /// Launches the app and waits for the list or the sidebar. On slow CI runners a launch
     /// sometimes fails ("Timed out while launching application via Xcode", "Failed to get
@@ -63,7 +70,7 @@ final class SmokeTests: XCTestCase {
         }
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         XCUIDevice.shared.orientation = .portrait
     }
 

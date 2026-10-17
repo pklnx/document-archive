@@ -29,11 +29,12 @@ struct ProcessingEnvironment: Sendable {
     /// Test hook: receives the PDF data before `MistralClient.ocr` encodes it. `nil` in the app.
     var encodeHook: (@Sendable (Data) -> Void)?
 
-    /// The app's environment. Unit and UI test runs never use the stored Mistral key and never
-    /// read the real text layer and cleanup settings (on, Off and Color).
+    /// The app's environment. Unit and UI test runs never use the stored Mistral key, never reach
+    /// the network (`offlineSession`) and never read the real text layer and cleanup settings
+    /// (on, Off and Color).
     static let live = ProcessingEnvironment(
         mistralConfig: { TestEnvironment.isIsolated ? nil : MistralConfig.live() },
-        session: .shared,
+        session: TestEnvironment.isIsolated ? offlineSession : .shared,
         defaultsSuite: nil,
         textLayerEnabled: { TestEnvironment.isRunningTests ? true : TextLayer.isEnabled(in: .standard) },
         cleanupMode: { TestEnvironment.isRunningTests ? CleanupMode.defaultSetting : CleanupMode.setting(in: .standard) },
@@ -48,4 +49,29 @@ struct ProcessingEnvironment: Sendable {
     }
 
     @TaskLocal static var current: ProcessingEnvironment = .live
+
+    /// The session of `live` in unit and UI test runs: every request fails at once with
+    /// `URLError(.notConnectedToInternet)` and never reaches the network. A second line of
+    /// defence: `live` has no Mistral configuration in these runs, so no client should be built
+    /// with it; tests use `MistralStub`'s sessions.
+    static let offlineSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        // Replaces the system's protocols, so no request can fall through to HTTP.
+        configuration.protocolClasses = [OfflineURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }()
+}
+
+/// Fails every request without sending it (`ProcessingEnvironment.offlineSession`).
+final class OfflineURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        // Should never happen: a request that would have gone to the network in a test run.
+        Log.mistral.fault("Request blocked in a test run: \(self.request.url?.host() ?? "", privacy: .private)")
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+    }
+
+    override func stopLoading() {}
 }

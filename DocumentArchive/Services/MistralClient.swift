@@ -314,7 +314,9 @@ struct ClassificationRequest {
 
     // MARK: Parts
 
-    private static let nullableString: [String: Any] = ["type": ["string", "null"]]
+    // Computed, like `date` below: `[String: Any]` and `Part` are not `Sendable`, so they cannot
+    // be shared `static let`s.
+    private static var nullableString: [String: Any] { ["type": ["string", "null"]] }
 
     private static func list(_ names: [String]) -> String {
         names.isEmpty ? "(none)" : names.joined(separator: "; ")
@@ -356,7 +358,9 @@ struct ClassificationRequest {
                     context: "Existing tags: \(list(unique))")
     }
 
-    static let date = Part(property: "date", schema: nullableString,
-                           rule: "the issue date of the document as YYYY-MM-DD (not a due date or service period), "
-                               + "null if there is none.")
+    static var date: Part {
+        Part(property: "date", schema: nullableString,
+             rule: "the issue date of the document as YYYY-MM-DD (not a due date or service period), "
+                 + "null if there is none.")
+    }
 }

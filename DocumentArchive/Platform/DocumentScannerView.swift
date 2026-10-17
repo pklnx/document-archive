@@ -21,7 +21,11 @@ struct DocumentScannerView: UIViewControllerRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-    final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
+    /// VisionKit calls the delegate on the main thread, but `VNDocumentCameraViewControllerDelegate`
+    /// is not annotated `@MainActor` yet; the `@preconcurrency` conformance checks the main actor
+    /// at run time instead of at compile time.
+    @MainActor
+    final class Coordinator: NSObject, @preconcurrency VNDocumentCameraViewControllerDelegate {
         let parent: DocumentScannerView
 
         init(parent: DocumentScannerView) { self.parent = parent }

@@ -151,7 +151,9 @@ by the app, which notices the test run (`TestEnvironment.isRunningTests`) and
 then opens an in-memory store and skips migrations, so the real archive is
 never touched. Rules for tests:
 
-- **No network.** Mistral is stubbed with `MistralStub` (a `URLProtocol`).
+- **No network.** In a test run, `ProcessingEnvironment.live` has no Mistral configuration
+  and a session that fails every request (`offlineSession`), so nothing reaches the network
+  even by mistake. Mistral is stubbed with `MistralStub` (a `URLProtocol`).
   `MistralStub.install(config:handler:)` returns a stub session with its own
   fake API key, `URLSession`, handler and recorded `requests`; requests are
   routed by their `Authorization` header, so parallel tests never see each
@@ -273,6 +275,36 @@ green again or an issue explains the failure.
 One target builds both platforms. Platform-specific code is wrapped in
 `#if os(iOS)` / `#if os(macOS)`; keep it small and in `Platform/` where
 possible.
+
+## Concurrency
+
+The project checks concurrency completely: `SWIFT_STRICT_CONCURRENCY = complete` in
+`Config/Project.xcconfig`, so the app, the unit tests and the UI tests get the same setting.
+The targets still build in the Swift 5 language mode (their own `SWIFT_VERSION = 5.0`), so the
+diagnostics are warnings, and CI turns every warning into an error. The same file turns on
+`InferSendableFromCaptures` (SE-0418, part of the Swift 6 mode), so key path literals such as
+`SortDescriptor(\.createdAt)` are `Sendable`. Default actor isolation stays `nonisolated`
+(maintainer decision on #44): types that need the main actor say so with `@MainActor`.
+
+- **SwiftData:** `@Model` objects and `ModelContext` stay on the main actor. Only
+  `PersistentIdentifier`s and `Sendable` snapshots (like `ArchiveMirror.DocumentWork`) cross
+  actors. A helper that captures a model in a closure is `@MainActor` (`Document.transfer`).
+- **Heavy work** leaves the main actor through `Task.detached` with a priority; code that
+  detaches captures `ProcessingEnvironment.current` first (see [Tests](#tests)). A helper that
+  runs a caller's closure takes `isolation: isolated (any Actor)? = #isolation`, so the closure
+  never leaves the caller's actor (`FolderAccess.withAccess`, `Log.interval`).
+- **`Notification`s** are not `Sendable`: an observer reads the `Sendable` values it needs
+  before it hops to the main actor (`SyncMonitor`).
+- **Static properties** hold `Sendable` values only. A non-`Sendable` constant (a `Regex`, a
+  `[String: Any]` schema) becomes a computed property.
+- **Escape hatches** need a comment saying why they are safe: `@preconcurrency import` only
+  with a comment naming the framework type that is not annotated yet (the same for a
+  `@preconcurrency` conformance, like `DocumentScannerView.Coordinator`), and
+  `nonisolated(unsafe)` or `@unchecked Sendable` only where a lock or the main thread protects
+  the value. The app has neither of the last two; the tests have two `nonisolated(unsafe)`
+  (`MistralStub`'s delayed answer and `SmokeTests.firstLaunchIssues`).
+- **UI tests** (`SmokeTests`, `MacSmokeTests`) are `@MainActor` classes with the `async`
+  variants of `setUp` and `tearDown`.
 
 ## Localization
 

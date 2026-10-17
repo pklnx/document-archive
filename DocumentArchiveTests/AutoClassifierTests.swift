@@ -302,11 +302,9 @@ import Testing
         let documents = (1...3).map { makeDocument("Deutsche Rentenversicherung Westfalen\nSchreiben \($0)",
                                                    fileName: "Brief-\($0).pdf") }
 
-        await withTaskGroup(of: Void.self) { group in
-            for doc in documents {
-                group.addTask { @MainActor in await self.classify(doc) }
-            }
-        }
+        // Tasks on the main actor, where the documents live; they interleave at every await.
+        let tasks = documents.map { doc in Task { _ = await self.classify(doc) } }
+        for task in tasks { await task.value }
 
         let all = try correspondents()
         #expect(all.count == 1)

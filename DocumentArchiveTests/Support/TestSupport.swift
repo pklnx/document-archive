@@ -437,7 +437,9 @@ final class MistralStub: URLProtocol {
             return state.delay
         }
         let response = route.handler(request, body)
-        let respond = { [request = self.request, client = self.client] in
+        // `URLProtocol` and its client are not `Sendable`, but the client may be called from any
+        // thread, and nothing else uses this protocol instance after `startLoading`.
+        nonisolated(unsafe) let respond = { [request = self.request, client = self.client] in
             client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: response.status,
                                                                   httpVersion: nil, headerFields: nil)!,
                                 cacheStoragePolicy: .notAllowed)
@@ -445,7 +447,7 @@ final class MistralStub: URLProtocol {
             client?.urlProtocolDidFinishLoading(self)
         }
         if delay > 0 {
-            DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: respond)
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) { respond() }
         } else {
             respond()
         }

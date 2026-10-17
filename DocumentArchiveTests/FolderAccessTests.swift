@@ -73,7 +73,7 @@ import Testing
     }
 
     /// iOS "Show in Files" opens the archive folder through `shareddocuments://`.
-    @Test func filesAppURLKeepsThePathEncoded() {
+    @Test @MainActor func filesAppURLKeepsThePathEncoded() {
         let folder = URL(filePath: "/private/var/mobile/Documents/Document Archive/", directoryHint: .isDirectory)
         #expect(RevealFolderButton.filesAppURL(for: folder)?.absoluteString
                 == "shareddocuments:///private/var/mobile/Documents/Document%20Archive/")

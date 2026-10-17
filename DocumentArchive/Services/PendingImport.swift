@@ -58,7 +58,10 @@ enum ImportOrigin: Sendable {
 /// memory. Full-size pages are decoded one at a time in `DocumentImporter.makeDocumentData`.
 ///
 /// #20 part 2 shows these in the review sheet; #22's vault import builds on `makeDocumentData`.
-struct PendingImport: @unchecked Sendable {
+///
+/// Checked `Sendable`: every field is a value type or a `CGImage`, which is immutable and
+/// `Sendable` in the SDK.
+struct PendingImport: Sendable {
     /// One entry per page.
     var originalData: [Data]
     var preview: [CGImage]
