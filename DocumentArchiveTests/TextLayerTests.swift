@@ -22,7 +22,7 @@ import Testing
 
     /// The box of a recognized word on the original page, in displayed page coordinates.
     private func box(of word: String, on page: PDFPage) async throws -> CGRect {
-        let words = await TextLayer.recognize(page).words
+        let words = await TextLayer.recognize(page, environment: .live).words
         return try #require(words.first { $0.text == word }?.box, "“\(word)” not recognized in \(words.map(\.text))")
     }
 

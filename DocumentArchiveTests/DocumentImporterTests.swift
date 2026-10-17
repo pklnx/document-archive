@@ -403,6 +403,70 @@ import UniformTypeIdentifiers
         }
     }
 
+    // MARK: One Vision request at a time (#60)
+
+    /// Regression (#60): a multi-file import starts one processing task per file, and their
+    /// Vision recognitions ran at the same time, which crashed. Several scans and photos at once
+    /// are all processed, with never more than one recognition in flight, off the main thread.
+    @Test func importOfSeveralFilesRecognizesOneAtATime() async throws {
+        let probe = VisionProbe()
+        var urls: [URL] = []
+        for index in 1...3 {
+            let url = directory.appending(path: "Scan \(index).pdf")
+            try TestSupport.samplePDF(lines: ["Rechnung Nr. \(index)00", "Stadtwerke Beispielstadt"]).write(to: url)
+            urls.append(url)
+        }
+        for index in 1...2 {
+            let url = directory.appending(path: "Foto \(index).png")
+            try pngData(lines: ["Lieferschein \(index)", "Paketdienst Beispiel"]).write(to: url)
+            urls.append(url)
+        }
+
+        let result = try await ProcessingEnvironment.$current.withValue(probe.environment()) {
+            let result = await DocumentImporter.importFiles(urls, into: context)
+            try await TestSupport.waitUntilProcessed(result.imported)
+            return result
+        }
+
+        #expect(result.errors.isEmpty)
+        #expect(result.imported.count == 5)
+        #expect(result.imported.allSatisfy { !$0.isProcessing && $0.pageCount == 1 && $0.textSource == "Apple Vision" })
+        #expect(result.imported.prefix(3).allSatisfy { $0.extractedText.contains("Rechnung") })
+        #expect(result.imported.suffix(2).allSatisfy { $0.extractedText.contains("Lieferschein") })
+        let state = probe.snapshot
+        #expect(state.maxInFlight == 1)
+        #expect(state.began.count >= 5)
+        #expect(state.ended == state.began.count)
+        #expect(state.onMainThread == 0)
+    }
+
+    /// Regression (#60): `resumePendingProcessing` restarts every unfinished document at launch;
+    /// they are all processed, one recognition at a time.
+    @Test func resumePendingProcessingRecognizesOneAtATime() async throws {
+        let probe = VisionProbe()
+        let documents = (1...4).map { index in
+            let document = Document(title: "Scan \(index)", pdfData: TestSupport.samplePDF(lines: ["Kontoauszug \(index)", "Sparkasse Beispiel"]),
+                                    source: .scan)
+            document.isProcessing = true
+            context.insert(document)
+            return document
+        }
+        try context.save()
+
+        try await ProcessingEnvironment.$current.withValue(probe.environment()) {
+            DocumentImporter.resumePendingProcessing(in: context)
+            try await TestSupport.waitUntilProcessed(documents)
+        }
+
+        #expect(documents.allSatisfy { !$0.isProcessing && $0.pageCount == 1 })
+        #expect(documents.allSatisfy { $0.extractedText.contains("Kontoauszug") })
+        let state = probe.snapshot
+        #expect(state.maxInFlight == 1)
+        #expect(state.began.count >= 4)
+        #expect(state.ended == state.began.count)
+        #expect(state.onMainThread == 0)
+    }
+
     @Test func sha256IsHexOfTheContent() {
         #expect(DocumentImporter.sha256(Data("abc".utf8))
             == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")

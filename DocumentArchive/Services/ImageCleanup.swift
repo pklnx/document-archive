@@ -154,12 +154,18 @@ enum ImageCleanup {
 
     /// Finds the page in a photo (best on a preview of about 1200 px; the quad is normalized).
     /// Uses document segmentation and falls back to rectangle detection when it finds nothing
-    /// **or throws** (it can on machines without a Neural Engine or GPU).
+    /// **or throws** (it can on machines without a Neural Engine or GPU). Each request waits for
+    /// `VisionGate`, like text recognition (#60).
+    /// - Parameter environment: The caller's environment (`visionHook`). No default: this runs
+    ///   detached, where `ProcessingEnvironment.current` is `.live`.
     /// - Returns: `nil` when nothing was found or the page is (almost) the whole image.
-    static func detectPage(in image: CGImage) async -> (quad: PageQuad, confidence: Float)? {
+    static func detectPage(in image: CGImage,
+                           environment: ProcessingEnvironment) async -> (quad: PageQuad, confidence: Float)? {
         var found: (quad: PageQuad, confidence: Float)?
         if usesDocumentSegmentation,
-           let document = try? await DetectDocumentSegmentationRequest().perform(on: image),
+           let document = try? await VisionGate.run(.detectDocumentSegmentation, environment: environment, {
+               try await DetectDocumentSegmentationRequest().perform(on: image)
+           }),
            let quad = PageQuad.ordered([document.topLeft, document.topRight, document.bottomRight, document.bottomLeft]
                                        .map(\.cgPoint)) {
             found = (quad.clamped(), document.confidence)
@@ -172,7 +178,9 @@ enum ImageCleanup {
             request.minimumConfidence = 0.6
             request.quadratureToleranceDegrees = 30
             request.maximumObservations = 1
-            if let rectangle = try? await request.perform(on: image).first,
+            if let rectangle = try? await VisionGate.run(.detectRectangles, environment: environment, {
+                   try await request.perform(on: image).first
+               }),
                let quad = PageQuad.ordered([rectangle.topLeft, rectangle.topRight, rectangle.bottomRight, rectangle.bottomLeft]
                                            .map(\.cgPoint)) {
                 found = (quad.clamped(), rectangle.confidence)

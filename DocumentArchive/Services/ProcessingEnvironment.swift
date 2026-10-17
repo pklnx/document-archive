@@ -8,7 +8,8 @@ import Foundation
 ///
 /// `current` is a task-local: `Task {}` inherits it, `Task.detached` does not. Code that leaves
 /// the task with `Task.detached` captures `ProcessingEnvironment.current` before detaching and
-/// passes it on (`DocumentImporter.processAndWait` → `DocumentProcessor.analyze`).
+/// passes it on (`DocumentImporter.processAndWait` → `DocumentProcessor.analyze` →
+/// `TextLayer.recognize`).
 struct ProcessingEnvironment: Sendable {
     /// The Mistral configuration; `nil` when no API key is stored.
     var mistralConfig: @Sendable () -> MistralConfig?
@@ -28,6 +29,9 @@ struct ProcessingEnvironment: Sendable {
     var rewriteHook: TextLayer.RewriteHook?
     /// Test hook: receives the PDF data before `MistralClient.ocr` encodes it. `nil` in the app.
     var encodeHook: (@Sendable (Data) -> Void)?
+    /// Test hook: sees every Apple Vision request while it holds `VisionGate`, so a test can
+    /// count the requests in flight. `nil` in the app.
+    var visionHook: VisionGate.Hook?
 
     /// The app's environment. Unit and UI test runs never use the stored Mistral key, never reach
     /// the network (`offlineSession`) and never read the real text layer and cleanup settings
@@ -40,7 +44,8 @@ struct ProcessingEnvironment: Sendable {
         cleanupMode: { TestEnvironment.isRunningTests ? CleanupMode.defaultSetting : CleanupMode.setting(in: .standard) },
         cleanupFilter: { TestEnvironment.isRunningTests ? CleanupMode.defaultFilter : CleanupMode.defaultFilter(in: .standard) },
         rewriteHook: nil,
-        encodeHook: nil
+        encodeHook: nil,
+        visionHook: nil
     )
 
     /// The per-device settings.

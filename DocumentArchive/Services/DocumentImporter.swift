@@ -189,14 +189,16 @@ enum DocumentImporter {
     private static func makeImagePDF(_ items: [Data], title: String, originalFileName: String = "",
                                      mode: CleanupMode) async -> Data? {
         // Read before detaching: `ProcessingEnvironment.current` is `.live` inside `Task.detached`.
-        let filter = ProcessingEnvironment.current.cleanupFilter()
+        let environment = ProcessingEnvironment.current
+        let filter = environment.cleanupFilter()
         return await Task.detached(priority: .userInitiated) { () -> Data? in
             switch mode {
             case .off:
                 return PDFBuilder.makePDF(fromImageData: items)
             case .automatic:
                 guard let pending = await PendingImport.make(originalData: items, title: title,
-                                                             originalFileName: originalFileName, filter: filter)
+                                                             originalFileName: originalFileName, filter: filter,
+                                                             environment: environment)
                 else { return nil }
                 return makeDocumentData(pending.unattended)
             }
