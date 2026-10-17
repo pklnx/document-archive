@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreText
 import Foundation
+import os
 import PDFKit
 import Vision
 
@@ -215,7 +216,7 @@ enum TextLayer {
         do {
             observations = try await request.perform(on: image)
         } catch {
-            print("Text recognition failed: \(error)")
+            Log.ocr.error("Text recognition failed: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
             return RecognizedPage()
         }
         var result = RecognizedPage()

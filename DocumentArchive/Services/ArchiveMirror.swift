@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 /// Writes the local archive into the chosen folder (the "copy in the folder", #8 part 1). Reading
@@ -154,13 +155,28 @@ final class ArchiveMirror {
     ///   - progress: documents done and total, after each batch.
     @discardableResult
     func run(confirming: [DeletionRecord] = [], progress: ((Int, Int) -> Void)? = nil) async throws -> PassResult {
-        var result = PassResult()
-        do {
-            try await pass(confirming: confirming, result: &result, progress: progress)
-        } catch is CancellationError {
-            result.wasCancelled = true
+        try await Log.interval("mirror") {
+            var result = PassResult()
+            do {
+                try await pass(confirming: confirming, result: &result, progress: progress)
+            } catch is CancellationError {
+                result.wasCancelled = true
+            } catch {
+                Log.mirror.error("Pass stopped: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
+                throw error
+            }
+            Self.log(result)
+            return result
         }
-        return result
+    }
+
+    /// One `.notice` line per pass with its counts, and one for the mass-delete guard.
+    private static func log(_ result: PassResult) {
+        let outcome = result.wasCancelled ? "cancelled" : "finished"
+        Log.mirror.notice("Pass \(outcome, privacy: .public): \(result.documentsWritten, privacy: .public) documents, \(result.pdfsWritten, privacy: .public) PDFs, \(result.entitiesWritten, privacy: .public) other records, \(result.tombstonesWritten, privacy: .public) tombstones written; \(result.leftInFolder, privacy: .public) left in the folder, \(result.waitingForDownload, privacy: .public) waiting for download, state reset: \(result.stateWasReset, privacy: .public)")
+        if let held = result.deletionsAwaitingConfirmation {
+            Log.mirror.notice("Mass-delete guard: \(held, privacy: .public) document deletions wait for confirmation")
+        }
     }
 
     private func pass(confirming: [DeletionRecord], result: inout PassResult,

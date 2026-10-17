@@ -1,6 +1,7 @@
 import CoreData
 import Foundation
 import Observation
+import os
 #if os(macOS)
 import Security
 #endif
@@ -76,21 +77,36 @@ final class SyncMonitor {
             let ended = event.endDate
             let succeeded = event.succeeded
             let message = event.error?.localizedDescription
+            let kind = Self.name(of: event.type)
+            let code = event.error.map { Log.code(of: $0) }
             MainActor.assumeIsolated {
-                self?.handle(ended: ended, succeeded: succeeded, error: message)
+                self?.handle(kind: kind, ended: ended, succeeded: succeeded, error: message, code: code)
             }
         }
     }
 
-    private func handle(ended: Date?, succeeded: Bool, error: String?) {
+    /// The event type for the log (`.public`).
+    nonisolated private static func name(of type: NSPersistentCloudKitContainer.EventType) -> String {
+        switch type {
+        case .setup: "setup"
+        case .import: "import"
+        case .export: "export"
+        @unknown default: "event \(type.rawValue)"
+        }
+    }
+
+    private func handle(kind: String, ended: Date?, succeeded: Bool, error: String?, code: String?) {
         guard let ended else {
+            Log.sync.notice("CloudKit \(kind, privacy: .public) started")
             state = .syncing
             return
         }
         if succeeded {
+            Log.sync.notice("CloudKit \(kind, privacy: .public) succeeded")
             lastSuccess = ended
             state = .succeeded(ended)
         } else {
+            Log.sync.error("CloudKit \(kind, privacy: .public) failed: \(code ?? "no error", privacy: .public) \(error ?? "", privacy: .private)")
             state = .failed(error ?? String(localized: "Unknown error"))
         }
     }

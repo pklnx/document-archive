@@ -11,8 +11,9 @@ the app does). On macOS the manifest is also linted with `plutil -lint`.
     python3 scripts/check-privacy-manifest.py --self-test
 
 What counts as a use:
-- a symbol from SYMBOLS below, not preceded by a letter, digit or "_" (so `lstat(` is not
-  `stat(`, but `creationDateKey` is `creationDate`);
+- a symbol from SYMBOLS below, not preceded by a letter, digit or "_" (so `status(` is not
+  `stat(`, but `creationDateKey` is `creationDate`); symbols in CASE_INSENSITIVE_SYMBOLS match
+  in any case and anywhere in a word (`fileModificationDate()`, `NSFileModificationDate`);
 - not on a comment line (one starting with `//`);
 - not on a line with `setAttributes(`: setting a file's modification date is a write, not a
   required-reason read (ArchiveMirror stamps the files it writes).
@@ -32,17 +33,34 @@ SOURCES = "DocumentArchive"
 
 SYMBOLS = {
     "NSPrivacyAccessedAPICategoryUserDefaults": ["UserDefaults", "@AppStorage"],
+    # Apple's list: creationDate, modificationDate, fileModificationDate, contentModificationDateKey,
+    # creationDateKey, getattrlist(), getattrlistbulk(), fgetattrlist(), stat, fstat(), fstatat(),
+    # lstat(), getattrlistat().
     "NSPrivacyAccessedAPICategoryFileTimestamp": [
         "creationDate", "modificationDate", "contentModificationDate", "attributesOfItem",
-        "getattrlist", "stat(",
+        "getattrlist", "getattrlistbulk", "getattrlistat", "fgetattrlist",
+        "stat(", "lstat(", "fstat(", "fstatat(",
     ],
     "NSPrivacyAccessedAPICategorySystemBootTime": ["systemUptime", "mach_absolute_time"],
-    "NSPrivacyAccessedAPICategoryDiskSpace": ["volumeAvailableCapacity", "systemFreeSize", "statfs"],
+    # Apple's list: volumeAvailableCapacityKey, volumeAvailableCapacityForImportantUsageKey,
+    # volumeAvailableCapacityForOpportunisticUsageKey, volumeTotalCapacityKey, systemFreeSize,
+    # systemSize, statfs(), statvfs(), fstatfs(), fstatvfs().
+    "NSPrivacyAccessedAPICategoryDiskSpace": [
+        "volumeAvailableCapacity", "volumeTotalCapacity", "systemFreeSize", "systemSize",
+        "statfs", "statvfs", "fstatfs", "fstatvfs",
+    ],
     "NSPrivacyAccessedAPICategoryActiveKeyboards": ["activeInputModes"],
+}
+
+# Matched in any case and inside longer words: `fileModificationDate()` (NSDictionary) and the
+# key `NSFileModificationDate`, which the word-boundary rule above would miss.
+CASE_INSENSITIVE_SYMBOLS = {
+    "NSPrivacyAccessedAPICategoryFileTimestamp": ["fileModificationDate"],
 }
 
 PATTERNS = {
     category: [re.compile(r"(?<![A-Za-z0-9_])" + re.escape(symbol)) for symbol in symbols]
+    + [re.compile(re.escape(symbol), re.IGNORECASE) for symbol in CASE_INSENSITIVE_SYMBOLS.get(category, [])]
     for category, symbols in SYMBOLS.items()
 }
 
@@ -124,6 +142,7 @@ def manifest_text(categories):
 def self_test() -> None:
     defaults = "NSPrivacyAccessedAPICategoryUserDefaults"
     timestamp = "NSPrivacyAccessedAPICategoryFileTimestamp"
+    disk = "NSPrivacyAccessedAPICategoryDiskSpace"
     cases = [
         # (description, Swift source, declared categories, expected problem count)
         ("declared and used", "let d = UserDefaults.standard\n", [defaults], 0),
@@ -132,12 +151,31 @@ def self_test() -> None:
         ("declared but not used", "let x = 1\n", [defaults], 1),
         ("resource key counts", "let k: URLResourceKey = .contentModificationDateKey\n", [timestamp], 0),
         ("stat( counts", "let r = stat(path, &info)\n", [timestamp], 0),
+        ("lstat( counts", "let r = lstat(path, &info)\n", [timestamp], 0),
+        ("lstat( counts, undeclared", "let r = lstat(path, &info)\n", [], 1),
+        ("fstat( counts", "let r = fstat(fd, &info)\n", [timestamp], 0),
+        ("fstatat( counts", "let r = fstatat(fd, path, &info, 0)\n", [timestamp], 0),
+        ("fgetattrlist counts", "fgetattrlist(fd, &list, &buffer, size, 0)\n", [timestamp], 0),
+        ("getattrlistbulk counts", "getattrlistbulk(fd, &list, &buffer, size, 0)\n", [timestamp], 0),
+        ("getattrlistat counts", "getattrlistat(fd, path, &list, &buffer, size, 0)\n", [timestamp], 0),
+        ("fileModificationDate counts", "let d = (attributes as NSDictionary).fileModificationDate()\n", [timestamp], 0),
+        ("NSFileModificationDate counts", 'let d = attributes["NSFileModificationDate"]\n', [], 1),
+        ("lowercase filemodificationdate counts", "let d = filemodificationdate\n", [timestamp], 0),
         # ArchiveMirror stamps written files: a write is not a required-reason read.
         ("write-only match", "try? m.setAttributes([.modificationDate: date], ofItemAtPath: p)\n", [timestamp], 1),
         ("write-only match, undeclared", "try? m.setAttributes([.modificationDate: date], ofItemAtPath: p)\n", [], 0),
         ("createdAt is not creationDate", "let d = document.createdAt\n", [timestamp], 1),
         ("createdAt is not creationDate, undeclared", "let d = document.createdAt\n", [], 0),
-        ("other identifiers", "let s = status(); let x = myUserDefaultsKey; lstat(p)\n", [], 0),
+        ("other identifiers", "let s = status(); let x = myUserDefaultsKey; let t = mystat(p)\n", [], 0),
+        ("disk space: volumeTotalCapacityKey", "let k: URLResourceKey = .volumeTotalCapacityKey\n", [disk], 0),
+        ("disk space: systemSize", "let s = attributes[.systemSize]\n", [disk], 0),
+        ("disk space: systemSize, undeclared", "let s = attributes[.systemSize]\n", [], 1),
+        ("disk space: statvfs", "statvfs(path, &info)\n", [disk], 0),
+        ("disk space: fstatfs", "fstatfs(fd, &info)\n", [disk], 0),
+        ("disk space: fstatvfs", "fstatvfs(fd, &info)\n", [disk], 0),
+        ("disk space: statfs", "statfs(path, &info)\n", [disk], 0),
+        ("disk space: volumeAvailableCapacityForImportantUsageKey",
+         "let k: URLResourceKey = .volumeAvailableCapacityForImportantUsageKey\n", [disk], 0),
         ("comment line", "// UserDefaults are read elsewhere\n", [], 0),
         ("two categories", "UserDefaults.standard\nProcessInfo.processInfo.systemUptime\n",
          [defaults, "NSPrivacyAccessedAPICategorySystemBootTime"], 0),

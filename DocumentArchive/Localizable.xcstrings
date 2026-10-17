@@ -901,6 +901,16 @@
         }
       }
     },
+    "Creates a text file with the app version, the system, the device model, the storage settings and what the app logged since it started: imports, text recognition, Mistral requests, the folder copy and sync, with counts, durations and error codes. Document titles, file names and text are left out. Nothing is sent anywhere; you choose where the file is saved.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstellt eine Textdatei mit der App-Version, dem System, dem Gerätemodell, den Speichereinstellungen und dem, was die App seit dem Start protokolliert hat: Importe, Texterkennung, Mistral-Anfragen, die Ordnerkopie und die Synchronisierung, mit Anzahlen, Dauern und Fehlercodes. Dokumenttitel, Dateinamen und Texte sind nicht enthalten. Es wird nichts gesendet; du wählst, wo die Datei gespeichert wird."
+          }
+        }
+      }
+    },
     "Custom color": {
       "localizations": {
         "de": {
@@ -1111,6 +1121,26 @@
         }
       }
     },
+    "Diagnostics": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose"
+          }
+        }
+      }
+    },
+    "Diagnostics saved.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose gespeichert."
+          }
+        }
+      }
+    },
     "Discard": {
       "localizations": {
         "de": {
@@ -1147,6 +1177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Document Archive"
+          }
+        }
+      }
+    },
+    "Document Archive Diagnostics %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Document Archive Diagnose %@"
           }
         }
       }
@@ -1427,6 +1467,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ aufklappen"
+          }
+        }
+      }
+    },
+    "Export Diagnostics…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose exportieren …"
           }
         }
       }

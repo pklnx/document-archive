@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Settings for the Mistral connection. The API key lives in the Keychain,
 /// everything else in UserDefaults (per device).
@@ -200,7 +201,7 @@ struct MistralClient: Sendable {
     func testConnection() async throws -> ConnectionResult {
         var request = URLRequest(url: baseURL.appending(path: "models"))
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-        let json = try await send(request)
+        let json = try await send(request, endpoint: "models")
         let ids = Set((json["data"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String })
         let missing = [config.ocrModel, config.chatModel].filter { !ids.isEmpty && !ids.contains($0) }
         return ConnectionResult(missingModels: missing)
@@ -214,18 +215,26 @@ struct MistralClient: Sendable {
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try await send(request)
+        return try await send(request, endpoint: path)
     }
 
-    private func send(_ request: URLRequest) async throws -> [String: Any] {
+    /// Sends a request and logs the endpoint, status, duration and sizes (never the key, the
+    /// headers or the body; see `Log`).
+    /// - Parameter endpoint: the API path, e.g. `ocr`; logged as `.public`.
+    private func send(_ request: URLRequest, endpoint: String) async throws -> [String: Any] {
         let data: Data
         let response: URLResponse
+        let start = ContinuousClock.now
+        let sent = request.httpBody?.count ?? 0
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            Log.mistral.error("\(endpoint, privacy: .public): no response after \(Log.milliseconds(since: start), privacy: .public) ms, \(sent, privacy: .public) bytes sent: \(Log.code(of: error), privacy: .public)")
             throw MistralError.network(error.localizedDescription)
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        // `.default` is `.notice`; a failed request is an `.error`.
+        Log.mistral.log(level: (200..<300).contains(status) ? .default : .error, "\(endpoint, privacy: .public): status \(status, privacy: .public), \(Log.milliseconds(since: start), privacy: .public) ms, \(sent, privacy: .public) bytes sent, \(data.count, privacy: .public) bytes received")
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         guard (200..<300).contains(status) else {
             let message = (json?["message"] as? String)

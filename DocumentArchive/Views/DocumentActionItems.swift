@@ -34,6 +34,6 @@ struct DocumentActionItems: View {
     /// The menu bar's actions for the document in front; `nil` for none.
     static func actions(for document: Document?) -> DocumentActions? {
         guard let document, document.isAlive else { return nil }
-        return DocumentActions(print: document.pdfData == nil ? nil : { print(document) })
+        return DocumentActions(print: document.pdfData == nil ? nil : { Self.print(document) })
     }
 }

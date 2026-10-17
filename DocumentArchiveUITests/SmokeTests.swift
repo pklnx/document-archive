@@ -385,6 +385,14 @@ final class SmokeTests: XCTestCase {
         let settings = element("settings")
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         attachScreenshot("settings")
+        // Settings → General → Diagnostics (#42); not tapped, it would open the Files picker.
+        let diagnostics = element("settings.diagnostics.export")
+        for _ in 0..<6 where !diagnostics.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(diagnostics.isHittable, "Export Diagnostics missing")
+        XCTAssertTrue(diagnostics.isEnabled)
+        attachScreenshot("settings diagnostics")
         // The folder copy's section is there; with sample data it stays off (#8).
         let storage = element("settings.storage.location")
         for _ in 0..<6 where !storage.isHittable {

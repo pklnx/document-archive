@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 /// Assigns correspondent, document type, tags, title and issue date to new documents from
@@ -43,6 +44,10 @@ enum AutoClassifier {
     /// Only fills empty fields; assignments made by hand stay untouched.
     @discardableResult
     static func classify(_ document: Document, context: ModelContext) async -> Outcome {
+        await Log.interval("classify") { await classifyUnlogged(document, context: context) }
+    }
+
+    private static func classifyUnlogged(_ document: Document, context: ModelContext) async -> Outcome {
         var outcome = Outcome()
         let text = document.title + "\n" + document.extractedText
         var correspondents = fetchCorrespondents(context)
@@ -79,6 +84,7 @@ enum AutoClassifier {
                 apply(suggestion, to: document, correspondents: correspondents, types: types, tags: tags,
                       dateIsUntouched: dateIsUntouched, context: context, outcome: &outcome)
             } catch {
+                Log.mistral.error("Classification failed, using the local rules: \(Log.code(of: error), privacy: .public)")
                 outcome.aiError = error.localizedDescription
             }
         }

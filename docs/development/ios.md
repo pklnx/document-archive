@@ -129,6 +129,7 @@ and landscape:
 | iPad | keyboard shortcuts (⌘O, ⌘,, ⌘P with a document open) and menu bar, narrow windows, Split View on iPadOS 18; an opened document is not covered by the list, also after rotating with it open; after deleting the open document the list is back |
 | Sidebar footer | sync status matches the build (local only on unsigned builds) |
 | Saved views | "+" in the Views header opens the editor (popover on iPad, sheet on iPhone) and the pickers push inside it; "Save as View…" from a tag list and from a search; the view's sort menu; "Manage Views…": rename, drag to reorder, delete; a view whose tag was deleted shows the banner and "(deleted)" in the editor |
+| Diagnostics | Settings → "Export Diagnostics…" opens Files with "Document Archive Diagnostics <date>.txt"; the saved file opens in Files and has no titles or file names |
 | Storage Location | "Choose Folder…" opens the folder picker (iCloud Drive, On My iPhone); the copy appears in `Document Archive/`; "Show in Files" opens it or shows the path with a share button; "Back to Default" keeps the files |
 
 ### Mac
@@ -142,3 +143,4 @@ On a signed (sandboxed) build, once the paid account exists:
 | Drag and drop | a drop from Finder, Mail and Safari |
 | Folder copy | choose a folder, quit, relaunch: the copy continues; "Show in Finder" opens it |
 | Export | export a PDF and "Share as…" to Finder |
+| Export Diagnostics | Settings → General → "Export Diagnostics…": the save panel offers "Document Archive Diagnostics <date>.txt"; the file has the header (version, system, model, "Sandboxed: yes", store, CloudKit, folder copy) and log lines of this launch, and **no titles or file names** (they show as `<private>`) and no API key |

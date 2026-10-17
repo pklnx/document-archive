@@ -1,5 +1,6 @@
 import CoreData
 import Foundation
+import os
 import SwiftData
 
 /// Which store the app opens at launch.
@@ -39,6 +40,19 @@ enum ArchiveStore {
     nonisolated static let storeName = "DocumentArchive"
     static let schema = DocumentArchiveApp.schema
 
+    /// The store the app opened at launch, for the diagnostics report; `nil` before.
+    private(set) static var opened: OpenedStore?
+
+    /// What `makeContainer` actually opened (a CloudKit choice can fall back to local storage).
+    enum OpenedStore: String {
+        case inMemory = "in memory"
+        case sampleData = "in memory with sample data"
+        case cloudKit = "CloudKit"
+        case local = "local"
+        /// The second fallback, `DocumentArchive-lokal.store`, after the normal store failed.
+        case localFallback = "local fallback"
+    }
+
     /// The persistent store's `NSStoreUUIDKey`. It identifies this store file: a lost, reset or
     /// fallback store has another one, which the folder copy uses to notice that its bookkeeping
     /// belongs to a different store. `nil` for in-memory stores.
@@ -66,7 +80,7 @@ enum ArchiveStore {
             #if DEBUG
             if seed { UITestSeed.fill(container.mainContext) }
             #endif
-            return container
+            return record(container, seed ? .sampleData : .inMemory)
         }
         migrate()
         if choice == .cloudKit {
@@ -75,22 +89,30 @@ enum ArchiveStore {
                                                 cloudKitDatabase: .private(SyncMonitor.containerIdentifier))
                 let container = try ModelContainer(for: schema, configurations: config)
                 SyncMonitor.shared.isCloudKitEnabled = true
-                return container
+                return record(container, .cloudKit)
             } catch {
-                print("Could not open the CloudKit store, using local storage: \(error)")
+                Log.store.error("CloudKit store failed, using local storage: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
             }
         }
         // Same location as with CloudKit, so nothing is lost when sync is turned on later
         do {
             let local = ModelConfiguration(storeName, schema: schema, cloudKitDatabase: .none)
-            return try ModelContainer(for: schema, configurations: local)
+            return try record(ModelContainer(for: schema, configurations: local), .local)
         } catch {
+            Log.store.error("Local store failed, trying the fallback store: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
             do {
                 let local = ModelConfiguration("\(storeName)-lokal", schema: schema, cloudKitDatabase: .none)
-                return try ModelContainer(for: schema, configurations: local)
+                return try record(ModelContainer(for: schema, configurations: local), .localFallback)
             } catch {
+                Log.store.fault("Could not create the store: \(Log.code(of: error), privacy: .public)")
                 fatalError("Could not create the store: \(error)")
             }
         }
+    }
+
+    private static func record(_ container: ModelContainer, _ store: OpenedStore) -> ModelContainer {
+        opened = store
+        Log.store.notice("Store opened: \(store.rawValue, privacy: .public)")
+        return container
     }
 }

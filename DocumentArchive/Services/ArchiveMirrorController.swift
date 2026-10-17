@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import SwiftData
 
 /// Runs the folder copy in the app: keeps the chosen folder (`FolderAccess`), starts a pass at
@@ -174,7 +175,13 @@ final class ArchiveMirrorController {
             refreshFromState()
         }
         do {
-            let folder = try folderAccess.resolve().url
+            let folder: URL
+            do {
+                folder = try folderAccess.resolve().url
+            } catch {
+                Log.mirror.error("The chosen folder cannot be resolved: \(Log.code(of: error), privacy: .public)")
+                throw error
+            }
             folderURL = folder
             try await FolderAccess.withAccess(to: folder) {
                 let mirror = ArchiveMirror(context: container.mainContext, folder: folder, stateStore: stateStore,
