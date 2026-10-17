@@ -200,6 +200,20 @@ so the tests never see the real archive or the stored Mistral key. Rules:
 - `SmokeTests.launchApp()` launches once more when the first launch fails or
   shows neither the list nor the sidebar (slow CI runners); wait for an
   element before using it instead of adding sleeps.
+- Lists and forms create rows only once they are scrolled into view: reach a
+  row further down (the sidebar's tags, Settings, the inspector) with
+  `scroll(_:to:_:)` or `sidebarRow(_:)`, never by assuming it is on screen.
+  New sections can push a row out of view on the smallest iPhone.
+- In regular width too narrow for three columns (iPad in portrait, the
+  largest iPhones in landscape) the system lays the sidebar over the list and
+  leaves it there after a row is chosen; `reveal(_:_:)` closes it with a tap
+  beside it, like a user would.
+- In regular width on iOS 26 and later, the system adds "Toolbar"
+  accessibility elements as large as a column or the window; they answer
+  XCUITest's hit test, so `isHittable` is false for list rows a finger can
+  tap. `isReachable(_:)` accepts an element on screen under such a toolbar
+  (not under the sidebar or an opened document) and `tapReachable(_:)` taps
+  its center; the test still checks what the tap does.
 - Attach screenshots of the screens a test visits (`XCTAttachment`, kept
   always), so a review can look at them; on the Mac, screenshot a window, not
   the app (`app.screenshot()` is the whole screen there).
@@ -307,8 +321,9 @@ diagnostics are warnings, and CI turns every warning into an error. The same fil
   with a comment naming the framework type that is not annotated yet (the same for a
   `@preconcurrency` conformance, like `DocumentScannerView.Coordinator`), and
   `nonisolated(unsafe)` or `@unchecked Sendable` only where a lock or the main thread protects
-  the value. The app has neither of the last two; the tests have two `nonisolated(unsafe)`
-  (`MistralStub`'s delayed answer and `SmokeTests.firstLaunchIssues`).
+  the value. The app has neither of the last two; the tests have one `nonisolated(unsafe)`
+  (`MistralStub`'s delayed answer). An override of a nonisolated XCTest method in a `@MainActor`
+  test class reaches its state through `MainActor.assumeIsolated` (`SmokeTests.record`).
 - **UI tests** (`SmokeTests`, `MacSmokeTests`) are `@MainActor` classes with the `async`
   variants of `setUp` and `tearDown`.
 

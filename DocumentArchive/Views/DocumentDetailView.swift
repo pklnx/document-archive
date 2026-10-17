@@ -282,9 +282,20 @@ struct DocumentInfoForm: View {
 
             Section("Details") {
                 LabeledContent("Added", value: document.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .accessibilityIdentifier(AccessibilityID.detailsRow("added"))
                 LabeledContent("Modified", value: document.modifiedAt.formatted(date: .abbreviated, time: .shortened))
-                LabeledContent("Source") { Label(document.source.label, systemImage: document.source.systemImage) }
+                    .accessibilityIdentifier(AccessibilityID.detailsRow("modified"))
+                // Icon and text side by side: a `Label` as the value made the row several
+                // times its height on iOS 26 and later (empty gap below "Source", #54 review).
+                LabeledContent("Source") {
+                    HStack(spacing: 6) {
+                        Image(systemName: document.source.systemImage).accessibilityHidden(true)
+                        Text(document.source.label)
+                    }
+                }
+                .accessibilityIdentifier(AccessibilityID.detailsRow("source"))
                 LabeledContent("Pages", value: "\(document.pageCount)")
+                    .accessibilityIdentifier(AccessibilityID.detailsRow("pages"))
                 LabeledContent("Size", value: document.fileSize.formatted(.byteCount(style: .file)))
                 if !document.originalFileName.isEmpty {
                     LabeledContent("Original file", value: document.originalFileName)
