@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import os
 import PDFKit
 import Vision
 
@@ -34,7 +35,15 @@ enum DocumentProcessor {
     static func analyze(_ pdfData: Data, mistral: MistralConfig? = nil,
                         textLayerSource: DocumentSource? = nil,
                         environment: ProcessingEnvironment) async -> Result {
+        await Log.interval("ocr") {
+            await analyzeUnlogged(pdfData, mistral: mistral, textLayerSource: textLayerSource, environment: environment)
+        }
+    }
+
+    private static func analyzeUnlogged(_ pdfData: Data, mistral: MistralConfig?, textLayerSource: DocumentSource?,
+                                        environment: ProcessingEnvironment) async -> Result {
         guard let pdf = PDFDocument(data: pdfData) else {
+            Log.ocr.error("Analysis failed: the PDF could not be read (\(pdfData.count, privacy: .public) bytes)")
             return Result(pageCount: 0, thumbnail: nil, text: "", textSource: "", note: String(localized: "The PDF could not be read."))
         }
         let pageCount = pdf.pageCount
@@ -46,6 +55,7 @@ enum DocumentProcessor {
         var notes: [String] = []
         var text = ""
         var source = ""
+        var recognizedPages = 0
         if let mistral, mistral.useOCR {
             do {
                 let mistralText = try await MistralClient(config: mistral, environment: environment).ocr(pdfData: pdfData)
@@ -54,6 +64,7 @@ enum DocumentProcessor {
                     source = mistralTextSource
                 }
             } catch {
+                Log.ocr.error("Mistral OCR failed, using local text recognition: \(Log.code(of: error), privacy: .public)")
                 notes.append(String(localized: "\(error.localizedDescription) Local text recognition was used instead."))
             }
         }
@@ -64,6 +75,7 @@ enum DocumentProcessor {
             let hasUsableText = text.count >= max(20, pageCount * 15)
             if !hasUsableText {
                 var pages: [String] = []
+                recognizedPages = min(pageCount, maxOCRPages)
                 for index in 0..<min(pageCount, maxOCRPages) {
                     pages.append(await recognition.page(index).text)
                 }
@@ -81,7 +93,9 @@ enum DocumentProcessor {
                                         recognition: &recognition, rewriteHook: environment.rewriteHook)
             searchablePDF = layer.data
             if let note = layer.note { notes.append(note) }
+            Log.ocr.notice("Text layer: \(layer.outcome.rawValue, privacy: .public)")
         }
+        Log.ocr.notice("Analyzed: \(pageCount, privacy: .public) pages, text source \(source, privacy: .public), \(recognizedPages, privacy: .public) pages recognized on the device, \(text.count, privacy: .public) characters")
         return Result(pageCount: pageCount, thumbnail: thumbnail, text: text, textSource: source,
                       note: notes.joined(separator: "\n"), searchablePDF: searchablePDF)
     }
@@ -90,33 +104,55 @@ enum DocumentProcessor {
     /// qualify, has no page that needs a layer, no words were found, or the check failed.
     private static func textLayer(for pdfData: Data, pdf: PDFDocument, source: DocumentSource,
                                   recognition: inout PageRecognition,
-                                  rewriteHook: TextLayer.RewriteHook?) async -> (data: Data?, note: String?) {
-        guard TextLayer.qualifies(pdf, source: source) else { return (nil, nil) }
+                                  rewriteHook: TextLayer.RewriteHook?) async -> TextLayerResult {
+        guard TextLayer.qualifies(pdf, source: source) else { return TextLayerResult(outcome: .doesNotQualify) }
         let pages = TextLayer.pagesNeedingLayer(in: pdf).filter { $0 < maxOCRPages }
+        guard !pages.isEmpty else { return TextLayerResult(outcome: .notNeeded) }
         var words: [Int: [RecognizedWord]] = [:]
         for index in pages {
             let found = await recognition.page(index).words
             if !found.isEmpty { words[index] = found }
         }
-        guard !words.isEmpty else { return (nil, nil) }
+        guard !words.isEmpty else { return TextLayerResult(outcome: .noWords) }
         guard var rewritten = TextLayer.addingTextLayer(to: pdfData, words: words) else {
-            return (nil, String(localized: "Text layer skipped: the PDF could not be rewritten."))
+            return TextLayerResult(outcome: .rewriteFailed,
+                                   note: String(localized: "Text layer skipped: the PDF could not be rewritten."))
         }
         if let rewriteHook { rewritten = rewriteHook(pdfData, rewritten) }
         switch TextLayer.check(original: pdfData, rewritten: rewritten) {
         case .passed:
             break
         case .tooLarge:
-            return (nil, String(localized: "Text layer skipped: the result would be too large."))
+            return TextLayerResult(outcome: .tooLarge,
+                                   note: String(localized: "Text layer skipped: the result would be too large."))
         case .unreadable:
-            return (nil, String(localized: "Text layer skipped: the PDF could not be rewritten."))
+            return TextLayerResult(outcome: .rewriteFailed,
+                                   note: String(localized: "Text layer skipped: the PDF could not be rewritten."))
         case .pageCountChanged, .looksDifferent:
-            return (nil, String(localized: "Text layer skipped: the result did not match the original."))
+            return TextLayerResult(outcome: .checkFailed,
+                                   note: String(localized: "Text layer skipped: the result did not match the original."))
         }
         let note = pdf.pageCount > maxOCRPages
             ? String(localized: "Text layer added to the first \(maxOCRPages) pages only.")
             : nil
-        return (rewritten, note)
+        return TextLayerResult(outcome: .added, data: rewritten, note: note)
+    }
+
+    /// What `textLayer(for:…)` did; `outcome` is logged (an enum state, so `.public`).
+    private struct TextLayerResult {
+        enum Outcome: String {
+            case added
+            case doesNotQualify = "skipped (does not qualify)"
+            case notNeeded = "skipped (every page has text)"
+            case noWords = "skipped (no words recognized)"
+            case rewriteFailed = "skipped (rewrite failed)"
+            case tooLarge = "skipped (too large)"
+            case checkFailed = "skipped (did not match the original)"
+        }
+
+        var outcome: Outcome
+        var data: Data?
+        var note: String?
     }
 
     /// Runs Vision at most once per page and keeps the result, so the document's text and the

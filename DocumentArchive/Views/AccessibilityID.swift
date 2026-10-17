@@ -13,6 +13,8 @@ enum AccessibilityID {
     static let storageUseDefault = "settings.storage.useDefault"
     static let deletionsConfirm = "folderCopy.deletionsConfirm"
     static let deletionsDiscard = "folderCopy.deletionsDiscard"
+    /// Settings → General → Diagnostics → "Export Diagnostics…" (#42).
+    static let diagnosticsExport = "settings.diagnostics.export"
     /// Sidebar footer line of the folder copy.
     static let folderCopyStatus = "sidebar.folderCopyStatus"
 

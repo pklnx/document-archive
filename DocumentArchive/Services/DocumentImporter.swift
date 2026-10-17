@@ -1,6 +1,7 @@
 import CoreGraphics
 import CryptoKit
 import Foundation
+import os
 import SwiftData
 import UniformTypeIdentifiers
 
@@ -82,13 +83,20 @@ enum DocumentImporter {
                             into context: ModelContext) async -> ImportResult {
         var result = ImportResult()
         for url in urls {
+            let data: Data
             do {
-                let data = try readFile(url)
+                data = try readFile(url)
+            } catch {
+                Log.importing.error("File not read: \(Log.code(of: error), privacy: .public) \(url.lastPathComponent, privacy: .private)")
+                result.errors.append(error)
+                continue
+            }
+            do {
                 result.add(try await importFile(data: data, name: url.lastPathComponent, origin: origin,
                                                 cleanup: cleanup, into: context),
                            fileName: url.lastPathComponent)
             } catch {
-                result.errors.append(error)
+                result.errors.append(error)   // logged by importFile
             }
         }
         return result
@@ -131,6 +139,27 @@ enum DocumentImporter {
     /// - Throws: `ImportError` for an unsupported type or an image that cannot be decoded.
     static func importFile(data: Data, name: String, origin: ImportOrigin = .interactive,
                            cleanup: CleanupMode? = nil, into context: ModelContext) async throws -> FileOutcome {
+        try await Log.interval("import") {
+            let outcome: FileOutcome
+            do {
+                outcome = try await importFileUnlogged(data: data, name: name, origin: origin, cleanup: cleanup,
+                                                       into: context)
+            } catch {
+                Log.importing.error("File not imported: \(Log.code(of: error), privacy: .public) \(name, privacy: .private)")
+                throw error
+            }
+            switch outcome {
+            case .imported(let document):
+                Log.importing.notice("Imported: \(document.source.rawValue, privacy: .public) from \(String(describing: origin), privacy: .public), \(data.count, privacy: .public) bytes, \(name, privacy: .private)")
+            case .duplicate:
+                Log.importing.notice("Duplicate skipped: from \(String(describing: origin), privacy: .public), \(data.count, privacy: .public) bytes, \(name, privacy: .private)")
+            }
+            return outcome
+        }
+    }
+
+    private static func importFileUnlogged(data: Data, name: String, origin: ImportOrigin,
+                                           cleanup: CleanupMode?, into context: ModelContext) async throws -> FileOutcome {
         let title = (name as NSString).deletingPathExtension
         let type = UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
         guard type.conforms(to: .pdf) || type.conforms(to: .image) else { throw ImportError.unsupported(name) }
@@ -200,7 +229,11 @@ enum DocumentImporter {
     /// Several images (e.g. a camera scan) become one multi-page document.
     @discardableResult
     static func importImages(_ images: [CGImage], source: DocumentSource, into context: ModelContext) -> Document? {
-        guard let data = PDFBuilder.makePDF(from: images) else { return nil }
+        guard let data = PDFBuilder.makePDF(from: images) else {
+            Log.importing.error("Scan not imported: the PDF could not be built from \(images.count, privacy: .public) pages")
+            return nil
+        }
+        Log.importing.notice("Imported: \(source.rawValue, privacy: .public), \(images.count, privacy: .public) pages, \(data.count, privacy: .public) bytes")
         return insert(title: defaultTitle(for: source), pdfData: data, source: source, hash: sha256(data), context: context)
     }
 
@@ -210,12 +243,22 @@ enum DocumentImporter {
     static func importImageData(_ items: [Data], cleanup: CleanupMode? = nil,
                                 into context: ModelContext) async -> (document: Document?, isDuplicate: Bool) {
         let combined = items.reduce(Data(), +)
-        if let existing = existingDocument(for: combined, in: context) { return (existing, true) }
+        if let existing = existingDocument(for: combined, in: context) {
+            Log.importing.notice("Duplicate skipped: \(items.count, privacy: .public) photos")
+            return (existing, true)
+        }
         let hash = sha256(combined)
         let title = defaultTitle(for: .image)
         let mode = cleanup ?? CleanupMode.mode(for: .interactive, setting: ProcessingEnvironment.current.cleanupMode())
-        guard let data = await makeImagePDF(items, title: title, mode: mode) else { return (nil, false) }
-        if let existing = existingDocument(withHash: hash, in: context) { return (existing, true) }
+        guard let data = await makeImagePDF(items, title: title, mode: mode) else {
+            Log.importing.error("Photos not imported: \(items.count, privacy: .public) photos could not be read")
+            return (nil, false)
+        }
+        if let existing = existingDocument(withHash: hash, in: context) {
+            Log.importing.notice("Duplicate skipped: \(items.count, privacy: .public) photos")
+            return (existing, true)
+        }
+        Log.importing.notice("Imported: image, \(items.count, privacy: .public) photos, \(data.count, privacy: .public) bytes")
         return (insert(title: title, pdfData: data, source: .image, hash: hash, context: context), false)
     }
 

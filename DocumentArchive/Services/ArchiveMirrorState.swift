@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The folder copy's local bookkeeping, in `ArchiveMirror.json` next to the store (not in the
 /// folder, never synced).
@@ -109,7 +110,7 @@ final class ArchiveMirrorStateStore: DeletionRecording {
             encoder.outputFormatting = [.sortedKeys]
             try encoder.encode(state).write(to: url, options: .atomic)
         } catch {
-            print("Could not save the folder copy state: \(error)")
+            Log.mirror.error("Could not save the folder copy state: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
         }
     }
 }

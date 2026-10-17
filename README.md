@@ -25,6 +25,7 @@ The app is available in English and German.
 - **Notes in Markdown:** headings, lists, read-only checkboxes and clickable links (web, e-mail, phone), with "Edit Notes" to change the text
 - **Several documents at once:** select them (Mac: ⌘/⇧-click, ⌘A; iPhone/iPad: "Select") and set tags, correspondent, type, inbox and favorite, analyze them again or delete them together
 - **Copy in a folder** (optional, Settings → Storage Location): the app keeps a copy of the archive as plain files in a folder you choose, e.g. in iCloud Drive – one PDF and one JSON file with the details and the recognized text per document. Deleted documents stay in its `Deleted` folder for 30 days. The archive itself stays on the device; reading the folder back (restore, sync between devices) follows in a later version.
+- **Diagnostics** (Settings → General → Diagnostics): "Export Diagnostics…" saves a text file with the app version, the device model and the app's log since it started (counts, durations, error codes; no document titles, file names or text), for a bug report. Nothing is sent anywhere.
 
 ## Setup (once)
 

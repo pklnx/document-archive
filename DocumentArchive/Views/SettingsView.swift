@@ -210,6 +210,8 @@ struct GeneralSettingsSections: View {
         } footer: {
             Text("“Reassign” adds missing correspondents, document types and tags. Existing assignments are kept.")
         }
+
+        DiagnosticsSettingsSection()
     }
 
     private func reclassifyAll() async {

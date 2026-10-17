@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Takes over data from the time the app was called "Ablage", once per device:
 /// the database with its PDFs, the Mistral API key and the settings.
@@ -59,10 +60,11 @@ enum LegacyMigration {
             for (old, new) in pairs where fm.fileExists(atPath: dir.appending(path: old).path) {
                 try fm.copyItem(at: dir.appending(path: old), to: dir.appending(path: new))
             }
+            Log.store.notice("Legacy migration: took over the old database")
         } catch {
             // Remove a partial copy, so the next launch can try again cleanly
             for (_, new) in pairs { try? fm.removeItem(at: dir.appending(path: new)) }
-            print("Taking over the old database failed: \(error)")
+            Log.store.error("Legacy migration: taking over the old database failed: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
         }
     }
 

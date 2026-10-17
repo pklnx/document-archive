@@ -32,6 +32,7 @@ jobs:
           python3 scripts/app-changes.py --self-test
           python3 scripts/coverage-summary.py --self-test
           python3 scripts/check-privacy-manifest.py --self-test
+          python3 scripts/check-logging.py --self-test
           python3 scripts/check-container-migration.py --self-test
       - name: Filter changed files
         id: filter
@@ -83,6 +84,9 @@ jobs:
       # The required-reason APIs the code uses must match DocumentArchive/PrivacyInfo.xcprivacy.
       - name: Check privacy manifest
         run: python3 scripts/check-privacy-manifest.py
+      # No print/NSLog in the app, and no log call that interpolates the API key or headers.
+      - name: Check logging
+        run: python3 scripts/check-logging.py
       # The container migration manifest is in the real app, and the build settings keep it out
       # of every build with a bundle identifier suffix (the sandboxed test builds).
       - name: Check container migration manifest

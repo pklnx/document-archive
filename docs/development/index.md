@@ -696,6 +696,52 @@ the right reason from Apple's list, or remove the declaration, and add a new
 symbol to the script's list when it misses one. `PrivacyManifestTests` check
 the bundled file.
 
+### Logging and diagnostics
+
+The app logs through `Services/Log.swift` (unified logging, subsystem
+`de.patrickklein.DocumentArchive`) with one `Logger` per area: `import`, `ocr`,
+`mistral`, `mirror`, `sync` and `store`. Console shows them while developing
+(filter by the subsystem). There are no `print` calls in the app.
+
+- **Privacy:** `.public` only for counts, durations, byte sizes, page counts,
+  HTTP status, error domain and code (`Log.code(of:)`) and enum states (store
+  choice, text source, folder copy outcome). Titles, file names, paths, folder
+  names, recognized text, Mistral answers and the `localizedDescription` of
+  errors are `.private`. **Never** log the API key, request headers or
+  request bodies.
+- **Levels:** what the diagnostics export must contain is logged at
+  `.notice` (`Logger.notice`, the default level): each import outcome, the
+  text source and page count, the text layer result, every Mistral request
+  (endpoint, status, duration, bytes sent and received), each folder copy
+  pass and the mass-delete guard, the store choice and fallback, and CloudKit
+  events. Failures are `.error`; `.fault` only for what should never happen.
+  `.info` and `.debug` are for Console only: unified logging keeps `.info`
+  only in memory and never stores `.debug`, so the export does not contain
+  them.
+- **Signposts:** `Log.interval("import" | "ocr" | "classify" | "mirror") { … }`
+  wraps `DocumentImporter.importFile`, `DocumentProcessor.analyze`,
+  `AutoClassifier.classify` and one `ArchiveMirror` pass. Instruments →
+  Points of Interest shows the pipeline.
+- **Diagnostics export:** Settings → General → Diagnostics → "Export
+  Diagnostics…" saves "Document Archive Diagnostics <date>.txt" through the
+  file exporter (save panel on the Mac, Files on iPhone and iPad). The file
+  has a header (app version and build, system and version, device model,
+  sandboxed or not from `AppSandbox.isActive`, the store opened, the CloudKit
+  build flag and state, whether a folder copy is set) and this launch's log
+  entries (`OSLogStore(scope: .currentProcessIdentifier)`), one line each:
+  time, level, category, message. `.private` values arrive as `<private>`;
+  only processes launched by Xcode (including test runs) see them. The report
+  adds nothing private of its own and is only written where the user saves
+  it. `DiagnosticsReport` is the app's only report builder: #23 adds its sync
+  section through `sections` and "Copy Diagnostics" on the same text.
+
+`scripts/check-logging.py` (in `build (macOS)`; its `--self-test` in the
+`changes` job) fails on `print(`, `debugPrint(`, `NSLog(` and `dump(` in
+`DocumentArchive/` (the tests may print) and on a `Log.` call whose
+interpolations mention `apiKey`, `key)` or `Authorization`.
+`DiagnosticsTests` log one entry per level the export relies on and read
+them back on macOS and the iOS simulator.
+
 **Export compliance:** `ITSAppUsesNonExemptEncryption` is `NO` (build setting
 `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption`): the app only uses HTTPS and
 CryptoKit hashing, which are exempt. A feature that adds encryption (#22's
