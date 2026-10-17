@@ -67,6 +67,17 @@ jobs:
             | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)|rash|signal' || true
           xcrun xcresulttool export diagnostics --path ProbeB.xcresult --output-path diag-b || true
           python3 scripts/crash-summary.py diag-b | tee -a "$GITHUB_STEP_SUMMARY" | grep -v '^ ' | head -40
+      - name: Probe c (run loop turns, then the container is released)
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_RUNNER_DA_PROBE_59: c
+        run: |
+          xcodebuild test-without-building -project DocumentArchive.xcodeproj -scheme DocumentArchive \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build \
+            -only-testing:DocumentArchiveTests/Issue59Probes -resultBundlePath ProbeC.xcresult 2>&1 \
+            | grep -E '#59|^✔|^✘|TEST (SUCC|FAIL)|rash|signal' || true
+          xcrun xcresulttool export diagnostics --path ProbeC.xcresult --output-path diag-c || true
+          python3 scripts/crash-summary.py diag-c | tee -a "$GITHUB_STEP_SUMMARY" | grep -v '^ ' | head -40
       - name: Upload results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -76,7 +87,8 @@ jobs:
           retention-days: 7
 
   stress-ios:
-    # Step 1: unchanged main, the unit tests in parallel, five times at once.
+    # Step 1: unchanged main, the unit tests in parallel, five times at once, with PR 2's timeout
+    # scale (without it, parallel OCR runs past the 180 s waits, which hides crashes).
     runs-on: macos-26
     timeout-minutes: 60
     name: stress (iOS) ${{ matrix.run }}
@@ -95,6 +107,7 @@ jobs:
       - name: Test
         env:
           UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_RUNNER_DA_TEST_TIMEOUT_SCALE: 3
         run: |
           set -o pipefail
           xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
@@ -105,7 +118,7 @@ jobs:
         if: ${{ failure() }}
         run: |
           xcrun xcresulttool export diagnostics --path TestResults.xcresult --output-path diagnostics || true
-          python3 scripts/crash-summary.py diagnostics >> "$GITHUB_STEP_SUMMARY" || true
+          python3 scripts/crash-summary.py diagnostics | tee -a "$GITHUB_STEP_SUMMARY" | grep -vE '^ +"|^ +[]{}]' | head -80 || true
       - name: Upload test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

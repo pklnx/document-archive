@@ -48,6 +48,24 @@ import Testing
         print("#59 probe a: survived 5 s")
     }
 
+    /// (c) Like (a), but the run loop turns once while the container still lives (an async test
+    /// that inserted and awaited something), then the container is released.
+    @Test(.enabled(if: probe.contains("c"))) @MainActor func c_runLoopTurnsThenRelease() async throws {
+        weak var dropped: ModelContainer?
+        do {
+            let container = try TestSupport.makeContainer()
+            container.mainContext.insert(ArchiveTag(name: "Probe"))
+            try await Task.sleep(for: .milliseconds(100))
+            container.mainContext.insert(ArchiveTag(name: "Probe 2"))
+            dropped = container
+        }
+        print("#59 probe c: container released: \(dropped == nil)")
+        for second in stride(from: 10, through: 90, by: 10) {
+            try await Task.sleep(for: .seconds(10))
+            print("#59 probe c: survived \(second) s")
+        }
+    }
+
     /// (b) Start processing, release the container during the detached analysis, then wait.
     @Test(.enabled(if: probe.contains("b"))) @MainActor func b_releaseDuringAnalysis() async throws {
         weak var dropped: ModelContainer?
