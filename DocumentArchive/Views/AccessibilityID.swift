@@ -63,6 +63,8 @@ enum AccessibilityID {
     static let notesEdit = "documentDetail.notes.edit"
     static let notesEditor = "documentDetail.notes.editor"
     static let notesDone = "documentDetail.notes.done"
+    /// A row of the inspector's "Details" section, e.g. `documentDetail.details.source`.
+    static func detailsRow(_ name: String) -> String { "documentDetail.details.\(name)" }
     /// UI tests only: shown once the More menu's Delete action ran (see `UITestMarker`).
     static let documentDeleteRequested = "documentDetail.deleteRequested"
 

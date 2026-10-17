@@ -29,9 +29,7 @@ final class SmokeTests: XCTestCase {
     /// Generous: slow CI runners need a long time for the first launch of a simulator.
     private let launchTimeout: TimeInterval = 60
     /// Set while the first launch attempt runs; its failures are collected instead of recorded.
-    /// `nonisolated(unsafe)` for `record`, which overrides a nonisolated XCTest method: only the
-    /// main thread uses it (`launchApp`, and `record` called from the launch).
-    nonisolated(unsafe) private var firstLaunchIssues: [XCTIssue]?
+    private var firstLaunchIssues: [XCTIssue]?
 
     /// Launches the app and waits for the list or the sidebar. On slow CI runners a launch
     /// sometimes fails ("Timed out while launching application via Xcode", "Failed to get
@@ -62,12 +60,15 @@ final class SmokeTests: XCTestCase {
         return XCTWaiter().wait(for: [ready], timeout: launchTimeout) == .completed
     }
 
+    /// Overrides a nonisolated XCTest method. XCTest records an issue on the thread the test runs
+    /// on, which is the main thread for these tests (`launchApp` and the launch it calls).
     override func record(_ issue: XCTIssue) {
-        if firstLaunchIssues != nil {
+        let collected = MainActor.assumeIsolated {
+            guard firstLaunchIssues != nil else { return false }
             firstLaunchIssues?.append(issue)
-        } else {
-            super.record(issue)
+            return true
         }
+        if !collected { super.record(issue) }
     }
 
     override func tearDown() async throws {
@@ -90,14 +91,18 @@ final class SmokeTests: XCTestCase {
     }
 
     /// Makes `element` reachable, one step at a time: on iPad from an opened document with the
-    /// app's "Show List" button, otherwise with the leading button of a navigation bar (back on
-    /// iPhone, the sidebar button on iPad). Never a toolbar button of the document.
+    /// app's "Show List" button; a sidebar lying over the element is closed with a tap beside it;
+    /// otherwise with the leading button of a navigation bar (back on iPhone, the sidebar button
+    /// on iPad). Never a toolbar button of the document.
     private func reveal(_ element: XCUIElement, _ what: String) {
-        _ = element.waitForExistence(timeout: 5)
-        for _ in 0..<3 where !element.isHittable {
+        // Not while a push or a column is still moving in: the element may be hittable a moment later.
+        if element.waitForExistence(timeout: 5) { _ = waitUntilHittable(element, timeout: 2) }
+        for _ in 0..<3 where !isReachable(element) {
             let showList = self.element("documentDetail.showList")
             if showList.exists, showList.isHittable {
                 showList.tap()
+            } else if closeSidebarOverlay(over: element) {
+                // The list under the sidebar is in front again.
             } else {
                 // Prefer a bar that is not the document's (iPad). Only on iPhone may it be the
                 // document's bar, whose first button is Back. On iPad that bar's first button is
@@ -111,7 +116,54 @@ final class SmokeTests: XCTestCase {
             }
             _ = element.waitForExistence(timeout: 2)
         }
-        XCTAssertTrue(element.isHittable, "\(what) not reachable")
+        XCTAssertTrue(isReachable(element), "\(what) not reachable")
+    }
+
+    /// Whether a user can tap `element`. Usually `isHittable`; but in regular width on iOS 26 and
+    /// later (iPad, the largest iPhones in landscape) the system adds "Toolbar" accessibility
+    /// elements as large as a whole column or the window, which answer XCUITest's hit test
+    /// although touches pass through them to the list. An element on screen under such a toolbar,
+    /// and not under the sidebar lying over the list or an opened document, counts as reachable;
+    /// `tapReachable` taps it at its center like a finger.
+    private func isReachable(_ element: XCUIElement) -> Bool {
+        if element.isHittable { return true }
+        guard element.exists else { return false }
+        let frame = element.frame
+        let window = app.windows.firstMatch.frame
+        guard !frame.isEmpty, window.contains(frame) else { return false }
+        let fullToolbar = app.toolbars.allElementsBoundByIndex.contains {
+            $0.frame.contains(frame) && $0.frame.height >= window.height * 0.9
+        }
+        let sidebar = self.element("sidebar")
+        let document = self.element("documentDetail")
+        let inSidebar = element.identifier.hasPrefix("sidebar.")
+        let covered = (!inSidebar && sidebar.exists && sidebar.frame.intersects(frame))
+            || (!element.identifier.hasPrefix("documentDetail") && document.exists && document.frame.intersects(frame))
+        return fullToolbar && !covered
+    }
+
+    private func tapReachable(_ element: XCUIElement) {
+        if element.isHittable {
+            element.tap()
+        } else {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+    }
+
+    /// Regular width too narrow for three columns (iPad in portrait, the largest iPhones in
+    /// landscape): the system shows the sidebar over the list, and it stays there after a row
+    /// is chosen until the user taps beside it. Closes it when it covers `element`; `false` when
+    /// there is no such sidebar (compact width, where the sidebar fills the window).
+    private func closeSidebarOverlay(over element: XCUIElement) -> Bool {
+        let sidebar = self.element("sidebar")
+        let window = app.windows.firstMatch.frame
+        guard element.exists, sidebar.exists, window.contains(sidebar.frame),
+              sidebar.frame.intersects(element.frame), sidebar.frame.maxX < window.maxX - 100 else { return false }
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: (sidebar.frame.maxX + window.maxX) / 2, dy: window.midY))
+            .tap()
+        _ = waitUntilHittable(element, timeout: 3)
+        return true
     }
 
     /// An iPad window narrower than `SplitLayout.sideBySideMinimumWidth` (iPad mini, iPad Air
@@ -144,21 +196,43 @@ final class SmokeTests: XCTestCase {
 
     private func showSidebar() { reveal(element("sidebar.settings"), "sidebar") }
 
-    /// A sidebar row further down (tags on a small iPhone): the list only creates rows once they
-    /// are scrolled into view.
+    /// A sidebar row or section header button further down (the tags on an iPhone, below the
+    /// saved views since #41): the list only creates rows once they are scrolled into view.
     private func sidebarRow(_ id: String) -> XCUIElement {
         let row = element(id)
-        for _ in 0..<5 where !row.exists || !row.isHittable {
-            element("sidebar").swipeUp()
-        }
-        XCTAssertTrue(row.isHittable, "\(id) not reachable in the sidebar")
+        scroll(element("sidebar"), to: row, "\(id) in the sidebar")
         return row
+    }
+
+    /// Scrolls `container` (a list or form) until `target` can be tapped: towards a target that
+    /// is above the middle, otherwise towards the end, and back up when the end did not have it
+    /// (a row above the visible area is not in the hierarchy).
+    ///
+    /// A drag held at its end instead of a swipe, so the list stops where the drag ends: a swipe
+    /// flicks on and can carry a short row past the visible area (Settings). Near the leading
+    /// edge, beside the rows, because a drag that starts in a text field selects text instead of
+    /// scrolling. In the lower part of the container above a keyboard: a sheet at its medium
+    /// height (the iPhone inspector) covers only the lower half of its list's frame.
+    private func scroll(_ container: XCUIElement, to target: XCUIElement, _ what: String) {
+        for attempt in 0..<16 where !(target.exists && target.isHittable) {
+            let frame = container.frame
+            let keyboard = app.keyboards.firstMatch
+            let bottom = keyboard.exists ? min(frame.maxY, keyboard.frame.minY) : frame.maxY
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let x = frame.minX + min(12, frame.width * 0.03)
+            let upper = origin.withOffset(CGVector(dx: x, dy: frame.minY + (bottom - frame.minY) * 0.5))
+            let lower = origin.withOffset(CGVector(dx: x, dy: frame.minY + (bottom - frame.minY) * 0.85))
+            let towardsEnd = target.exists ? target.frame.midY > (frame.minY + bottom) / 2 : attempt < 8
+            let (start, end) = towardsEnd ? (lower, upper) : (upper, lower)
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .default, thenHoldForDuration: 0.3)
+        }
+        XCTAssertTrue(target.isHittable, "\(what) not reachable")
     }
 
     private func openDocument(_ title: String) {
         let row = row(title)
         reveal(row, "row \(title)")
-        row.tap()
+        tapReachable(row)
         XCTAssertTrue(element("documentDetail").waitForExistence(timeout: 5), "detail did not open")
     }
 
@@ -210,10 +284,11 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(row("Golf inspection").exists, "Auto must include the documents of Golf")
         XCTAssertFalse(row(firstDocument).exists)
         let chip = element("documentList.subfolder.Golf")
-        XCTAssertTrue(waitUntilHittable(chip), "no subfolder chip for Golf")
+        XCTAssertTrue(chip.waitForExistence(timeout: 5), "no subfolder chip for Golf")
+        reveal(chip, "subfolder chip for Golf")   // iPad portrait: under the sidebar
         attachScreenshot("Auto with subfolder Golf")
 
-        chip.tap()
+        tapReachable(chip)
         XCTAssertTrue(row("Car insurance").waitForNonExistence(timeout: 5), "Golf's list shows Auto's document")
         XCTAssertTrue(row("Golf inspection").exists)
         attachScreenshot("Golf")
@@ -271,10 +346,9 @@ final class SmokeTests: XCTestCase {
         sidebarRow("sidebar.favorites").tap()
         XCTAssertTrue(row(favoriteDocument).waitForExistence(timeout: 5))
         let options = element("documentList.options")
-        // iPad portrait: the sidebar lies over the list until it is closed.
-        if !waitUntilHittable(options) { app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
-        XCTAssertTrue(waitUntilHittable(options), "no menu with Save as View")
-        options.tap()
+        XCTAssertTrue(options.waitForExistence(timeout: 5), "no menu with Save as View")
+        reveal(options, "menu with Save as View")   // iPad portrait: under the sidebar
+        tapReachable(options)
         let saveAsView = element("documentList.saveAsView")
         XCTAssertTrue(waitUntilHittable(saveAsView), "no Save as View in the menu")
         saveAsView.tap()
@@ -337,7 +411,8 @@ final class SmokeTests: XCTestCase {
 
         if isPhone {
             app.swipeDown(velocity: .fast)   // the sheet closes like any sheet
-            if inspector.exists { inspector.swipeDown(velocity: .fast) }
+            // A swipe that only scrolled the form leaves the sheet open; it may still be closing.
+            if !inspector.waitForNonExistence(timeout: 2) { inspector.swipeDown(velocity: .fast) }
         } else {
             toggle.tap()
         }
@@ -353,13 +428,12 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(inspector.waitForExistence(timeout: 5), "inspector did not open")
 
         let rendered = element("documentDetail.notes.rendered")
-        scroll(inspector, until: rendered)
-        XCTAssertTrue(rendered.isHittable, "rendered notes not shown")
+        scroll(inspector, to: rendered, "rendered notes")
         XCTAssertFalse(element("documentDetail.notes.editor").exists, "notes start in the editor")
         attachScreenshot("rendered notes")
 
         let edit = element("documentDetail.notes.edit")
-        scroll(inspector, until: edit)
+        scroll(inspector, to: edit, "Edit Notes")
         edit.tap()
         let editor = element("documentDetail.notes.editor")
         XCTAssertTrue(editor.waitForExistence(timeout: 5), "the editor did not open")
@@ -368,21 +442,24 @@ final class SmokeTests: XCTestCase {
         attachScreenshot("notes editor")
 
         let done = element("documentDetail.notes.done")
-        scroll(inspector, until: done)
+        scroll(inspector, to: done, "Done of the notes editor")
         done.tap()
-        // The form keeps its scroll position, so the rendered text may be above the visible rows
-        // (and not in the hierarchy); "Edit Notes" belongs to the rendered state.
-        XCTAssertTrue(edit.waitForExistence(timeout: 5), "notes not rendered again after Done")
-        XCTAssertFalse(editor.exists, "the editor is still shown after Done")
-        for _ in 0..<4 where !rendered.exists { inspector.swipeDown() }
-        XCTAssertTrue(rendered.exists, "rendered notes not shown after Done")
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 5), "the editor is still shown after Done")
+        // The form keeps its scroll position, so the rendered note may be above the visible rows.
+        scroll(inspector, to: rendered, "rendered notes after Done")
+        XCTAssertTrue(edit.exists, "no Edit Notes after Done")
         attachScreenshot("notes after Done")
-    }
 
-    /// Swipes up in `container` (a form) until `target` can be tapped.
-    private func scroll(_ container: XCUIElement, until target: XCUIElement) {
-        for _ in 0..<8 where !(target.exists && target.isHittable) {
-            container.swipeUp()
+        // Regression (#54 review): after Done, a row of "Details" kept the editor's height and
+        // left a large empty gap below the notes (a reused cell's stale height).
+        let added = element("documentDetail.details.added")
+        let pages = element("documentDetail.details.pages")
+        scroll(inspector, to: pages, "Details")
+        XCTAssertTrue(added.exists, "Details rows missing")
+        attachScreenshot("details after Done")
+        for id in ["added", "modified", "source", "pages"] {
+            let row = element("documentDetail.details.\(id)")
+            XCTAssertLessThan(row.frame.height, added.frame.height * 1.5, "the Details row \(id) is too tall after Done")
         }
     }
 
@@ -394,18 +471,12 @@ final class SmokeTests: XCTestCase {
         attachScreenshot("settings")
         // Settings → General → Diagnostics (#42); not tapped, it would open the Files picker.
         let diagnostics = element("settings.diagnostics.export")
-        for _ in 0..<6 where !diagnostics.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(diagnostics.isHittable, "Export Diagnostics missing")
+        scroll(settings, to: diagnostics, "Export Diagnostics")
         XCTAssertTrue(diagnostics.isEnabled)
         attachScreenshot("settings diagnostics")
         // The folder copy's section is there; with sample data it stays off (#8).
         let storage = element("settings.storage.location")
-        for _ in 0..<6 where !storage.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(storage.isHittable, "storage location section missing")
+        scroll(settings, to: storage, "storage location section")
         XCTAssertFalse(element("settings.storage.chooseFolder").exists, "folder copy offered with sample data")
         attachScreenshot("settings storage location")
         element("settings.done").tap()
@@ -414,7 +485,8 @@ final class SmokeTests: XCTestCase {
 
     func testRuleEditorCanBeCancelled() {
         showSidebar()
-        element("sidebar.add.tag").tap()
+        // Below the saved views and the other sections: on an iPhone only after scrolling.
+        sidebarRow("sidebar.add.tag").tap()
         let cancel = element("ruleEditor.cancel")
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
         attachScreenshot("rule editor")
@@ -432,9 +504,9 @@ final class SmokeTests: XCTestCase {
         _ = waitUntilHittable(first, timeout: 10)   // still settling after the launch
         reveal(first, "row \(firstDocument)")
 
-        first.swipeLeft()
         let deleteSwipe = element("documentList.deleteSwipe")
-        XCTAssertTrue(waitUntilHittable(deleteSwipe), "no Delete swipe action")
+        swipeToDelete(first)
+        XCTAssertTrue(deleteSwipe.isHittable, "no Delete swipe action")
         deleteSwipe.tap()
         let confirm = element("documentList.deleteConfirm")
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
@@ -444,8 +516,8 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(first.exists, "nothing was deleted")
 
         let second = row(secondDocument)
-        second.swipeLeft()
-        XCTAssertTrue(waitUntilHittable(deleteSwipe), "no Delete swipe action for the second document")
+        swipeToDelete(second)
+        XCTAssertTrue(deleteSwipe.isHittable, "no Delete swipe action for the second document")
         deleteSwipe.tap()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "dialog did not show again")
         confirm.tap()
@@ -453,8 +525,22 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(first.exists)
     }
 
+    /// Swipes `row` to the left and waits for its Delete action. A swipe can end without opening
+    /// the actions (flaky on the iPhone 17 right after the launch: the row only bounced back);
+    /// the row is then swiped once more. Once the actions are open, the row is not swiped again,
+    /// which would close them.
+    private func swipeToDelete(_ row: XCUIElement) {
+        let deleteSwipe = element("documentList.deleteSwipe")
+        row.swipeLeft()
+        if !waitUntilHittable(deleteSwipe, timeout: 3) {
+            row.swipeLeft()
+            _ = waitUntilHittable(deleteSwipe)
+        }
+    }
+
     func testNavigationInLandscape() {
-        XCUIDevice.shared.orientation = .landscapeLeft
+        // Wait for the window to turn: the largest iPhones change to regular width in landscape.
+        rotate(to: .landscapeLeft)
         openDocument(firstDocument)
         attachScreenshot("landscape document")
         showSidebar()
@@ -475,7 +561,8 @@ final class SmokeTests: XCTestCase {
     func testDeletingTheOpenDocumentShowsTheList() {
         openDocument(firstDocument)
         let more = element("documentDetail.more")
-        XCTAssertTrue(waitUntilHittable(more), "no More menu")
+        // Once flaky on a slow runner: the pushed document's toolbar was still coming in.
+        XCTAssertTrue(waitUntilHittable(more, timeout: 10), "no More menu")
         more.tap()
         let delete = element("documentDetail.delete")
         // Not before the menu has finished opening: a tap on a menu still animating in can be lost.
