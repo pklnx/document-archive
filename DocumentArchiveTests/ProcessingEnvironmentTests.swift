@@ -40,7 +40,10 @@ import Testing
             Issue.record("expected a network error, got \(String(describing: clientError))")
             return
         }
-        #expect(ContinuousClock.now - start < .seconds(5), "failed locally, not after a network timeout")
+        // Scaled like every wait (#59: under parallel tests the failure itself took 6 s); a
+        // network timeout would take 90 s or more.
+        #expect(ContinuousClock.now - start < TestSupport.scaled(.seconds(5)),
+                "failed locally, not after a network timeout")
 
         // Any URL, not only Mistral's.
         let url = try #require(URL(string: "https://example.com/"))
