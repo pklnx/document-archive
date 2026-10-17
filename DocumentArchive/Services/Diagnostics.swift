@@ -102,8 +102,11 @@ struct DiagnosticsReport: Equatable, Sendable {
 /// Builds the diagnostics report from the running app (Settings → General → Diagnostics).
 enum Diagnostics {
     /// The header for this launch.
+    /// - Parameter store: the store opened at launch; tests pass their own value instead of
+    ///   relying on the process-wide one.
     @MainActor
-    static func currentHeader(info: [String: Any]? = Bundle.main.infoDictionary) -> DiagnosticsReport.Header {
+    static func currentHeader(info: [String: Any]? = Bundle.main.infoDictionary,
+                              store: String = ArchiveStore.opened?.rawValue ?? "not opened") -> DiagnosticsReport.Header {
         DiagnosticsReport.Header(
             appVersion: info?["CFBundleShortVersionString"] as? String ?? "?",
             build: info?["CFBundleVersion"] as? String ?? "?",
@@ -111,7 +114,7 @@ enum Diagnostics {
             systemVersion: DeviceInfo.systemVersion,
             deviceModel: DeviceInfo.modelIdentifier,
             sandboxed: AppSandbox.isActive,
-            store: ArchiveStore.opened?.rawValue ?? "not opened",
+            store: store,
             cloudKitAllowed: SyncMonitor.cloudKitAvailable(),
             cloudKitActive: SyncMonitor.shared.isCloudKitEnabled,
             folderCopy: ArchiveMirrorController.shared.isEnabled

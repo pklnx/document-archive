@@ -34,6 +34,7 @@ jobs:
           python3 scripts/check-privacy-manifest.py --self-test
           python3 scripts/check-logging.py --self-test
           python3 scripts/check-container-migration.py --self-test
+          python3 scripts/crash-summary.py --self-test
       - name: Filter changed files
         id: filter
         env:
@@ -135,6 +136,15 @@ jobs:
             -destination 'platform=macOS,arch=arm64' -resultBundlePath TestResults.xcresult \
             -enableCodeCoverage YES CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             | xcbeautify --renderer github-actions
+      # A crash of the test host (#59): the crash reports (exception, application-specific
+      # information, top frames, the whole report of the host) and the host's last output in the
+      # job summary, so the message is readable without downloading the result bundle. Test data
+      # only; nothing from the environment. Never fails the job by itself.
+      - name: Crash summary
+        if: ${{ failure() }}
+        run: |
+          xcrun xcresulttool export diagnostics --path TestResults.xcresult --output-path diagnostics || true
+          python3 scripts/crash-summary.py diagnostics >> "$GITHUB_STEP_SUMMARY" || true
       # Line coverage of the app and its least covered files in the job summary. No gate: the
       # script prints "no coverage data" and exits 0 when there is nothing to read.
       - name: Coverage summary
@@ -173,6 +183,15 @@ jobs:
             -destination "platform=iOS Simulator,id=$UDID" -resultBundlePath TestResults.xcresult \
             -enableCodeCoverage YES CODE_SIGN_IDENTITY=- SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             | xcbeautify --renderer github-actions
+      # A crash of the test host (#59): the crash reports (exception, application-specific
+      # information, top frames, the whole report of the host) and the host's last output in the
+      # job summary, so the message is readable without downloading the result bundle. Test data
+      # only; nothing from the environment. Never fails the job by itself.
+      - name: Crash summary
+        if: ${{ failure() }}
+        run: |
+          xcrun xcresulttool export diagnostics --path TestResults.xcresult --output-path diagnostics || true
+          python3 scripts/crash-summary.py diagnostics >> "$GITHUB_STEP_SUMMARY" || true
       # Line coverage of the app and its least covered files in the job summary. No gate: the
       # script prints "no coverage data" and exits 0 when there is nothing to read.
       - name: Coverage summary

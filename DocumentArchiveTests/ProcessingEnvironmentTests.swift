@@ -34,13 +34,15 @@ import Testing
     @Test func liveSessionCannotReachTheNetworkWhileTestsRun() async throws {
         let config = MistralConfig(apiKey: "offline-key", ocrModel: "ocr", chatModel: "chat", useOCR: true, useLLM: true)
         let client = MistralClient(config: config, environment: .live)
-        let start = ContinuousClock.now
         let clientError = await #expect(throws: MistralError.self) { try await client.testConnection() }
-        guard case .network = clientError else {
+        guard case .network(let message) = clientError else {
             Issue.record("expected a network error, got \(String(describing: clientError))")
             return
         }
-        #expect(ContinuousClock.now - start < .seconds(5), "failed locally, not after a network timeout")
+        // The offline protocol's own error, so it failed locally, not after a network timeout
+        // ("The request timed out"). #59: a check of the elapsed time instead failed under
+        // parallel tests, where the failure itself took up to 33 s on a busy simulator.
+        #expect(message == URLError(.notConnectedToInternet).localizedDescription)
 
         // Any URL, not only Mistral's.
         let url = try #require(URL(string: "https://example.com/"))

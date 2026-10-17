@@ -44,14 +44,14 @@ import Testing
     }
 
     @Test func seededChoiceFillsTheInMemoryStore() throws {
-        let container = ArchiveStore.makeContainer(for: .inMemory(seed: true), migrate: {})
+        let container = TestSupport.keepAlive(ArchiveStore.makeContainer(for: .inMemory(seed: true), migrate: {}).container)
         let count = try container.mainContext.fetchCount(FetchDescriptor<Document>())
         #expect(count == UITestSeed.documents.count)
         #expect(container.configurations.first?.isStoredInMemoryOnly == true)
     }
 
     @Test func unseededChoiceStaysEmpty() throws {
-        let container = ArchiveStore.makeContainer(for: .inMemory(seed: false), migrate: {})
+        let container = TestSupport.keepAlive(ArchiveStore.makeContainer(for: .inMemory(seed: false), migrate: {}).container)
         #expect(try container.mainContext.fetchCount(FetchDescriptor<Document>()) == 0)
     }
 }

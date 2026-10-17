@@ -4,7 +4,9 @@ import Testing
 @testable import DocumentArchive
 
 /// The semaphore behind `VisionGate` (#60): FIFO, cancellation-safe, no deadlock.
-@Suite(.timeLimit(.minutes(1))) struct AsyncSemaphoreTests {
+/// The time limit ends a deadlocked test. It is scaled like every wait and leaves room for a busy
+/// main actor: under parallel tests a `@MainActor` test here waited more than a minute for it (#59).
+@Suite(.timeLimit(.minutes(Int((2 * TestSupport.timeoutScale).rounded(.up))))) struct AsyncSemaphoreTests {
     /// Waits until `count` tasks are queued, so the next waiter is known to be behind them.
     private func waitUntilQueued(_ semaphore: AsyncSemaphore, _ count: Int) async throws {
         let deadline = ContinuousClock.now + TestSupport.scaled(.seconds(10))

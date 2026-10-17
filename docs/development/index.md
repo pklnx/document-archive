@@ -64,15 +64,24 @@ The `DocumentArchive` scheme has two test plans in `TestPlans/`:
   seconds locally), but the test host crashed on the CI runners, in Vision
   text recognition running several times at once on macOS (#60, fixed: the
   app now runs one Vision request at a time through `VisionGate`) and in
-  SwiftData on the iOS simulator (#59). Turn it on again (`parallelizable:
-  true` in both plans) once #59 is fixed too, with three green CI runs in a
-  row. Until then, write tests as if they ran in parallel: no shared global
-  state (see the rules below), `.serialized` for a suite that uses something
-  global like the real Keychain (`KeychainStoreTests`), and
-  `TestSupport.makeContainerOnDisk()` for a test that follows store change
-  notifications (`StoreChangeObserver`). In-memory stores all report
-  `/dev/null` as their URL, so other tests' saves would count as its
-  changes.
+  SwiftData on the iOS simulator (#59). The #59 crash was a main context's
+  autosave timer firing after its test had ended: SwiftData's timer callback
+  found the context's container gone and trapped. Test containers now live
+  until the end of the run (`ContainerKeeper`, see the rules below). Turn
+  parallel execution on again (`parallelizable: true` in both plans) with
+  three green CI runs in a row (#59 part 2). Until then, write tests as if
+  they ran in parallel: no shared global state (see the rules below),
+  `.serialized` for a suite that uses something global like the real
+  Keychain (`KeychainStoreTests`), and `TestSupport.makeContainerOnDisk()`
+  for a test that follows store change notifications
+  (`StoreChangeObserver`). In-memory stores all report `/dev/null` as their
+  URL, so other tests' saves would count as its changes. Since containers
+  outlive their tests, a context a test left with unsaved changes autosaves
+  later, during another test, and posts `ModelContext.didSave` and
+  `NSPersistentStoreRemoteChange` for `/dev/null` then: one more reason for
+  a notification test to use a store on disk. When a test run crashes in CI,
+  the job summary shows the crash report and the test host's last output
+  (`scripts/crash-summary.py`).
 - **`Nightly.xctestplan`** is attached to the scheme but not the default. Its
   configurations run in the nightly workflow (`nightly-tests.yml`) on macOS:
   - **"German"**: the app and the tests in German (`de`, region `DE`). A test
@@ -97,7 +106,11 @@ xcodebuild test -project DocumentArchive.xcodeproj -scheme DocumentArchive \
 
 Every wait for something asynchronous in a test scales its timeout with
 `TestSupport.scaled(_:)` (`DA_TEST_TIMEOUT_SCALE`, default 1);
-`TestSupport.waitUntilProcessed` does this already. On the command line,
+`TestSupport.waitUntilProcessed` does this already. So does a suite's
+`.timeLimit` (`AsyncSemaphoreTests`). Do not assert on elapsed time: under
+parallel tests a busy simulator delayed an instant local failure by up to
+33 seconds (#59); check what happened instead (which error, which state).
+On the command line,
 `xcodebuild` passes it on as `TEST_RUNNER_DA_TEST_TIMEOUT_SCALE=3`. A Thread Sanitizer report
 in app code becomes an issue labeled `bug`; a race in test code is fixed in
 the test.
@@ -161,6 +174,23 @@ never touched. Rules for tests:
   other's requests. Run the test body in
   `ProcessingEnvironment.$current.withValue(stub.environment) { … }`, or pass
   `stub.environment` to `MistralClient` / `DocumentProcessor.analyze`.
+- **Containers come from `TestSupport`.** Every container comes from
+  `TestSupport.makeContainer()` (in memory), `makeContainerOnDisk()` or
+  `makeContainerOnDisk(at:)` (a store file, also to open the same file
+  again), or goes through `TestSupport.keepAlive(_:)` (a container from
+  `ArchiveStore.makeContainer`). Never build a `ModelContainer` in a test
+  yourself; a `ModelContext(container)` on such a container is fine. They
+  register the container in `ContainerKeeper`, which holds it until the end
+  of the test run, as the app holds its container for the whole process
+  (#59: an autosave timer or a processing task that outlived its test found
+  its container gone, and SwiftData trapped). Entries stay for the whole run,
+  like `MistralStub.routes`.
+- **The launch store stays the host's.** Only `ArchiveStore.openAtLaunch`
+  (called by `DocumentArchiveApp.init`) records the opened store and turns on
+  the CloudKit state; `ArchiveStore.makeContainer` changes no global state.
+  `StoreChoiceTests.openAtLaunchRecordsTheStore` is the only test that calls
+  `openAtLaunch`. Pass `store:` to `Diagnostics.currentHeader` to test a
+  header for another store.
 - **No real data.** Use `TestSupport.makeContainer()` for an in-memory archive,
   `TestSupport.makeDefaults()` for settings, `TestSupport.makeTemporaryDirectory()`
   for files and the test service name for the Keychain. Generate documents in

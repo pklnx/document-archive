@@ -22,12 +22,37 @@ import Testing
 
     @Test @MainActor func inMemoryStoreSkipsMigrationAndSync() {
         var migrated = false
-        let container = ArchiveStore.makeContainer(for: .inMemory(seed: false), migrate: { migrated = true })
+        let opened = ArchiveStore.makeContainer(for: .inMemory(seed: false), migrate: { migrated = true })
+        let container = TestSupport.keepAlive(opened.container)
 
         #expect(!migrated)
+        #expect(opened.store == .inMemory)
         let configuration = container.configurations.first
         #expect(configuration?.isStoredInMemoryOnly == true)
         #expect(configuration?.cloudKitContainerIdentifier == nil)
+    }
+
+    /// #59: making a container changes no global state. Only `openAtLaunch` records the store, so
+    /// the diagnostics header keeps the test host's launch value (`.inMemory`), also while other
+    /// tests make containers in parallel. Before, this set `opened` to `.sampleData`.
+    @Test @MainActor func makingAContainerLeavesTheOpenedStoreAlone() {
+        let opened = ArchiveStore.makeContainer(for: .inMemory(seed: true), migrate: {})
+        TestSupport.keepAlive(opened.container)
+
+        #expect(opened.store == .sampleData)
+        #expect(ArchiveStore.opened == .inMemory)
+        #expect(!SyncMonitor.shared.isCloudKitEnabled)
+    }
+
+    /// `openAtLaunch` records what it opened. It writes the process-wide `ArchiveStore.opened`,
+    /// which only works here because it writes the value the test host opened at launch
+    /// (`.inMemory`): keep this the only test that calls `openAtLaunch`.
+    @Test @MainActor func openAtLaunchRecordsTheStore() {
+        let container = TestSupport.keepAlive(ArchiveStore.openAtLaunch(.inMemory(seed: false)))
+
+        #expect(ArchiveStore.opened == .inMemory)
+        #expect(container.configurations.first?.isStoredInMemoryOnly == true)
+        #expect(!SyncMonitor.shared.isCloudKitEnabled)
     }
 
     @Test @MainActor func hostedTestRunChoosesMemory() {
