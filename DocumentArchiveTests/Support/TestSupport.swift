@@ -14,23 +14,37 @@ import UniformTypeIdentifiers
 typealias ArchiveTag = DocumentArchive.Tag
 
 enum TestSupport {
-    /// A fresh in-memory archive, never synced.
+    /// A fresh in-memory archive, never synced. It lives until the end of the test run
+    /// (`ContainerKeeper`).
     static func makeContainer() throws -> ModelContainer {
         let schema = DocumentArchiveApp.schema
-        return try ModelContainer(
+        return try keepAlive(ModelContainer(
             for: schema,
             configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-        )
+        ))
     }
 
     /// A fresh archive in a temporary folder, never synced. Only for tests of store change
     /// notifications: in-memory stores all report `/dev/null` as their URL, so the saves of tests
     /// running in parallel would count as changes of every in-memory store.
     static func makeContainerOnDisk() throws -> ModelContainer {
+        try makeContainerOnDisk(at: makeTemporaryDirectory().appending(path: "Test.store"))
+    }
+
+    /// The archive in the store file at `url` (created if missing), never synced. For tests that
+    /// open the same store file again. It lives until the end of the test run (`ContainerKeeper`).
+    static func makeContainerOnDisk(at url: URL) throws -> ModelContainer {
         let schema = DocumentArchiveApp.schema
-        let url = try makeTemporaryDirectory().appending(path: "Test.store")
-        return try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, url: url,
-                                                                                  cloudKitDatabase: .none))
+        return try keepAlive(ModelContainer(for: schema, configurations: ModelConfiguration(
+            schema: schema, url: url, cloudKitDatabase: .none)))
+    }
+
+    /// Keeps a container that a test got from elsewhere (`ArchiveStore.makeContainer`) alive until
+    /// the end of the test run, like the ones from `makeContainer()`.
+    @discardableResult
+    static func keepAlive(_ container: ModelContainer) -> ModelContainer {
+        ContainerKeeper.shared.keep(container)
+        return container
     }
 
     /// A throwaway settings suite; removed by `removeDefaults`.
@@ -288,6 +302,22 @@ enum TestSupport {
             }
             try await Task.sleep(for: .milliseconds(50))
         }
+    }
+}
+
+/// Holds every test container until the end of the test run (#59). A main context with unsaved
+/// changes has an autosave timer on the main run loop; when the container went away with the test
+/// that made it, the timer fired later, during another test, and SwiftData trapped (the crash of
+/// the test host under parallel tests). In the app the container lives as long as the process;
+/// here it does too. Entries stay for the whole run, like `MistralStub.routes`: one store per
+/// test, most of them empty or holding a few small PDFs. Tests never read it.
+final class ContainerKeeper: Sendable {
+    static let shared = ContainerKeeper()
+
+    private let containers = Mutex<[ModelContainer]>([])
+
+    func keep(_ container: ModelContainer) {
+        containers.withLock { $0.append(container) }
     }
 }
 

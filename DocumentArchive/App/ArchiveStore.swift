@@ -40,8 +40,15 @@ enum ArchiveStore {
     nonisolated static let storeName = "DocumentArchive"
     static let schema = DocumentArchiveApp.schema
 
-    /// The store the app opened at launch, for the diagnostics report; `nil` before.
+    /// The store the app opened at launch, for the diagnostics report; `nil` before. Only
+    /// `openAtLaunch` sets it, so a test that makes a container cannot change it (#59).
     private(set) static var opened: OpenedStore?
+
+    /// A container and the store it actually opened.
+    struct Opened {
+        let container: ModelContainer
+        let store: OpenedStore
+    }
 
     /// What `makeContainer` actually opened (a CloudKit choice can fall back to local storage).
     enum OpenedStore: String {
@@ -69,27 +76,40 @@ enum ArchiveStore {
                            cloudKitAvailable: SyncMonitor.cloudKitAvailable())
     }
 
+    /// Opens the store of the app's launch: the only place that records it in `opened`, logs it
+    /// for the diagnostics export and turns on the CloudKit state. Only `DocumentArchiveApp.init`
+    /// calls it.
+    static func openAtLaunch(_ choice: StoreChoice) -> ModelContainer {
+        let result = makeContainer(for: choice)
+        opened = result.store
+        if result.store == .cloudKit {
+            SyncMonitor.shared.isCloudKitEnabled = true
+        }
+        Log.store.notice("Store opened: \(result.store.rawValue, privacy: .public)")
+        return result.container
+    }
+
+    /// Creates the container for `choice`, without changing any global state; `openAtLaunch`
+    /// records what it opened.
     /// - Parameter migrate: takes over data of the app's old name; only run for stores on disk.
     static func makeContainer(
         for choice: StoreChoice,
         migrate: () -> Void = { LegacyMigration.run(newStoreName: storeName) }
-    ) -> ModelContainer {
+    ) -> Opened {
         if case .inMemory(let seed) = choice {
             let container = try! ModelContainer(for: schema, configurations: ModelConfiguration(
                 schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none))
             #if DEBUG
             if seed { UITestSeed.fill(container.mainContext) }
             #endif
-            return record(container, seed ? .sampleData : .inMemory)
+            return Opened(container: container, store: seed ? .sampleData : .inMemory)
         }
         migrate()
         if choice == .cloudKit {
             do {
                 let config = ModelConfiguration(storeName, schema: schema,
                                                 cloudKitDatabase: .private(SyncMonitor.containerIdentifier))
-                let container = try ModelContainer(for: schema, configurations: config)
-                SyncMonitor.shared.isCloudKitEnabled = true
-                return record(container, .cloudKit)
+                return try Opened(container: ModelContainer(for: schema, configurations: config), store: .cloudKit)
             } catch {
                 Log.store.error("CloudKit store failed, using local storage: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
             }
@@ -97,22 +117,16 @@ enum ArchiveStore {
         // Same location as with CloudKit, so nothing is lost when sync is turned on later
         do {
             let local = ModelConfiguration(storeName, schema: schema, cloudKitDatabase: .none)
-            return try record(ModelContainer(for: schema, configurations: local), .local)
+            return try Opened(container: ModelContainer(for: schema, configurations: local), store: .local)
         } catch {
             Log.store.error("Local store failed, trying the fallback store: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
             do {
                 let local = ModelConfiguration("\(storeName)-lokal", schema: schema, cloudKitDatabase: .none)
-                return try record(ModelContainer(for: schema, configurations: local), .localFallback)
+                return try Opened(container: ModelContainer(for: schema, configurations: local), store: .localFallback)
             } catch {
                 Log.store.fault("Could not create the store: \(Log.code(of: error), privacy: .public)")
                 fatalError("Could not create the store: \(error)")
             }
         }
-    }
-
-    private static func record(_ container: ModelContainer, _ store: OpenedStore) -> ModelContainer {
-        opened = store
-        Log.store.notice("Store opened: \(store.rawValue, privacy: .public)")
-        return container
     }
 }

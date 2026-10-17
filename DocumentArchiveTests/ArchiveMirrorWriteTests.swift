@@ -324,11 +324,9 @@ import Testing
     /// The real store's identity: stable for one store file, different for another one.
     @Test func storeIdentifierBelongsToTheStoreFile() throws {
         let folder = try TestSupport.makeTemporaryDirectory()
-        let schema = DocumentArchiveApp.schema
         func open(_ name: String) throws -> URL {
             let url = folder.appending(path: "\(name).store")
-            let container = try ModelContainer(for: schema, configurations: ModelConfiguration(
-                schema: schema, url: url, cloudKitDatabase: .none))
+            let container = try TestSupport.makeContainerOnDisk(at: url)
             container.mainContext.insert(ArchiveTag(name: "x"))
             try container.mainContext.save()
             return url

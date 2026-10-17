@@ -106,6 +106,12 @@ import Testing
         #endif
     }
 
+    /// The store comes from the caller when given, never from another test's container (#59).
+    @Test func headerUsesTheGivenStore() {
+        #expect(Diagnostics.currentHeader(info: [:], store: "local").store == "local")
+        #expect(Diagnostics.currentHeader(info: [:]).store == ArchiveStore.OpenedStore.inMemory.rawValue)
+    }
+
     // MARK: Unified logging round trip
 
     /// Polls the log store until `isComplete` holds for the entries found (unified logging hands

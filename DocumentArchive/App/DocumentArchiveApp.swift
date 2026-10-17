@@ -15,7 +15,7 @@ struct DocumentArchiveApp: App {
     /// A store on disk also gets the folder copy, when the user chose a folder (#8).
     init() {
         let choice = ArchiveStore.currentChoice()
-        container = ArchiveStore.makeContainer(for: choice)
+        container = ArchiveStore.openAtLaunch(choice)
         let changes = StoreChangeObserver(container: container)
         if choice.isOnDisk {
             ArchiveMirrorController.shared.start(container: container, changes: changes)
