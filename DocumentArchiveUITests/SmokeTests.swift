@@ -97,7 +97,7 @@ final class SmokeTests: XCTestCase {
     private func reveal(_ element: XCUIElement, _ what: String) {
         // Not while a push or a column is still moving in: the element may be hittable a moment later.
         if element.waitForExistence(timeout: 5) { _ = waitUntilHittable(element, timeout: 2) }
-        for _ in 0..<3 where !element.isHittable {
+        for _ in 0..<3 where !isReachable(element) {
             let showList = self.element("documentDetail.showList")
             if showList.exists, showList.isHittable {
                 showList.tap()
@@ -116,7 +116,38 @@ final class SmokeTests: XCTestCase {
             }
             _ = element.waitForExistence(timeout: 2)
         }
-        XCTAssertTrue(element.isHittable, "\(what) not reachable")
+        XCTAssertTrue(isReachable(element), "\(what) not reachable")
+    }
+
+    /// Whether a user can tap `element`. Usually `isHittable`; but in regular width on iOS 26 and
+    /// later (iPad, the largest iPhones in landscape) the system adds "Toolbar" accessibility
+    /// elements as large as a whole column or the window, which answer XCUITest's hit test
+    /// although touches pass through them to the list. An element on screen under such a toolbar,
+    /// and not under the sidebar lying over the list or an opened document, counts as reachable;
+    /// `tapReachable` taps it at its center like a finger.
+    private func isReachable(_ element: XCUIElement) -> Bool {
+        if element.isHittable { return true }
+        guard element.exists else { return false }
+        let frame = element.frame
+        let window = app.windows.firstMatch.frame
+        guard !frame.isEmpty, window.contains(frame) else { return false }
+        let fullToolbar = app.toolbars.allElementsBoundByIndex.contains {
+            $0.frame.contains(frame) && $0.frame.height >= window.height * 0.9
+        }
+        let sidebar = self.element("sidebar")
+        let document = self.element("documentDetail")
+        let inSidebar = element.identifier.hasPrefix("sidebar.")
+        let covered = (!inSidebar && sidebar.exists && sidebar.frame.intersects(frame))
+            || (!element.identifier.hasPrefix("documentDetail") && document.exists && document.frame.intersects(frame))
+        return fullToolbar && !covered
+    }
+
+    private func tapReachable(_ element: XCUIElement) {
+        if element.isHittable {
+            element.tap()
+        } else {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
     }
 
     /// Regular width too narrow for three columns (iPad in portrait, the largest iPhones in
@@ -126,7 +157,7 @@ final class SmokeTests: XCTestCase {
     private func closeSidebarOverlay(over element: XCUIElement) -> Bool {
         let sidebar = self.element("sidebar")
         let window = app.windows.firstMatch.frame
-        guard element.exists, sidebar.exists, sidebar.isHittable,
+        guard element.exists, sidebar.exists, window.contains(sidebar.frame),
               sidebar.frame.intersects(element.frame), sidebar.frame.maxX < window.maxX - 100 else { return false }
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: (sidebar.frame.maxX + window.maxX) / 2, dy: window.midY))
@@ -201,7 +232,7 @@ final class SmokeTests: XCTestCase {
     private func openDocument(_ title: String) {
         let row = row(title)
         reveal(row, "row \(title)")
-        row.tap()
+        tapReachable(row)
         XCTAssertTrue(element("documentDetail").waitForExistence(timeout: 5), "detail did not open")
     }
 
@@ -257,7 +288,7 @@ final class SmokeTests: XCTestCase {
         reveal(chip, "subfolder chip for Golf")   // iPad portrait: under the sidebar
         attachScreenshot("Auto with subfolder Golf")
 
-        chip.tap()
+        tapReachable(chip)
         XCTAssertTrue(row("Car insurance").waitForNonExistence(timeout: 5), "Golf's list shows Auto's document")
         XCTAssertTrue(row("Golf inspection").exists)
         attachScreenshot("Golf")
@@ -317,7 +348,7 @@ final class SmokeTests: XCTestCase {
         let options = element("documentList.options")
         XCTAssertTrue(options.waitForExistence(timeout: 5), "no menu with Save as View")
         reveal(options, "menu with Save as View")   // iPad portrait: under the sidebar
-        options.tap()
+        tapReachable(options)
         let saveAsView = element("documentList.saveAsView")
         XCTAssertTrue(waitUntilHittable(saveAsView), "no Save as View in the menu")
         saveAsView.tap()
