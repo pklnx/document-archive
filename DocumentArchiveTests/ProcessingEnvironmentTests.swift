@@ -26,6 +26,7 @@ import Testing
         #expect(live.cleanupFilter() == .color)
         #expect(live.rewriteHook == nil)
         #expect(live.encodeHook == nil)
+        #expect(live.visionHook == nil)
     }
 
     /// Defence in depth (#57 review): even a client built from `live` with a key cannot reach

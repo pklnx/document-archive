@@ -51,7 +51,7 @@ enum DocumentProcessor {
             .flatMap { render($0, maxPixelSize: 480) }
             .flatMap { ImageCoding.jpegData(from: $0, quality: 0.75) }
 
-        var recognition = PageRecognition(pdf: pdf)
+        var recognition = PageRecognition(pdf: pdf, environment: environment)
         var notes: [String] = []
         var text = ""
         var source = ""
@@ -159,14 +159,18 @@ enum DocumentProcessor {
     /// text layer share one recognition.
     private struct PageRecognition {
         let pdf: PDFDocument
+        let environment: ProcessingEnvironment
         private var cache: [Int: RecognizedPage] = [:]
 
-        init(pdf: PDFDocument) { self.pdf = pdf }
+        init(pdf: PDFDocument, environment: ProcessingEnvironment) {
+            self.pdf = pdf
+            self.environment = environment
+        }
 
         mutating func page(_ index: Int) async -> RecognizedPage {
             if let cached = cache[index] { return cached }
             guard let page = pdf.page(at: index) else { return RecognizedPage() }
-            let result = await TextLayer.recognize(page)
+            let result = await TextLayer.recognize(page, environment: environment)
             cache[index] = result
             return result
         }

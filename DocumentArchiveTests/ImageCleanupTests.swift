@@ -39,7 +39,7 @@ import Vision
         let photo = TestSupport.photographedPage(lines: Self.letter)
         let preview = try #require(ImageCoding.orientedImage(from: TestSupport.encoded(photo),
                                                              maxPixelSize: ImageCoding.previewPixelSize))
-        let found = try #require(await ImageCleanup.detectPage(in: preview))
+        let found = try #require(await ImageCleanup.detectPage(in: preview, environment: .live))
         #expect(found.quad.maximumDistance(to: TestSupport.photoCorners) < 0.03, "\(found.quad)")
         #expect(found.confidence > 0)
     }
@@ -69,7 +69,7 @@ import Vision
                                 bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
         context.draw(uniform, in: CGRect(x: 0, y: 0, width: 900, height: 1200))
         let gray = context.makeImage()!
-        #expect(await ImageCleanup.detectPage(in: gray) == nil)
+        #expect(await ImageCleanup.detectPage(in: gray, environment: .live) == nil)
 
         var generator = SeededGenerator(seed: 3)
         for _ in 0..<4000 {
@@ -79,7 +79,7 @@ import Vision
                                 width: 12, height: 12))
         }
         let noise = context.makeImage()!
-        #expect(await ImageCleanup.detectPage(in: noise) == nil)
+        #expect(await ImageCleanup.detectPage(in: noise, environment: .live) == nil)
 
         let whole = try #require(ImageCleanup.apply(CleanupSettings(quad: nil, filter: .color), to: noise))
         #expect(whole.width == noise.width && whole.height == noise.height)
@@ -212,7 +212,7 @@ import Vision
     @Test func pendingImportKeepsOnlyPreviews() async throws {
         let photo = TestSupport.photographedPage(lines: Self.letter, width: 2400, height: 3200)
         let data = TestSupport.encoded(photo, type: .jpeg)
-        let pending = try #require(await PendingImport.make(originalData: [data], title: "Foto", filter: .color))
+        let pending = try #require(await PendingImport.make(originalData: [data], title: "Foto", filter: .color, environment: .live))
 
         #expect(pending.originalData == [data])
         #expect(pending.hash == DocumentImporter.sha256(data))
@@ -226,6 +226,6 @@ import Vision
         #expect(pending.settings[0].quad != nil, "detected on the preview")
         #expect(pending.settings[0].filter == .color)
 
-        #expect(await PendingImport.make(originalData: [Data("no image".utf8)], title: "x", filter: .color) == nil)
+        #expect(await PendingImport.make(originalData: [Data("no image".utf8)], title: "x", filter: .color, environment: .live) == nil)
     }
 }

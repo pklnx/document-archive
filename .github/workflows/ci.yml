@@ -232,6 +232,8 @@ jobs:
             DocumentImporterTests/importReachesTheStubThroughTheDetachedAnalysis \
             DocumentImporterTests/settingOffLeavesThePDFUnchanged \
             DocumentImporterTests/automaticCleanupStraightensThePhotoAndKeepsTheOriginalHash \
+            DocumentImporterTests/importOfSeveralFilesRecognizesOneAtATime \
+            DocumentImporterTests/resumePendingProcessingRecognizesOneAtATime \
             DocumentProcessorTests/readsScannedTextWithVision \
             DocumentProcessorTests/textLayerComesFromVisionWhenMistralReadsTheText \
             DocumentProcessorTests/fallsBackToVisionWhenMistralFails \
@@ -244,7 +246,9 @@ jobs:
             TextLayerTests/looksTheSameAndStaysSmall \
             TextLayerTests/tooLargeRewriteIsSkippedWithItsOwnNote \
             TextLayerTests/densePageStaysSmall \
-            TextLayerTests/secondRunFindsNothingToDo
+            TextLayerTests/secondRunFindsNothingToDo \
+            VisionGateTests/concurrentRecognitionsRunOneAtATime \
+            VisionGateTests/cancelledRecognitionDoesNotBlockTheGate
           do
             skip+=("-skip-testing:DocumentArchiveTests/$test()")
           done

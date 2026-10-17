@@ -62,9 +62,10 @@ The `DocumentArchive` scheme has two test plans in `TestPlans/`:
   `.serialized` on a suite changes nothing today. Parallel execution was
   tried in #43 part 2: macOS ran about three times faster (8 instead of 24
   seconds locally), but the test host crashed on the CI runners, in Vision
-  text recognition running several times at once on macOS (#60) and in
+  text recognition running several times at once on macOS (#60, fixed: the
+  app now runs one Vision request at a time through `VisionGate`) and in
   SwiftData on the iOS simulator (#59). Turn it on again (`parallelizable:
-  true` in both plans) once these are fixed, with three green CI runs in a
+  true` in both plans) once #59 is fixed too, with three green CI runs in a
   row. Until then, write tests as if they ran in parallel: no shared global
   state (see the rules below), `.serialized` for a suite that uses something
   global like the real Keychain (`KeychainStoreTests`), and
@@ -293,6 +294,11 @@ diagnostics are warnings, and CI turns every warning into an error. The same fil
   detaches captures `ProcessingEnvironment.current` first (see [Tests](#tests)). A helper that
   runs a caller's closure takes `isolation: isolated (any Actor)? = #isolation`, so the closure
   never leaves the caller's actor (`FolderAccess.withAccess`, `Log.interval`).
+- **Apple Vision** runs one request at a time, process-wide (#60: concurrent text recognition
+  crashed): every `perform` goes through `VisionGate.run`, a FIFO `AsyncSemaphore` with one
+  slot (`TextLayer.recognize`, `ImageCleanup.detectPage`). A new Vision request uses it too. A
+  task cancelled while it waits gives up without blocking the others. Tests count the requests
+  in flight with `VisionProbe` (`ProcessingEnvironment.visionHook`).
 - **`Notification`s** are not `Sendable`: an observer reads the `Sendable` values it needs
   before it hops to the main actor (`SyncMonitor`).
 - **Static properties** hold `Sendable` values only. A non-`Sendable` constant (a `Regex`, a

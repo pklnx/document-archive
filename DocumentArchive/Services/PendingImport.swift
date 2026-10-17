@@ -74,9 +74,12 @@ struct PendingImport: Sendable {
 
     /// Decodes a preview of every page and detects the page in it. The detected settings use
     /// `filter`; a page where nothing was found keeps the whole image.
+    /// - Parameter environment: The caller's environment, for the detection (`VisionGate`). No
+    ///   default: this runs detached.
     /// - Returns: `nil` when a photo cannot be decoded.
     static func make(originalData: [Data], title: String, originalFileName: String = "",
-                     source: DocumentSource = .image, filter: PageFilter) async -> PendingImport? {
+                     source: DocumentSource = .image, filter: PageFilter,
+                     environment: ProcessingEnvironment) async -> PendingImport? {
         guard !originalData.isEmpty else { return nil }
         var previews: [CGImage] = []
         var settings: [CleanupSettings] = []
@@ -85,7 +88,7 @@ struct PendingImport: Sendable {
                 return nil
             }
             var detected = CleanupSettings(filter: filter)
-            if let page = await ImageCleanup.detectPage(in: preview) {
+            if let page = await ImageCleanup.detectPage(in: preview, environment: environment) {
                 detected.quad = page.quad
                 detected.confidence = page.confidence
             }

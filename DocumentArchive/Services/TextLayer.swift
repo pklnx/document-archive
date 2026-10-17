@@ -204,8 +204,11 @@ enum TextLayer {
 
     /// Renders the page upright (rotation and crop box applied) and reads it with Vision.
     /// Each line is split into words with their own boxes, so a single word in the middle of a
-    /// line can be selected.
-    static func recognize(_ page: PDFPage) async -> RecognizedPage {
+    /// line can be selected. The request waits for `VisionGate`, so only one recognition runs at
+    /// a time (#60).
+    /// - Parameter environment: The caller's environment (`visionHook`). No default: this runs
+    ///   inside the detached analysis, where `ProcessingEnvironment.current` is `.live`.
+    static func recognize(_ page: PDFPage, environment: ProcessingEnvironment) async -> RecognizedPage {
         let size = displayedSize(of: page)
         guard let image = DocumentProcessor.render(page, maxPixelSize: 2600) else { return RecognizedPage() }
         var request = RecognizeTextRequest()
@@ -214,7 +217,9 @@ enum TextLayer {
         request.recognitionLanguages = [Locale.Language(identifier: "de-DE"), Locale.Language(identifier: "en-US")]
         let observations: [RecognizedTextObservation]
         do {
-            observations = try await request.perform(on: image)
+            observations = try await VisionGate.run(.recognizeText, environment: environment) {
+                try await request.perform(on: image)
+            }
         } catch {
             Log.ocr.error("Text recognition failed: \(Log.code(of: error), privacy: .public) \(error.localizedDescription, privacy: .private)")
             return RecognizedPage()

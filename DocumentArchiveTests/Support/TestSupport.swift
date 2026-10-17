@@ -300,6 +300,46 @@ final class Recorder<Value: Sendable>: Sendable {
     var values: [Value] { storage.withLock { $0 } }
 }
 
+/// Counts the Apple Vision requests in flight through `ProcessingEnvironment.visionHook` (#60).
+/// Several environments may share one probe, to check that `VisionGate` is process-wide.
+final class VisionProbe: Sendable {
+    struct State {
+        var inFlight = 0
+        var maxInFlight = 0
+        var began: [VisionGate.Request] = []
+        var ended = 0
+        /// Requests that began on the main thread; the gate must never be entered there.
+        var onMainThread = 0
+    }
+
+    private let state = Mutex(State())
+
+    var snapshot: State { state.withLock { $0 } }
+
+    /// `base` with a hook that reports to this probe.
+    func environment(_ base: ProcessingEnvironment = .live) -> ProcessingEnvironment {
+        var environment = base
+        environment.visionHook = { [self] event in record(event) }
+        return environment
+    }
+
+    private func record(_ event: VisionGate.Event) {
+        let isMainThread = Thread.isMainThread
+        state.withLock { state in
+            switch event {
+            case .began(let request):
+                state.inFlight += 1
+                state.maxInFlight = max(state.maxInFlight, state.inFlight)
+                state.began.append(request)
+                if isMainThread { state.onMainThread += 1 }
+            case .ended:
+                state.inFlight -= 1
+                state.ended += 1
+            }
+        }
+    }
+}
+
 /// A deterministic random number generator (SplitMix64), so generated images are the same in every run.
 struct SeededGenerator: RandomNumberGenerator {
     private var state: UInt64
