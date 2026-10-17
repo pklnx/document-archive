@@ -86,7 +86,12 @@ struct FolderAccess {
         return try body()
     }
 
-    static func withAccess<T>(to url: URL, _ body: () async throws -> T) async rethrows -> T {
+    /// Runs on the caller's actor (`isolation`), so `body` never leaves it: the folder copy's body
+    /// uses the main context. Heavy work inside `body` detaches on its own
+    /// (`ArchiveMirrorController.choose`).
+    static func withAccess<T>(
+        to url: URL, isolation: isolated (any Actor)? = #isolation, _ body: () async throws -> T
+    ) async rethrows -> T {
         let started = url.startAccessingSecurityScopedResource()
         defer { if started { url.stopAccessingSecurityScopedResource() } }
         return try await body()

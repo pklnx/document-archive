@@ -116,10 +116,11 @@ import UniformTypeIdentifiers
 
     @Test func importFileRejectsUnsupportedAndUndecodableData() async throws {
         await #expect(throws: DocumentImporter.ImportError.self) {
-            try await DocumentImporter.importFile(data: Data("hello".utf8), name: "notes.txt", into: context)
+            // The outcome holds a model, which must not leave the main actor.
+            _ = try await DocumentImporter.importFile(data: Data("hello".utf8), name: "notes.txt", into: context)
         }
         await #expect(throws: DocumentImporter.ImportError.self) {
-            try await DocumentImporter.importFile(data: Data("not an image".utf8), name: "Foto.png", into: context)
+            _ = try await DocumentImporter.importFile(data: Data("not an image".utf8), name: "Foto.png", into: context)
         }
         #expect(try context.fetch(FetchDescriptor<Document>()).isEmpty)
     }

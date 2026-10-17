@@ -16,10 +16,12 @@ struct PDFTransfer: Transferable {
 
     /// The file name with ".pdf" (`FileNaming.sanitized`).
     let fileName: String
-    private let load: @MainActor () -> Data?
+    /// Runs on the main actor, where the document lives; `@Sendable` because `Transferable`
+    /// values are `Sendable`.
+    private let load: @MainActor @Sendable () -> Data?
     private let folder: ExportFolder
 
-    init(fileName: String, folder: ExportFolder = .shared, load: @escaping @MainActor () -> Data?) {
+    init(fileName: String, folder: ExportFolder = .shared, load: @escaping @MainActor @Sendable () -> Data?) {
         self.fileName = FileNaming.sanitized(fileName)
         self.folder = folder
         self.load = load
@@ -66,6 +68,9 @@ struct PDFFile: FileDocument {
     }
 }
 
+/// On the main actor: the transfer's loader captures the document, a SwiftData model, which stays
+/// on the main actor (see docs/development/index.md → Concurrency).
+@MainActor
 extension Document {
     /// For a document with a PDF; `nil` while it is still downloading.
     var transfer: PDFTransfer? {

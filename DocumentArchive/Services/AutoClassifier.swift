@@ -314,12 +314,23 @@ enum DateDetector {
         "dezember": 12, "dez": 12, "dec": 12, "december": 12,
     ]
 
-    // Swift Regex has no lookbehind, hence the group `(?:^|…)` as a precondition
-    private static let numeric = /(?:^|[^\d.])(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})(?!\d)/
-    private static let iso = /(?:^|\D)(\d{4})-(\d{2})-(\d{2})(?!\d)/
-    private static let written = /(?i)(?:^|\D)(\d{1,2})\.?\s+([a-zäöü]{3,9})\.?\s+(\d{4})(?!\d)/
+    // Swift Regex has no lookbehind, hence the group `(?:^|…)` as a precondition.
+    // Computed: `Regex` is not `Sendable`, so it cannot be a shared `static let`; a literal is
+    // cheap to create, and `firstDate` runs once per document.
+    private typealias DatePattern = Regex<(Substring, Substring, Substring, Substring)>
+    private static var numeric: DatePattern {
+        /(?:^|[^\d.])(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})(?!\d)/
+    }
+    private static var iso: DatePattern {
+        /(?:^|\D)(\d{4})-(\d{2})-(\d{2})(?!\d)/
+    }
+    private static var written: DatePattern {
+        /(?i)(?:^|\D)(\d{1,2})\.?\s+([a-zäöü]{3,9})\.?\s+(\d{4})(?!\d)/
+    }
     /// English: "October 3, 2026" or "Oct 3 2026"
-    private static let writtenUS = /(?i)([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?!\d)/
+    private static var writtenUS: DatePattern {
+        /(?i)([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?!\d)/
+    }
 
     static func firstDate(in text: String) -> Date? {
         var candidates: [(position: String.Index, date: Date)] = []

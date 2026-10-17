@@ -4,12 +4,14 @@ import Testing
 
 /// Alerts and dialogs must use real bindings: the system dismisses them by setting the binding to
 /// `false` (swipe down, tap outside an iPad popover), which a `.constant` binding ignores.
-@Suite struct PresentationBindingTests {
+@MainActor @Suite struct PresentationBindingTests {
     /// Holds the presented item like a view's `@State`.
-    private final class Box<Item> {
+    @MainActor private final class Box<Item> {
         var item: Item?
         init(_ item: Item?) { self.item = item }
-        var binding: Binding<Item?> { Binding(get: { self.item }, set: { self.item = $0 }) }
+        var binding: Binding<Item?> {
+            Binding(get: { @MainActor in self.item }, set: { @MainActor in self.item = $0 })
+        }
     }
 
     @Test func presentedWhileTheItemIsSet() {

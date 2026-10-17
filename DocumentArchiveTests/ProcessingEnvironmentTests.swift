@@ -17,13 +17,34 @@ import Testing
         let live = ProcessingEnvironment.live
         #expect(live.mistralConfig() == nil)
         #expect(MistralConfig.current() == nil)
-        #expect(live.session === URLSession.shared)
+        #expect(live.session === ProcessingEnvironment.offlineSession)
+        #expect(live.session.configuration.protocolClasses?.count == 1)
+        #expect(live.session.configuration.protocolClasses?.first == OfflineURLProtocol.self)
         #expect(live.defaultsSuite == nil)
         #expect(live.textLayerEnabled())
         #expect(live.cleanupMode() == .off)
         #expect(live.cleanupFilter() == .color)
         #expect(live.rewriteHook == nil)
         #expect(live.encodeHook == nil)
+    }
+
+    /// Defence in depth (#57 review): even a client built from `live` with a key cannot reach
+    /// the network in a test run; the request fails at once instead of going to api.mistral.ai.
+    @Test func liveSessionCannotReachTheNetworkWhileTestsRun() async throws {
+        let config = MistralConfig(apiKey: "offline-key", ocrModel: "ocr", chatModel: "chat", useOCR: true, useLLM: true)
+        let client = MistralClient(config: config, environment: .live)
+        let start = ContinuousClock.now
+        let clientError = await #expect(throws: MistralError.self) { try await client.testConnection() }
+        guard case .network = clientError else {
+            Issue.record("expected a network error, got \(String(describing: clientError))")
+            return
+        }
+        #expect(ContinuousClock.now - start < .seconds(5), "failed locally, not after a network timeout")
+
+        // Any URL, not only Mistral's.
+        let url = try #require(URL(string: "https://example.com/"))
+        let error = await #expect(throws: URLError.self) { try await ProcessingEnvironment.live.session.data(from: url) }
+        #expect(error?.code == .notConnectedToInternet)
     }
 
     @Test func concurrentTasksEachSeeTheirOwnEnvironment() async {

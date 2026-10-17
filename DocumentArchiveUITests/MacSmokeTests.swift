@@ -9,6 +9,11 @@ import XCTest
 ///
 /// macOS UI tests take over the pointer and the keyboard of the Mac they run on, and need
 /// automation mode (`automationmodetool enable-automationmode-without-authentication`).
+///
+/// `@MainActor`: XCTest runs UI tests on the main thread, and the UI automation API is
+/// main-actor isolated. `setUp` and `tearDown` are the `async` variants, which may run on the
+/// main actor; a failed assertion there still ends the test (`continueAfterFailure`).
+@MainActor
 final class MacSmokeTests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -19,7 +24,7 @@ final class MacSmokeTests: XCTestCase {
     /// All documents of `UITestSeed` ("All Documents").
     private let seededDocumentCount = 7
 
-    override func setUp() {
+    override func setUp() async throws {
         continueAfterFailure = false
         app = XCUIApplication()
         // Not "-ApplePersistenceIgnoreState YES": with it the SwiftUI app starts without a window.
@@ -31,7 +36,7 @@ final class MacSmokeTests: XCTestCase {
         XCTAssertTrue(row(firstDocument).waitForExistence(timeout: 5), "sample documents missing")
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         app?.terminate()
     }
 
